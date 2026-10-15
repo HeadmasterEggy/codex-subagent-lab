@@ -985,13 +985,21 @@ function selectInterruptCloseScenario(scenarioName) {
   container.outerHTML = interruptCloseMarkup();
 }
 function admissionMarkup() {
-  const overlapped = admissionScenario === 'overlap';
+  const overlapped = admissionScenario === 'cross-runtime';
+  const sameRuntime = admissionScenario === 'same-runtime';
   const stages = overlapped
     ? [
-      ['SHARED COUNTER', 'active = 0 / limit 1', 'Both child sessions see the same execution limiter.'],
-      ['CHILD A · CHECK', 'passes at 0', 'Advisory check; this step reserves no permit.'],
-      ['CHILD B · CHECK', 'also passes at 0', 'A different thread has separate turn state and can check before A starts.'],
-      ['TASK STARTS', 'guards raise count to 2', 'Each task later acquires its guard; the increment does not re-check the limit.']
+      ['TREE LIMITER', 'active = 0 / limit 1', 'Different child sessions share this execution counter.'],
+      ['SESSION A · CHECK', 'passes at 0', 'Its ToolCallRuntime has its own dispatch lock.'],
+      ['SESSION B · CHECK', 'also passes at 0', 'A different runtime can check before either child turn starts.'],
+      ['TURN STARTS', 'guards raise count to 2', 'Each task later increments the shared counter; the guard does not re-check.']
+    ]
+    : sameRuntime
+    ? [
+      ['ONE RUNTIME', 'write lock available', 'spawn_agent uses the default non-parallel tool-call setting.'],
+      ['CALL A · DISPATCH', 'holds write lock', 'Handler dispatch runs while this ToolCallRuntime lock is held.'],
+      ['CALL B · DISPATCH', 'waits for lock', 'A second call through the same runtime cannot dispatch alongside A.'],
+      ['TREE LIMITER', 'still a separate check', 'The lock serializes dispatch; it does not reserve a global permit.']
     ]
     : [
       ['SHARED COUNTER', 'active = 0 / limit 1', 'One child turn is admitted at a time in this example.'],
@@ -1000,28 +1008,31 @@ function admissionMarkup() {
       ['CHILD B · CHECK', 'rejected at 1', 'A later check sees the updated count.']
     ];
   const outcome = overlapped
-    ? 'The source contracts permit this check-then-start interleaving; they do not prove that a real run exceeded the configured limit. No concurrent runtime reproduction was performed.'
+    ? 'Separate ToolCallRuntime locks do not serialize different child sessions. The source permits these checks to overlap; it does not prove a real run exceeded the configured limit.'
+    : sameRuntime
+    ? 'The write lock serializes handler dispatch only within one ToolCallRuntime. It is not the shared execution permit, and the source does not establish a hard global limit from this lock.'
     : 'When checks happen after prior task-start guards update the counter, the later child is rejected at the limit.';
   return `<section class="admission-map" data-admission-map="${admissionScenario}" aria-labelledby="admission-map-title">
-    <div class="admission-heading"><div><span class="admission-eyebrow">V2 · EXECUTION CAPACITY</span><h5 id="admission-map-title">Does the capacity check reserve a slot?</h5></div><span class="admission-version">source snapshot · e89b7c4</span></div>
-    <p class="admission-intro">The API checks capacity before work is accepted, then counts execution when a task starts. Compare sequential checks with overlapping child sessions.</p>
+    <div class="admission-heading"><div><span class="admission-eyebrow">V2 · EXECUTION CAPACITY</span><h5 id="admission-map-title">Which lock actually limits child turns?</h5></div><span class="admission-version">source snapshot · 1ef30bc</span></div>
+    <p class="admission-intro">A per-runtime tool-dispatch lock and the shared agent-tree execution counter have different scopes. Compare ordered admission, one runtime, and separate child sessions.</p>
     <div class="admission-controls" role="group" aria-label="Choose an execution admission ordering">
-      <button type="button" data-admission-case="sequential" aria-pressed="${!overlapped}">Sequential checks</button>
-      <button type="button" data-admission-case="overlap" aria-pressed="${overlapped}">Two checks overlap</button>
+      <button type="button" data-admission-case="sequential" aria-pressed="${admissionScenario === 'sequential'}">Sequential checks</button>
+      <button type="button" data-admission-case="same-runtime" aria-pressed="${sameRuntime}">Same runtime</button>
+      <button type="button" data-admission-case="cross-runtime" aria-pressed="${overlapped}">Separate sessions</button>
     </div>
     <div class="admission-flow" data-case="${admissionScenario}" aria-live="polite">
       ${stages.map(([label,title,detail],index) => `<article class="admission-node" data-stage="${index}"><span>${label}</span><strong>${title}</strong><small>${detail}</small></article>${index < stages.length-1 ? '<i aria-hidden="true">→</i>' : ''}`).join('')}
     </div>
-    <p class="admission-counter"><b>${overlapped ? 'POSSIBLE INTERLEAVING' : 'ORDERED EXAMPLE'}</b><span>${overlapped ? 'A check is not a reservation; the later guard count can exceed the configured limit in this source-level scenario.' : 'The next check observes the guard acquired by the earlier started task.'}</span></p>
+    <p class="admission-counter"><b>${overlapped ? 'POSSIBLE INTERLEAVING' : sameRuntime ? 'LOCK SCOPE' : 'ORDERED EXAMPLE'}</b><span>${overlapped ? 'A check is not a reservation; separate session locks do not serialize access to the shared counter.' : sameRuntime ? 'The dispatch lock is local to this runtime; the execution guard belongs to the shared tree limiter.' : 'The next check observes the guard acquired by the earlier started task.'}</span></p>
     <p class="admission-outcome" aria-live="polite">${outcome}</p>
     <p class="admission-boundary">Source-level concurrency inference only. The checked-in test covers sequential admission; no stress test, real over-cap event, or Desktop observation is claimed.</p>
-    <p class="admission-sources"><a href="https://github.com/openai/codex/blob/e89b7c442c0433ad5167e72a5a25bb6d0712766a/codex-rs/core/src/agent/api.rs#L111-L125" target="_blank" rel="noreferrer">advisory API contract</a> · <a href="https://github.com/openai/codex/blob/e89b7c442c0433ad5167e72a5a25bb6d0712766a/codex-rs/core/src/codex_thread.rs#L474-L490" target="_blank" rel="noreferrer">turn start check</a> · <a href="https://github.com/openai/codex/blob/e89b7c442c0433ad5167e72a5a25bb6d0712766a/codex-rs/core/src/tasks/mod.rs#L347-L359" target="_blank" rel="noreferrer">guard acquisition</a> · <a href="https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#current-main-v2-execution-admission-is-explicitly-advisory-2026-10-15" target="_blank" rel="noreferrer">evidence ledger</a></p>
+    <p class="admission-sources"><a href="https://github.com/openai/codex/blob/1ef30bcbe784f1006548adc1542985be32b05109/codex-rs/core/src/agent/control/execution.rs#L33-L79" target="_blank" rel="noreferrer">shared capacity check and guard</a> · <a href="https://github.com/openai/codex/blob/1ef30bcbe784f1006548adc1542985be32b05109/codex-rs/core/src/tools/parallel.rs#L45-L65" target="_blank" rel="noreferrer">per-runtime lock</a> · <a href="https://github.com/openai/codex/blob/1ef30bcbe784f1006548adc1542985be32b05109/codex-rs/core/src/tools/parallel.rs#L202-L239" target="_blank" rel="noreferrer">dispatch holds lock through handler</a> · <a href="https://github.com/openai/codex/blob/1ef30bcbe784f1006548adc1542985be32b05109/codex-rs/tools/src/tool_executor.rs#L122-L124" target="_blank" rel="noreferrer">parallel-call default is false</a> · <a href="https://github.com/openai/codex/blob/1ef30bcbe784f1006548adc1542985be32b05109/codex-rs/core/src/tasks/mod.rs#L347-L359" target="_blank" rel="noreferrer">turn-start guard</a> · <a href="https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#current-main-follow-up-per-runtime-tool-lock-does-not-reserve-tree-capacity" target="_blank" rel="noreferrer">evidence ledger</a></p>
   </section>`;
 }
 function selectAdmissionScenario(scenarioName) {
   const container = $('.admission-map');
   if (!container) return;
-  admissionScenario = ['sequential','overlap'].includes(scenarioName) ? scenarioName : 'sequential';
+  admissionScenario = ['sequential','same-runtime','cross-runtime'].includes(scenarioName) ? scenarioName : 'sequential';
   container.outerHTML = admissionMarkup();
 }
 document.addEventListener('toggle', event => {
