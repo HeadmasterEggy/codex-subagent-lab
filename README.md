@@ -18,7 +18,7 @@ To preview the populated interface without starting Codex processes, run a separ
 DEMO_MODE=1 PORT=4327 node /Users/joey/codex-subagent-lab/server.mjs /absolute/path/to/workspace
 ```
 
-Demo mode loads a fixed four-task hierarchy with completed and failed outcomes plus an unread child result. It hides task creation and marks sample records so they cannot be mistaken for live Codex tasks. Normal runs remain empty and use the live CLI workflow.
+Demo mode loads a fixed four-task hierarchy with completed and failed outcomes, a returned parent-to-child message, and pending child results. The Inspector visualizes task ancestry separately from direct message/result routes, then shows each interaction as sender → coordinator inbox → task-tool handoff (or pending inbox). “Supplied” means the coordinator included the message in a task-tool call; it does not establish model interpretation. Demo mode hides task creation and marks sample records so they cannot be mistaken for live Codex tasks. Normal runs remain empty and use the live CLI workflow.
 
 ## Current behavior and limits
 

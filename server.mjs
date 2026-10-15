@@ -301,7 +301,13 @@ function seedDemoTasks() {
       events: [
         { at: stamp(19), kind: 'started', detail: 'Delegated by parent task' },
         { at: stamp(10), kind: 'finished', detail: 'status=completed exit=0' },
-      ], messages: [], messageHistory: [], error: null, pid: null, signal: null,
+      ],
+      messages: [
+        { id: 'd10000000000000000000003', from: 'd00000000000000000000004', at: stamp(11), text: 'The UI projection remains version-dependent; I have attached the captured source path.', kind: 'task_result' },
+      ],
+      messageHistory: [
+        { id: 'd10000000000000000000002', from: 'd00000000000000000000001', at: stamp(16), readAt: stamp(15), text: 'Trace the result delivery path and note where mailbox state diverges from activity events.', kind: 'message', deliveryState: 'read' },
+      ], error: null, pid: null, signal: null,
     },
     {
       id: 'd00000000000000000000004', parentId: 'd00000000000000000000003', createdBy: 'agent',
