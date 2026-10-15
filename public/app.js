@@ -4,10 +4,29 @@ const $ = selector => document.querySelector(selector);
 let state = { tasks: [] };
 let selectedParent = null;
 let selectedMessageTask = null;
+let activeFilter = 'all';
+let taskSearch = '';
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const when = value => value ? new Date(value).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'}) : '';
+function visibleTaskIds() {
+  const byId = new Map(state.tasks.map(task => [task.id, task]));
+  const visible = new Set();
+  const query = taskSearch.toLocaleLowerCase();
+  for (const task of state.tasks) {
+    const statusMatches = activeFilter === 'all' || task.status === activeFilter;
+    const textMatches = !query || task.prompt.toLocaleLowerCase().includes(query);
+    if (!statusMatches || !textMatches) continue;
+    let current = task;
+    while (current && !visible.has(current.id)) {
+      visible.add(current.id);
+      current = current.parentId ? byId.get(current.parentId) : null;
+    }
+  }
+  return visible;
+}
 function taskTree(parentId = null, depth = 0) {
-  return state.tasks.filter(t => t.parentId === parentId).map(task => {
+  const visible = visibleTaskIds();
+  return state.tasks.filter(t => t.parentId === parentId && visible.has(t.id)).map(task => {
     const status = task.status;
     const icon = status === 'running' ? '◉' : status === 'completed' ? '✓' : status === 'failed' ? '!' : status === 'cancelled' ? '×' : status === 'queued' ? '◷' : '…';
     const canCancel = ['queued','running'].includes(status);
@@ -23,6 +42,14 @@ function render(next) {
   $('#workspace').textContent = next.workspace;
   $('#task-count').textContent = next.tasks.length;
   $('#empty').hidden = next.tasks.length > 0;
+  for (const status of ['all','running','queued','completed','failed']) {
+    const count = status === 'all' ? next.tasks.length : next.tasks.filter(task => task.status === status).length;
+    $(`#metric-${status}`).textContent = count;
+  }
+  const visible = visibleTaskIds();
+  $('#visible-count').textContent = `${visible.size} shown`;
+  $('#no-matches').hidden = next.tasks.length === 0 || visible.size > 0;
+  document.querySelectorAll('.metric').forEach(button => button.classList.toggle('active', button.dataset.filter === activeFilter));
   $('#tree').innerHTML = taskTree();
 }
 async function request(path, data) {
@@ -38,6 +65,16 @@ function connect() {
   events.onerror = () => { $('#connection').textContent = 'Reconnecting'; $('.pulse').classList.remove('online'); };
   events.addEventListener('state', event => render(JSON.parse(event.data)));
 }
+document.querySelector('.overview').addEventListener('click', event => {
+  const button = event.target.closest('[data-filter]');
+  if (!button) return;
+  activeFilter = button.dataset.filter;
+  render(state);
+});
+$('#task-search').addEventListener('input', event => {
+  taskSearch = event.target.value.trim();
+  render(state);
+});
 $('#start-root').addEventListener('click', async () => {
   const button = $('#start-root'); const prompt = $('#prompt').value.trim();
   if (!prompt) { $('#prompt').focus(); return; }

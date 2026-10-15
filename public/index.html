@@ -23,7 +23,19 @@
       <div class="compose-foot"><span>Agents run as separate <code>codex exec</code> processes.</span><button id="start-root" class="primary">＋ Start root task</button></div>
     </section>
     <section class="board-head"><div><div class="eyebrow">YOUR WORK</div><h2>Agent tree <span id="task-count" class="count">0</span></h2></div><div class="legend"><span class="dot running"></span>Running <span class="dot done"></span>Done <span class="dot queued"></span>Queued</div></section>
+    <section class="overview" aria-label="Task summary">
+      <button class="metric active" data-filter="all"><span>All tasks</span><strong id="metric-all">0</strong></button>
+      <button class="metric" data-filter="running"><span>Running</span><strong id="metric-running">0</strong></button>
+      <button class="metric" data-filter="queued"><span>Queued</span><strong id="metric-queued">0</strong></button>
+      <button class="metric" data-filter="completed"><span>Completed</span><strong id="metric-completed">0</strong></button>
+      <button class="metric attention" data-filter="failed"><span>Failed</span><strong id="metric-failed">0</strong></button>
+    </section>
+    <section class="task-tools" aria-label="Filter tasks">
+      <label class="search-box"><span aria-hidden="true">⌕</span><input id="task-search" type="search" placeholder="Search task prompts…" autocomplete="off"></label>
+      <span id="visible-count" class="visible-count">0 shown</span>
+    </section>
     <section id="empty" class="empty card"><div class="empty-icon">⌘</div><strong>No tasks yet</strong><p>Start a root task above. Agents can spawn children through MCP, and you can also add a child from the interface.</p></section>
+    <section id="no-matches" class="empty card" hidden><strong>No matching tasks</strong><p>Try a different search or status filter.</p></section>
     <section id="tree" class="tree"></section>
     <footer>Prototype · Runs only on this machine · Task output is held in memory and cleared when the server stops</footer>
   </main>
