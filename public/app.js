@@ -5,6 +5,7 @@ let state = { tasks: [] };
 let selectedTaskId = null;
 let renderedSelectedTaskId = null;
 let pendingFocusTaskId = null;
+let inspectorNavFrame = 0;
 let selectedParent = null;
 let selectedMessageTask = null;
 let activeFilter = 'all';
@@ -141,6 +142,41 @@ function scrollInspectorTo(targetId) {
     target.scrollIntoView({ behavior, block: 'start' });
   }
 }
+function updateInspectorNav() {
+  inspectorNavFrame = 0;
+  const inspector = $('#inspector');
+  const sections = [...document.querySelectorAll('#agent-detail .detail-section[id]')];
+  const buttons = [...document.querySelectorAll('.inspector-nav [data-inspector-target]')];
+  if (!inspector || !sections.length || !buttons.length) return;
+  const desktop = matchMedia('(min-width: 681px)').matches;
+  const atEnd = desktop
+    ? inspector.scrollTop + inspector.clientHeight >= inspector.scrollHeight - 2
+    : window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 2;
+  const anchor = desktop
+    ? inspector.getBoundingClientRect().top + Math.max($('#agent-detail .detail-head')?.getBoundingClientRect().height ?? 0, inspector.clientHeight * 0.55) + 16
+    : Math.min(window.innerHeight * 0.42, window.innerHeight - 80);
+  let current = sections[0];
+  if (atEnd) current = sections.at(-1);
+  else {
+    for (const section of sections) {
+      if (section.getBoundingClientRect().top <= anchor) current = section;
+      else break;
+    }
+  }
+  for (const button of buttons) {
+    const active = button.dataset.inspectorTarget === current.id;
+    button.classList.toggle('active', active);
+    if (active) button.setAttribute('aria-current', 'location');
+    else button.removeAttribute('aria-current');
+  }
+}
+function scheduleInspectorNavUpdate() {
+  if (inspectorNavFrame) return;
+  inspectorNavFrame = requestAnimationFrame(updateInspectorNav);
+}
+$('#inspector').addEventListener('scroll', scheduleInspectorNavUpdate, { passive:true });
+window.addEventListener('scroll', scheduleInspectorNavUpdate, { passive:true });
+window.addEventListener('resize', scheduleInspectorNavUpdate, { passive:true });
 function render(next) {
   const focused = document.activeElement?.dataset ?? {};
   const focusedId = document.activeElement?.id;
@@ -194,6 +230,7 @@ function render(next) {
   renderInspector();
   renderedSelectedTaskId = selectedTaskId;
   $('#inspector').scrollTop = previousSelectedTaskId === selectedTaskId ? inspectorScroll : 0;
+  scheduleInspectorNavUpdate();
   if (focusTarget) document.querySelector(focusTarget)?.focus({ preventScroll:true });
   window.scrollTo({ top:pageScroll, behavior:'instant' });
 }

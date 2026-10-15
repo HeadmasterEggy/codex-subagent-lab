@@ -40,5 +40,6 @@ dialog{max-width:none;max-height:calc(100dvh - 24px);overflow:auto;padding:0;bor
 .inspector-nav::-webkit-scrollbar{display:none}
 .inspector-nav button{flex:0 0 auto;padding:6px 8px;border:1px solid #30343a;border-radius:7px;background:#191b1f;color:#9da4ae;font-size:9px;cursor:pointer}
 .inspector-nav button:hover,.inspector-nav button:focus-visible{border-color:#71834f;color:#d9e6c5;outline:none}
+.inspector-nav button.active{border-color:#65784d;background:#1d2418;color:#d9e9c4;box-shadow:inset 0 1px #ffffff0b}
 @media(max-width:680px){.inspector-nav{margin-top:11px}.inspector-nav button{padding:7px 9px}}
 @media(prefers-reduced-motion:reduce){.inspector{scroll-behavior:auto}.inspector-nav button{scroll-behavior:auto}}
