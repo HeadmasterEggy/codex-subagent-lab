@@ -22,6 +22,11 @@ let topologyScenario = 'panel-open';
 let fullFidelityScenario = 'background';
 let rendererDeltaScenario = 'conversation-missing';
 let completionPayloadScenario = 'parent-input';
+let requestWireTransport = 'http';
+let requestWireContent = 'plaintext';
+let desktopPanelStatus = 'active';
+let desktopPanelInline = true;
+let desktopPanelSelected = null;
 let spawnConfigMode = 'fresh-v2';
 let spawnConfigModelSource = 'inherited';
 let spawnConfigRole = false;
@@ -529,6 +534,45 @@ function selectCompletionPayload(scenario) {
   completionPayloadScenario = ['work-panel','local-transcript'].includes(scenario) ? scenario : 'parent-input';
   container.outerHTML = completionPayloadMarkup();
 }
+function requestWireMarkup() {
+  const transport = requestWireTransport === 'websocket' ? 'websocket' : 'http';
+  const content = requestWireContent === 'encrypted' ? 'encrypted' : 'plaintext';
+  const contentType = content === 'encrypted' ? 'encrypted_content' : 'input_text';
+  const contentValue = content === 'encrypted' ? '"…opaque…"' : '"NEW_TASK … child result …"';
+  const transportLabel = transport === 'http' ? 'HTTP · POST /responses' : 'WEBSOCKET · JSON TEXT FRAME';
+  const transportDetail = transport === 'http'
+    ? 'EncodedJsonBody serializes the ResponsesApiRequest before the HTTP request is sent.'
+    : 'ResponseCreateWsRequest carries the same typed input, serializes as JSON, then is sent in a text frame.';
+  return `<section class="request-wire" aria-labelledby="request-wire-title">
+    <div class="request-wire-heading"><div><span class="request-wire-eyebrow">PARENT SAMPLING · PINNED PUBLIC SOURCE</span><h5 id="request-wire-title">How a child result becomes a model request</h5></div><span>Codex source · 67a7096</span></div>
+    <p class="request-wire-intro">Follow an admitted mailbox item through parent history projection into the typed Responses request. Switch the wire transport and content representation to inspect each source-defined shape.</p>
+    <div class="request-wire-controls">
+      <div role="group" aria-label="Choose source transport"><span>TRANSPORT</span><button type="button" data-request-wire-transport="http" aria-pressed="${transport === 'http'}">HTTP</button><button type="button" data-request-wire-transport="websocket" aria-pressed="${transport === 'websocket'}">WebSocket</button></div>
+      <div role="group" aria-label="Choose AgentMessage content representation"><span>CONTENT</span><button type="button" data-request-wire-content="plaintext" aria-pressed="${content === 'plaintext'}">Plain text</button><button type="button" data-request-wire-content="encrypted" aria-pressed="${content === 'encrypted'}">Encrypted</button></div>
+    </div>
+    <ol class="request-wire-flow" aria-label="Parent request construction sequence">
+      <li><span>01 · ADMISSION</span><strong>Mailbox phase accepts item</strong><small><code>trigger_turn=false</code> alone does not wake an idle parent.</small></li>
+      <li><span>02 · HISTORY</span><strong>Record typed <code>AgentMessage</code></strong><small>Author, recipient and content remain structured.</small></li>
+      <li><span>03 · PROJECTION</span><strong><code>clone_history().for_prompt(...)</code></strong><small>Normalization or truncation can change retained request items.</small></li>
+      <li class="request-wire-current"><span>04 · REQUEST INPUT</span><strong><code>ResponsesApiRequest.input</code></strong><small><code>Vec&lt;ResponseItem&gt;</code> keeps the agent-message discriminator.</small></li>
+      <li class="request-wire-transport"><span>05 · ${transportLabel}</span><strong>${transport === 'http' ? 'JSON body → /responses' : 'JSON → text frame'}</strong><small>${transportDetail}</small></li>
+    </ol>
+    <div class="request-wire-payload" aria-live="polite"><div><span>SIMPLIFIED TYPED SHAPE</span><small>${content === 'encrypted' ? 'Content value is opaque; this view does not decrypt it.' : 'Illustrative fields; IDs and optional metadata omitted.'}</small></div><pre><code>{
+  "type": "agent_message",
+  "author": "child-…",
+  "recipient": "parent-…",
+  "content": [{ "type": "${contentType}", "${content === 'encrypted' ? 'content' : 'text'}": ${contentValue} }]
+}</code></pre></div>
+    <p class="request-wire-boundary">Static source trace only. It does not establish that a live item passed admission, survived projection, used the selected transport, was accepted remotely, or was consumed by a model. The controls change this illustration, not Codex configuration.</p>
+    <p class="request-wire-source"><a href="https://github.com/openai/codex/tree/67a709665ac7b50311b93e32612c9a8281684787" target="_blank" rel="noreferrer">pinned public Codex source</a> · <a href="https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#parent-model-request-serialization-and-transport-boundary" target="_blank" rel="noreferrer">request and transport evidence ledger</a></p>
+  </section>`;
+}
+function selectRequestWireOption(kind, value) {
+  if (kind === 'transport') requestWireTransport = value === 'websocket' ? 'websocket' : 'http';
+  else requestWireContent = value === 'encrypted' ? 'encrypted' : 'plaintext';
+  const container = $('.request-wire');
+  if (container) container.outerHTML = requestWireMarkup();
+}
 function topologyMarkup() {
   const scenarios = {
     'panel-open': {
@@ -635,6 +679,53 @@ function taskTree(parentId = null, depth = 0, visible = visibleTaskIds(), matche
       </div>${children}</div>`;
   }).join('');
 }
+function desktopSubagentsMarkup() {
+  const agents = [
+    { id:'agent-a', name:'Index transcript', role:'Trace analyst', model:'Codex default', status:'active', showInlineActivity:true },
+    { id:'agent-b', name:'Inspect renderer', role:'UI investigator', model:'Codex default', status:'done', showInlineActivity:true },
+    { id:'agent-c', name:'Map event route', role:'Protocol analyst', model:'Codex default', status:desktopPanelStatus, showInlineActivity:desktopPanelInline },
+    { id:'agent-empty', name:'   ', role:null, model:null, status:'active', showInlineActivity:false },
+  ];
+  const named = agents.filter(agent => agent.name.trim().length > 0);
+  const summaryAgents = named.filter(agent => agent.showInlineActivity);
+  const detailRows = named.filter(agent => !agent.showInlineActivity);
+  const working = summaryAgents.filter(agent => agent.status !== 'done');
+  const done = summaryAgents.filter(agent => agent.status === 'done');
+  const selected = agents.find(agent => agent.id === desktopPanelSelected);
+  const avatar = agent => `<span class="desktop-agent-avatar ${agent.status === 'done' ? 'is-done' : 'is-active'}" aria-label="${escapeHtml(agent.name)} · ${agent.status}">${escapeHtml(agent.name.slice(0,1))}</span>`;
+  return `<section class="desktop-subagents" aria-labelledby="desktop-subagents-title">
+    <div class="desktop-subagents-head"><div><span class="desktop-subagents-eyebrow">INSTALLED CODEX · STATIC UI TRACE</span><h5 id="desktop-subagents-title">One child set, two panel projections</h5></div><span class="desktop-subagents-version">26.1007.71326</span></div>
+    <p class="desktop-subagents-intro">A local bundle snapshot shows named background agents split by <code>showInlineActivity</code>. Change the sample child below to see which projection receives it.</p>
+    <div class="desktop-subagents-source" aria-label="Illustrative background agent records">
+      <div class="desktop-subagents-source-label"><span>INPUT</span><strong>backgroundAgents</strong><small>Illustrative records · not captured session data</small></div>
+      <article class="desktop-agent-record ${desktopPanelInline ? 'is-routed-summary' : 'is-routed-row'}"><span class="desktop-record-icon">A</span><div><strong>Map event route</strong><small>Protocol analyst · ${desktopPanelStatus === 'active' ? 'active' : 'done'}</small></div><span class="desktop-route-pill">${desktopPanelInline ? 'INLINE ACTIVITY' : 'PANEL ROW'}</span></article>
+      <article class="desktop-agent-record is-routed-summary"><span class="desktop-record-icon">I</span><div><strong>Index transcript</strong><small>Trace analyst · active</small></div><span class="desktop-route-pill">INLINE ACTIVITY</span></article>
+      <article class="desktop-agent-record is-routed-summary"><span class="desktop-record-icon">R</span><div><strong>Inspect renderer</strong><small>UI investigator · done</small></div><span class="desktop-route-pill">INLINE ACTIVITY</span></article>
+      <article class="desktop-agent-record is-filtered"><span class="desktop-record-icon">∅</span><div><strong>Unnamed record</strong><small>displayName.trim().length === 0</small></div><span class="desktop-route-pill">FILTERED OUT</span></article>
+    </div>
+    <div class="desktop-projection-connectors" aria-hidden="true"><span>showInlineActivity = true <i>↓</i></span><span>showInlineActivity = false <i>↓</i></span></div>
+    <div class="desktop-subagents-projections">
+      <article class="desktop-projection-card summary-projection">
+        <div class="desktop-projection-title"><span class="desktop-projection-icon">◉</span><div><span>COMPACT SUMMARY</span><strong>Collapsed subagents row</strong></div><small>${summaryAgents.length} in group</small></div>
+        <button class="desktop-summary-button" type="button" data-native-panel-summary aria-label="Illustrative open subagents overview">
+          <span class="desktop-avatar-stack">${summaryAgents.slice(0,4).map(avatar).join('')}</span>
+          <span class="desktop-summary-copy"><strong>${working.length ? `${working.length} working` : `${done.length} done`}</strong>${working.length && done.length ? `<small>${done.length} done</small>` : ''}</span><span class="desktop-open-mark">↗</span>
+        </button>
+        <p>Clicking this row invokes <code>onOpenSubagentsPanel</code> when supplied. Up to four status-sorted child avatars are shown.</p>
+      </article>
+      <article class="desktop-projection-card rows-projection">
+        <div class="desktop-projection-title"><span class="desktop-projection-icon">☷</span><div><span>DETAIL ROWS</span><strong>Other named agents</strong></div><small>${detailRows.length} in list</small></div>
+        <div class="desktop-agent-rows">${detailRows.length ? detailRows.map(agent => `<button class="desktop-agent-row ${desktopPanelSelected === agent.id ? 'is-selected' : ''}" type="button" data-native-panel-select="${agent.id}"><span class="desktop-agent-avatar ${agent.status === 'done' ? 'is-done' : 'is-active'}">${escapeHtml(agent.name.slice(0,1))}</span><span class="desktop-agent-row-copy"><strong>${escapeHtml(agent.name)}</strong><small>${escapeHtml(agent.role)} · ${escapeHtml(agent.model)}</small></span>${agent.status === 'active' ? '<span class="desktop-working-indicator"><i></i>is working</span>' : ''}<span class="desktop-row-open">↗</span></button>`).join('') : '<div class="desktop-empty-rows">No named agents in this projection. Turn inline activity off to place the sample in this list.</div>'}</div>
+        <p>Clicking a row calls <code>onOpenBackgroundAgent(agent)</code>. The active row gets an “is working” label; other statuses can remain unlabeled.</p>
+      </article>
+    </div>
+    <div class="desktop-projection-controls"><div><span>LIVE SAMPLE CONTROLS</span><strong>Map event route</strong></div><div class="desktop-control-group" role="group" aria-label="Sample agent status"><button type="button" data-native-panel-status="active" aria-pressed="${desktopPanelStatus === 'active'}">active</button><button type="button" data-native-panel-status="done" aria-pressed="${desktopPanelStatus === 'done'}">done</button></div><label class="desktop-inline-toggle"><input type="checkbox" data-native-panel-inline ${desktopPanelInline ? 'checked' : ''}><span>showInlineActivity</span></label></div>
+    <div class="desktop-panel-selection" aria-live="polite"><span>${selected ? 'ROW CLICK PATH' : desktopPanelSelected === 'summary' ? 'SUMMARY CLICK PATH' : 'STATIC BEHAVIOR'}</span><strong>${selected ? `Selected “${escapeHtml(selected.name)}” → onOpenBackgroundAgent → child conversation view` : desktopPanelSelected === 'summary' ? 'Compact summary → onOpenSubagentsPanel → subagents overview.' : 'The compact summary opens the overview; a named detail row opens that selected child.'}</strong></div>
+    <p class="desktop-subagents-boundary">Static extraction from the installed app bundle; example records and controls are illustrative. This does not capture a live Desktop session, prove a React commit or visible paint, or represent the Lab’s CLI process tree.</p>
+    <p class="desktop-subagents-source-link"><code>local-conversation-thread-269c4ee9ddf0.js</code> · chars 30,957–40,247 · REA Evidence <code>ev_9a2e1d42897d8f73d61bea38956116d402057de54c34849710d94e1956ca3dde</code></p>
+  </section>`;
+}
+
 function renderInspector() {
   const task = taskById(selectedTaskId);
   $('#inspector-empty').hidden = Boolean(task);
@@ -699,6 +790,7 @@ function renderInspector() {
       </div>
       <p>Static synthesis of pinned public source and the local prototype. The current-main comparison found no subagent lifecycle or message-routing change in the inspected paths; it does not establish behavior of a live Desktop session.</p>
     </section>
+    ${desktopSubagentsMarkup()}
     <section class="detail-section metadata-grid" aria-label="Agent metadata">
       <div class="meta-cell"><span>CREATED</span><strong>${escapeHtml(when(task.createdAt))}</strong></div><div class="meta-cell"><span>STARTED</span><strong>${escapeHtml(when(task.startedAt))}</strong></div><div class="meta-cell"><span>ELAPSED</span><strong data-duration-for="${escapeHtml(task.id)}">${task.startedAt ? durationLabel(elapsedMs(task)) : '—'}</strong></div><div class="meta-cell"><span>LAST ACTIVITY</span><strong>${escapeHtml(when(task.lastActivityAt ?? task.events?.at(-1)?.at))}</strong></div><div class="meta-cell"><span>RUNTIME LIMIT</span><strong>${task.timeoutSeconds ? durationLabel(task.timeoutSeconds * 1000) : 'None'}</strong></div><div class="meta-cell"><span>PROCESS</span><strong>${task.pid ? `PID ${escapeHtml(task.pid)}` : task.exitCode !== null ? `Exit ${escapeHtml(task.exitCode)}` : '—'}</strong></div>
     </section>
@@ -711,7 +803,7 @@ function renderInspector() {
     ${spawnProtocolMarkup()}
     ${terminalLifecycleMarkup()}
     ${isSample ? '<div class="sample-note">Illustrative data only. No Codex process was started.</div>' : ''}${task.timeoutReason ? `<section class="error-panel timeout-panel"><span class="error-icon">⌛</span><div><strong>Task timed out</strong><p>${escapeHtml(task.timeoutReason)}. The task is marked timed out after its process exits.</p></div></section>` : ''}${task.error ? `<section class="error-panel"><span class="error-icon">!</span><div><strong>Agent error</strong><p>${escapeHtml(task.error)}</p></div></section>` : ''}
-    <section id="links" class="detail-section"><div class="section-title"><h4>Task links</h4><span>${children.length} child${children.length === 1 ? '' : 'ren'}</span></div>${activeChildren.length && ['completed','failed','cancelled','timed_out'].includes(task.status) ? `<div class="lifecycle-note"><span>↗</span><p>This task has ended. ${activeChildren.length} direct child agent${activeChildren.length === 1 ? '' : 's'} ${activeChildren.length === 1 ? 'is' : 'are'} still active and will continue independently.</p></div>` : ''}<div class="task-relation-map" role="group" aria-label="Task parent and child relationships">${parent ? `<button class="relation-node parent-node" type="button" data-jump="${escapeHtml(parent.id)}"><span class="relation-role">PARENT · ${escapeHtml(parent.status.replaceAll('_',' ').toUpperCase())}</span><strong>${escapeHtml(parent.prompt)}</strong></button><div class="relation-edge"><span aria-hidden="true">↓</span><small>spawned by</small></div>` : ''}<div class="relation-node current-node" aria-current="true"><span class="relation-role">${parent ? 'SELECTED CHILD' : 'ROOT TASK'} · ${escapeHtml(task.status.replaceAll('_',' ').toUpperCase())}</span><strong>${escapeHtml(task.prompt)}</strong></div>${children.length ? `<div class="relation-branch"><div class="relation-edge"><span aria-hidden="true">↓</span><small>spawns ${children.length} child${children.length === 1 ? '' : 'ren'}</small></div><div class="relation-children">${children.map(child => `<button class="relation-node child-node" type="button" data-jump="${escapeHtml(child.id)}"><span class="relation-role">CHILD · ${escapeHtml(child.status.replaceAll('_',' ').toUpperCase())}</span><strong>${escapeHtml(child.prompt)}</strong><span class="relation-open" aria-hidden="true">↗</span></button>`).join('')}</div></div>` : '<div class="relation-empty">No child agents yet</div>'}</div><p class="relation-note">This map shows task ancestry. Messages and child results appear in the mailbox.</p>${renderConcurrencyTimeline(task, parent, children)}${renderInteractionSequence(task, parent, children, interactionItems)}${renderDesktopGate()}${fullFidelityMarkup()}${rendererDeltaMarkup()}${completionPayloadMarkup()}${historyProjectionMarkup()}<div class="interaction-trace"><div class="section-title"><h4>Direct interaction trace</h4><span>${interactionItems.length} item${interactionItems.length === 1 ? '' : 's'}</span></div>${interactionItems.length ? `<div class="interaction-list">${interactionItems.map(({ recipient, message }) => { const sender = taskById(message.from); const isResult = message.kind === 'task_result'; const isReturned = message.deliveryState === 'read'; return `<article class="interaction-item ${isResult ? 'result' : ''} ${isReturned ? 'returned' : 'pending'}"><div class="interaction-meta"><span class="interaction-kind">${isResult ? 'CHILD RESULT' : 'MESSAGE'}</span><span class="interaction-state ${isReturned ? 'returned' : 'pending'}">${isReturned ? 'SUPPLIED TO TASK TOOL' : 'PENDING IN INBOX'}</span><time>${escapeHtml(when(message.at))}</time></div><div class="interaction-pipeline" role="img" aria-label="${escapeHtml(relationRole(sender?.id))} sends to coordinator inbox, then ${isReturned ? 'the coordinator supplies it to' : 'it waits for'} the ${escapeHtml(relationRole(recipient.id))} task tool"><span class="pipeline-stage sent"><small>FROM · ${relationRole(sender?.id)}</small><strong>${escapeHtml(sender?.prompt ?? message.from)}</strong><b>SENT</b></span><i class="pipeline-link complete" aria-hidden="true">→</i><span class="pipeline-stage queued"><small>COORDINATOR INBOX</small><strong>${escapeHtml(relationRole(recipient.id))} mailbox</strong><b>QUEUED</b></span><i class="pipeline-link ${isReturned ? 'complete' : ''}" aria-hidden="true">→</i><span class="pipeline-stage ${isReturned ? 'supplied' : 'waiting'}"><small>TASK TOOL · ${relationRole(recipient.id)}</small><strong>${escapeHtml(recipient.prompt)}</strong><b>${isReturned ? 'SUPPLIED' : 'WAITING'}</b></span></div><p>${escapeHtml(message.text)}</p></article>`; }).join('')}</div><p class="interaction-proof">“Supplied” means the coordinator included the message in that task tool call. It does not prove the model interpreted it.</p>` : '<div class="interaction-empty">No direct parent/child messages or results in the available snapshot.</div>'}</div></section>
+    <section id="links" class="detail-section"><div class="section-title"><h4>Task links</h4><span>${children.length} child${children.length === 1 ? '' : 'ren'}</span></div>${activeChildren.length && ['completed','failed','cancelled','timed_out'].includes(task.status) ? `<div class="lifecycle-note"><span>↗</span><p>This task has ended. ${activeChildren.length} direct child agent${activeChildren.length === 1 ? '' : 's'} ${activeChildren.length === 1 ? 'is' : 'are'} still active and will continue independently.</p></div>` : ''}<div class="task-relation-map" role="group" aria-label="Task parent and child relationships">${parent ? `<button class="relation-node parent-node" type="button" data-jump="${escapeHtml(parent.id)}"><span class="relation-role">PARENT · ${escapeHtml(parent.status.replaceAll('_',' ').toUpperCase())}</span><strong>${escapeHtml(parent.prompt)}</strong></button><div class="relation-edge"><span aria-hidden="true">↓</span><small>spawned by</small></div>` : ''}<div class="relation-node current-node" aria-current="true"><span class="relation-role">${parent ? 'SELECTED CHILD' : 'ROOT TASK'} · ${escapeHtml(task.status.replaceAll('_',' ').toUpperCase())}</span><strong>${escapeHtml(task.prompt)}</strong></div>${children.length ? `<div class="relation-branch"><div class="relation-edge"><span aria-hidden="true">↓</span><small>spawns ${children.length} child${children.length === 1 ? '' : 'ren'}</small></div><div class="relation-children">${children.map(child => `<button class="relation-node child-node" type="button" data-jump="${escapeHtml(child.id)}"><span class="relation-role">CHILD · ${escapeHtml(child.status.replaceAll('_',' ').toUpperCase())}</span><strong>${escapeHtml(child.prompt)}</strong><span class="relation-open" aria-hidden="true">↗</span></button>`).join('')}</div></div>` : '<div class="relation-empty">No child agents yet</div>'}</div><p class="relation-note">This map shows task ancestry. Messages and child results appear in the mailbox.</p>${renderConcurrencyTimeline(task, parent, children)}${renderInteractionSequence(task, parent, children, interactionItems)}${renderDesktopGate()}${fullFidelityMarkup()}${rendererDeltaMarkup()}${completionPayloadMarkup()}${requestWireMarkup()}${historyProjectionMarkup()}<div class="interaction-trace"><div class="section-title"><h4>Direct interaction trace</h4><span>${interactionItems.length} item${interactionItems.length === 1 ? '' : 's'}</span></div>${interactionItems.length ? `<div class="interaction-list">${interactionItems.map(({ recipient, message }) => { const sender = taskById(message.from); const isResult = message.kind === 'task_result'; const isReturned = message.deliveryState === 'read'; return `<article class="interaction-item ${isResult ? 'result' : ''} ${isReturned ? 'returned' : 'pending'}"><div class="interaction-meta"><span class="interaction-kind">${isResult ? 'CHILD RESULT' : 'MESSAGE'}</span><span class="interaction-state ${isReturned ? 'returned' : 'pending'}">${isReturned ? 'SUPPLIED TO TASK TOOL' : 'PENDING IN INBOX'}</span><time>${escapeHtml(when(message.at))}</time></div><div class="interaction-pipeline" role="img" aria-label="${escapeHtml(relationRole(sender?.id))} sends to coordinator inbox, then ${isReturned ? 'the coordinator supplies it to' : 'it waits for'} the ${escapeHtml(relationRole(recipient.id))} task tool"><span class="pipeline-stage sent"><small>FROM · ${relationRole(sender?.id)}</small><strong>${escapeHtml(sender?.prompt ?? message.from)}</strong><b>SENT</b></span><i class="pipeline-link complete" aria-hidden="true">→</i><span class="pipeline-stage queued"><small>COORDINATOR INBOX</small><strong>${escapeHtml(relationRole(recipient.id))} mailbox</strong><b>QUEUED</b></span><i class="pipeline-link ${isReturned ? 'complete' : ''}" aria-hidden="true">→</i><span class="pipeline-stage ${isReturned ? 'supplied' : 'waiting'}"><small>TASK TOOL · ${relationRole(recipient.id)}</small><strong>${escapeHtml(recipient.prompt)}</strong><b>${isReturned ? 'SUPPLIED' : 'WAITING'}</b></span></div><p>${escapeHtml(message.text)}</p></article>`; }).join('')}</div><p class="interaction-proof">“Supplied” means the coordinator included the message in that task tool call. It does not prove the model interpreted it.</p>` : '<div class="interaction-empty">No direct parent/child messages or results in the available snapshot.</div>'}</div></section>
     <section id="agent-mailbox" class="detail-section mailbox-section"><div class="section-title"><h4><span class="section-icon">↳</span> Mailbox</h4><span class="mail-count">${Number(task.pendingMessageCount) || 0} pending · ${Number(task.pendingTaskResultCount) || 0} child results</span></div><p class="mailbox-proof">Returned means the coordinator supplied this message to the task tool; it does not prove the model interpreted it.</p><details class="delivery-model" ${deliveryModelOpen ? 'open' : ''}><summary><span>How Codex V2 chooses whether to wake a child</span><small>source model · 0.162.0-alpha.17.2</small></summary><div class="delivery-mode-grid"><article class="delivery-mode queue-only"><div class="delivery-mode-title"><span class="mode-icon" aria-hidden="true">Ⅱ</span><div><h5>send_message</h5><span>QueueOnly</span></div><b>QUEUE</b></div><div class="mode-flow"><span>Caller</span><i aria-hidden="true">→</i><span>Child mailbox</span><i aria-hidden="true">→</i><span class="mode-outcome">Waits for an eligible turn</span></div><p>Delivery does not start an ordinary idle child. If the child is unloaded, mail waits in runtime memory until a session loads.</p></article><article class="delivery-mode trigger-turn"><div class="delivery-mode-title"><span class="mode-icon" aria-hidden="true">▶</span><div><h5>followup_task</h5><span>TriggerTurn</span></div><b>WAKE</b></div><div class="mode-flow"><span>Caller</span><i aria-hidden="true">→</i><span>Load child + mailbox</span><i aria-hidden="true">→</i><span class="mode-outcome">Start a turn if idle</span></div><p>Targets an existing V2 child and asks the scheduler to start work when it is idle. It does not spawn a replacement child; triggering the root is rejected.</p></article></div><p class="delivery-model-proof">Accepted delivery and an “Interacted” activity do not prove the child model has read the message. <a href="https://github.com/openai/codex/blob/740e5af33c71225640e0c1c1555c514c2c93ab74/codex-rs/core/src/tools/handlers/multi_agents_v2/message_tool.rs" target="_blank" rel="noreferrer">Message handler</a> · <a href="https://github.com/openai/codex/blob/740e5af33c71225640e0c1c1555c514c2c93ab74/codex-rs/core/src/agent/control/delivery.rs" target="_blank" rel="noreferrer">Delivery policy</a></p></details>${inboxItems.length ? `<div class="inbox-list">${inboxItems.map(message => `<article class="inbox-item ${message.deliveryState === 'read' ? 'read' : 'pending'}"><div class="inbox-meta"><span class="mail-kind ${message.kind === 'task_result' ? 'result' : ''}">${message.kind === 'task_result' ? 'CHILD RESULT' : 'MESSAGE'}</span><span class="delivery-state ${message.deliveryState === 'read' ? 'read' : 'pending'}">${message.deliveryState === 'read' ? 'RETURNED' : 'PENDING'}</span><span>from ${escapeHtml(message.from)}</span><time>${escapeHtml(when(message.deliveryState === 'read' ? message.readAt : message.at))}</time></div><p>${escapeHtml(message.text)}</p></article>`).join('')}</div>` : `<div class="mailbox-empty"><span>✉</span><div><strong>Inbox is clear</strong><small>Messages and child results will show up here.</small></div></div>`}${canMessage ? `<button class="inbox-compose" type="button" data-message="${escapeHtml(task.id)}">＋ Send this agent a message</button>` : ''}</section>
     <section id="output" class="detail-section output-section"><div class="section-title"><h4>Latest output</h4><span>${task.output ? `${String(task.output).length.toLocaleString()} chars` : 'Awaiting output'}</span></div>${task.output ? `<pre class="output-text">${escapeHtml(task.output)}</pre>` : `<div class="output-empty"><span class="output-spinner ${task.status === 'running' ? 'active' : ''}">${task.status === 'running' ? '◌' : '·'}</span><span>${task.status === 'running' ? 'Agent is working. Output will stream in here.' : task.status === 'queued' ? 'Output will appear when this agent starts.' : 'This agent did not produce captured text output.'}</span></div>`}</section>
     <section id="activity" class="detail-section activity-section"><div class="section-title"><h4>Recent activity</h4><span>${(task.events ?? []).length} events</span></div>${events.length ? `<div class="activity-list">${events.map(event => `<div class="activity-item"><time>${escapeHtml(when(event.at))}</time><span class="activity-dot ${escapeHtml(event.kind)}"></span><span class="activity-copy"><strong>${escapeHtml(event.kind.replaceAll('_',' '))}</strong><small>${escapeHtml(String(event.detail ?? '').replace(/\s+/g,' ').slice(0,220))}</small></span></div>`).join('')}</div>` : '<div class="subtle-empty">No activity recorded yet.</div>'}</section>`;
@@ -1079,6 +1171,13 @@ document.addEventListener('toggle', event => {
 document.addEventListener('input', event => {
   if (event.target.matches('.sequence-scrubber input[type="range"]')) updateSequenceStep(event.target.closest('.interaction-sequence'), event.target.value);
 });
+document.addEventListener('change', event => {
+  if (!event.target.matches('[data-native-panel-inline]')) return;
+  desktopPanelInline = event.target.checked;
+  desktopPanelSelected = null;
+  const panel = event.target.closest('.desktop-subagents');
+  if (panel) panel.outerHTML = desktopSubagentsMarkup();
+});
 document.addEventListener('keydown', event => {
   const sequenceEvent = event.target.closest?.('.sequence-plot-event, .sequence-event');
   if (!sequenceEvent || !['Enter',' '].includes(event.key)) return;
@@ -1362,6 +1461,25 @@ $('#tree').addEventListener('keydown', event => {
   }
 });
 document.addEventListener('click', async event => {
+  const nativePanelStatus = event.target.closest('[data-native-panel-status]');
+  if (nativePanelStatus) {
+    desktopPanelStatus = nativePanelStatus.dataset.nativePanelStatus === 'done' ? 'done' : 'active';
+    desktopPanelSelected = null;
+    nativePanelStatus.closest('.desktop-subagents').outerHTML = desktopSubagentsMarkup();
+    return;
+  }
+  const nativePanelSelect = event.target.closest('[data-native-panel-select]');
+  if (nativePanelSelect) {
+    desktopPanelSelected = nativePanelSelect.dataset.nativePanelSelect;
+    nativePanelSelect.closest('.desktop-subagents').outerHTML = desktopSubagentsMarkup();
+    return;
+  }
+  const nativePanelSummary = event.target.closest('[data-native-panel-summary]');
+  if (nativePanelSummary) {
+    desktopPanelSelected = 'summary';
+    nativePanelSummary.closest('.desktop-subagents').outerHTML = desktopSubagentsMarkup();
+    return;
+  }
   const sequenceEvent = event.target.closest('[data-sequence-index]');
   if (sequenceEvent) {
     updateSequenceStep(sequenceEvent.closest('.interaction-sequence'), sequenceEvent.dataset.sequenceIndex);
@@ -1419,6 +1537,10 @@ document.addEventListener('click', async event => {
   if (rendererDeltaCase) { selectRendererDeltaScenario(rendererDeltaCase.dataset.rendererDelta); return; }
   const completionPayloadCase = event.target.closest('[data-completion-payload]');
   if (completionPayloadCase) { selectCompletionPayload(completionPayloadCase.dataset.completionPayload); return; }
+  const requestWireTransportButton = event.target.closest('[data-request-wire-transport]');
+  if (requestWireTransportButton) { selectRequestWireOption('transport', requestWireTransportButton.dataset.requestWireTransport); return; }
+  const requestWireContentButton = event.target.closest('[data-request-wire-content]');
+  if (requestWireContentButton) { selectRequestWireOption('content', requestWireContentButton.dataset.requestWireContent); return; }
   const spawnProtocolVersionButton = event.target.closest('[data-spawn-protocol-version]');
   if (spawnProtocolVersionButton) { selectSpawnProtocol('version', spawnProtocolVersionButton.dataset.spawnProtocolVersion); return; }
   const spawnProtocolOutcomeButton = event.target.closest('[data-spawn-protocol-outcome]');
