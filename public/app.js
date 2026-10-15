@@ -28,6 +28,8 @@ let desktopPanelStatus = 'active';
 let desktopPanelInline = true;
 let desktopPanelSelected = null;
 let desktopPanelCanInteract = true;
+let desktopPanelShouldResume = true;
+let desktopPanelWriterConflict = false;
 let spawnConfigMode = 'fresh-v2';
 let spawnConfigModelSource = 'inherited';
 let spawnConfigRole = false;
@@ -726,6 +728,7 @@ function desktopSubagentsMarkup() {
     <div class="desktop-open-route" data-route="${selectedRoute}" aria-live="polite">
       ${selectedRoute === 'summary' ? `<div class="desktop-open-route-head"><span>OVERVIEW ROUTE</span><strong>Summary click opens the parent’s Subagents overview</strong></div><div class="desktop-route-steps"><article><small>01 · CLICK</small><b>Compact summary row</b><span>onOpenSubagentsPanel</span></article><i aria-hidden="true">→</i><article><small>02 · DESTINATION</small><b>Parent Subagents overview</b><span>Child selection happens in a separate step.</span></article></div>` : selectedRoute === 'idle' ? `<div class="desktop-route-idle"><span>↗</span><div><b>Two click destinations</b><small>Summary opens the overview; a child row routes according to its parent-thread evidence.</small></div></div>` : selectedRoute === 'thread' ? `<div class="desktop-open-route-head"><span>CANINTERACT = TRUE · LOCAL THREAD ROUTE</span><strong>Resolve the child before mounting its conversation</strong></div><div class="desktop-route-steps"><article><small>01 · LOOK UP</small><b>Indexed child or parent history</b><span>Find the matching spawn/activity reference.</span></article><i aria-hidden="true">→</i><article><small>02 · VALIDATE</small><b>Parent ancestry + first page</b><span>Check the requested parent, then require child first-page readiness.</span></article><i aria-hidden="true">→</i><article><small>03 · OPEN</small><b>Durable local thread tab</b><span>Composer and resume can be enabled, subject to writer conflict.</span></article></div>` : `<div class="desktop-open-route-head"><span>CANINTERACT = FALSE · EMBEDDED PANEL ROUTE</span><strong>Keep the selected child inside the parent’s Subagents panel</strong></div><div class="desktop-route-steps"><article><small>01 · SELECT</small><b>Activity-only or non-interactive child</b><span>Open the parent panel with this child selected.</span></article><i aria-hidden="true">→</i><article><small>02 · CHECK</small><b>Verify descendant relationship</b><span>Missing ancestry can be hydrated without loading turns.</span></article><i aria-hidden="true">→</i><article><small>03 · PROJECT</small><b>Embedded child transcript</b><span>Composer stays hidden; the interactive resume hook is gated off.</span></article></div>`}
     </div>
+    ${selectedRoute === 'thread' ? `<div class="desktop-thread-gates" aria-live="polite"><div class="desktop-thread-gates-title"><span>THREAD RENDERER GATES</span><small>static client logic</small></div><div class="desktop-projection-controls gate-controls"><div class="desktop-control-group" role="group" aria-label="shouldResume input"><button type="button" data-native-panel-resume="true" aria-pressed="${desktopPanelShouldResume}">shouldResume true</button><button type="button" data-native-panel-resume="false" aria-pressed="${!desktopPanelShouldResume}">false</button></div><div class="desktop-control-group" role="group" aria-label="Writer conflict state"><button type="button" data-native-panel-conflict="false" aria-pressed="${!desktopPanelWriterConflict}">no conflict</button><button type="button" data-native-panel-conflict="true" aria-pressed="${desktopPanelWriterConflict}">writer conflict</button></div></div><div class="desktop-gate-matrix"><article><span>RESUME HOOK INPUT</span><strong class="${desktopPanelShouldResume && desktopPanelCanInteract ? 'gate-on' : 'gate-off'}">${desktopPanelShouldResume && desktopPanelCanInteract ? 'child ID passed' : 'null · hook gated'}</strong><small>shouldResume ∧ canInteract</small></article><article><span>COMPOSER</span><strong class="${desktopPanelCanInteract && !desktopPanelWriterConflict ? 'gate-on' : 'gate-off'}">${desktopPanelCanInteract && !desktopPanelWriterConflict ? 'shown' : 'hidden'}</strong><small>canInteract ∧ ¬writerConflict</small></article><article><span>READ ONLY</span><strong class="${!desktopPanelCanInteract || desktopPanelWriterConflict ? 'gate-warn' : 'gate-on'}">${!desktopPanelCanInteract || desktopPanelWriterConflict ? 'yes' : 'no'}</strong><small>¬canInteract ∨ writerConflict</small></article><article><span>CONFLICT UI</span><strong class="${desktopPanelWriterConflict ? 'gate-warn' : 'gate-neutral'}">${desktopPanelWriterConflict ? 'fork conflict view' : 'not rendered'}</strong><small>writer conflict branch</small></article></div><p>“Child ID passed” means the resume hook is eligible to run; it does not prove a resume request succeeds. The conflict view is a UI branch, not proof that forking succeeds.</p></div>` : ''}
     <p class="desktop-subagents-boundary">Static extraction from the installed app bundle; example records and controls are illustrative. <code>canInteract</code> describes client routing and composer/resume UI gates, not server authorization or current runtime status. This does not capture a live Desktop session, prove a React commit or visible paint, or represent the Lab’s CLI process tree.</p>
     <p class="desktop-subagents-source-link"><a href="https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#local-desktop-panel-entry-point" target="_blank" rel="noreferrer">Panel entry and child routing</a> · <a href="https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#installed-desktop-26100771326-selected-child-panel-path" target="_blank" rel="noreferrer">canInteract derivation and UI gates</a> · <code>local-conversation-thread-269c4ee9ddf0.js</code> · chars 30,957–40,247 · REA Evidence <code>ev_9a2e1d42897d8f73d61bea38956116d402057de54c34849710d94e1956ca3dde</code></p>
   </section>`;
@@ -1473,6 +1476,18 @@ $('#tree').addEventListener('keydown', event => {
   }
 });
 document.addEventListener('click', async event => {
+  const nativePanelResume = event.target.closest('[data-native-panel-resume]');
+  if (nativePanelResume) {
+    desktopPanelShouldResume = nativePanelResume.dataset.nativePanelResume === 'true';
+    nativePanelResume.closest('.desktop-subagents').outerHTML = desktopSubagentsMarkup();
+    return;
+  }
+  const nativePanelConflict = event.target.closest('[data-native-panel-conflict]');
+  if (nativePanelConflict) {
+    desktopPanelWriterConflict = nativePanelConflict.dataset.nativePanelConflict === 'true';
+    nativePanelConflict.closest('.desktop-subagents').outerHTML = desktopSubagentsMarkup();
+    return;
+  }
   const nativePanelInteract = event.target.closest('[data-native-panel-interact]');
   if (nativePanelInteract) {
     desktopPanelCanInteract = nativePanelInteract.dataset.nativePanelInteract === 'true';
