@@ -778,7 +778,7 @@ function renderInspector() {
       <div class="inspector-nav-links"><button type="button" data-inspector-target="context">Context</button><button type="button" data-inspector-target="links">Task links</button><button type="button" data-inspector-target="agent-mailbox">Mailbox</button><button type="button" data-inspector-target="output">Output</button><button type="button" data-inspector-target="activity">Activity</button></div>
     </nav>
     <section class="mechanism-overview" aria-labelledby="mechanism-overview-title">
-      <div class="mechanism-overview-heading"><div><span>MECHANISM MAP · SOURCE SYNTHESIS</span><h4 id="mechanism-overview-title">How a child agent fits into the parent thread</h4></div><a href="https://github.com/openai/codex/compare/7ae831991792744434027c431dfbc7e81dd5c12c...1ef30bcbe784f1006548adc1542985be32b05109" target="_blank" rel="noreferrer">main checked · 1ef30bc</a></div>
+      <div class="mechanism-overview-heading"><div><span>MECHANISM MAP · SOURCE SYNTHESIS</span><h4 id="mechanism-overview-title">How a child agent fits into the parent thread</h4></div><a href="https://github.com/openai/codex/compare/1ef30bcbe784f1006548adc1542985be32b05109...97ebf2d94d62e2ff2045f3ea17b6e11eae9a21fb" target="_blank" rel="noreferrer">main rechecked · 97ebf2d</a></div>
       <div class="mechanism-overview-flow" aria-label="Source-backed subagent lifecycle overview">
         <button type="button" data-inspector-target="context"><span>01 · PREPARE</span><strong>Context + policy</strong><small>Resolve the child snapshot, model, role and runtime authority.</small><b>Inspect input</b></button>
         <i aria-hidden="true">→</i>
@@ -788,7 +788,14 @@ function renderInspector() {
         <i aria-hidden="true">→</i>
         <button type="button" data-inspector-target="activity"><span>04 · RETURN</span><strong>Status + result</strong><small>Terminal status, activity and parent result are distinct signals.</small><b>Inspect activity</b></button>
       </div>
-      <p>Static synthesis of pinned public source and the local prototype. The current-main comparison found no subagent lifecycle or message-routing change in the inspected paths; it does not establish behavior of a live Desktop session.</p>
+      <div class="upstream-refresh" aria-label="Latest upstream changes and subagent scope">
+        <div class="upstream-refresh-heading"><span>UPSTREAM DELTA · 1EF30BC → 97EBF2D</span><b>2 COMMITS REVIEWED</b></div>
+        <div class="upstream-refresh-grid">
+          <a href="https://github.com/openai/codex/commit/aabf133" target="_blank" rel="noreferrer"><span>ADJACENT · RESULT DATA</span><strong>Generated images may be attachment references</strong><small>Thread history, rollout migration and task summaries now preserve fileId; inline data remains a fallback.</small></a>
+          <a href="https://github.com/openai/codex/commit/97ebf2d" target="_blank" rel="noreferrer"><span>DAEMON · MACOS</span><strong>Managed app-server launch policy changed</strong><small>Uses a taskpolicy -b probe with direct-launch fallback. This is not the child-agent launch path.</small></a>
+        </div>
+        <p>No direct changes were found in the inspected core child lifecycle, multi-agent handlers or inter-agent routing paths. The image-reference change is a generic result representation path; no child-specific image behavior was observed. This source map is not a live Desktop session.</p>
+      </div>
     </section>
     ${desktopSubagentsMarkup()}
     <section class="detail-section metadata-grid" aria-label="Agent metadata">
