@@ -69,7 +69,7 @@ function taskTree(parentId = null, depth = 0, visible = visibleTaskIds(), matche
     const isContext = !matches.has(task.id);
     const hasChildren = state.tasks.some(item => item.parentId === task.id && visible.has(item.id));
     const childCount = state.tasks.filter(item => item.parentId === task.id).length;
-    const forcedExpanded = hasChildren && matchingAncestors.has(task.id);
+    const forcedExpanded = hasChildren && (activeFilter !== 'all' || taskSearch.length > 0) && matchingAncestors.has(task.id);
     const expanded = hasChildren && (!collapsedTasks.has(task.id) || forcedExpanded);
     const children = expanded ? taskTree(task.id, depth + 1, visible, matches, matchingAncestors) : '';
     return `<div class="tree-node ${depth ? 'nested' : ''}" role="group">
@@ -81,7 +81,7 @@ function taskTree(parentId = null, depth = 0, visible = visibleTaskIds(), matche
           ${isContext ? '<span class="context-label">context</span>' : ''}
         </button>
         ${task.pendingTaskResultCount ? `<button class="tree-result-badge" type="button" data-open-inbox="${escapeHtml(task.id)}" aria-label="Open inbox: ${task.pendingTaskResultCount} pending child result${task.pendingTaskResultCount === 1 ? '' : 's'}">${task.pendingTaskResultCount} result${task.pendingTaskResultCount === 1 ? '' : 's'}</button>` : ''}
-        <div class="tree-actions">${['queued','running'].includes(task.status) ? `<button class="tree-action stop" type="button" data-cancel="${escapeHtml(task.id)}" aria-label="Stop task">■</button>` : ''}${depth < 7 ? `<button class="tree-action" type="button" data-child="${escapeHtml(task.id)}" aria-label="Add child agent">＋</button>` : ''}</div>
+        <div class="tree-actions">${state.demoMode ? '' : `${['queued','running'].includes(task.status) ? `<button class="tree-action stop" type="button" data-cancel="${escapeHtml(task.id)}" aria-label="Stop task">■</button>` : ''}${depth < 7 ? `<button class="tree-action" type="button" data-child="${escapeHtml(task.id)}" aria-label="Add child agent">＋</button>` : ''}`}</div>
       </div>${children}</div>`;
   }).join('');
 }
@@ -93,20 +93,21 @@ function renderInspector() {
   const parent = task.parentId ? taskById(task.parentId) : null;
   const children = state.tasks.filter(item => item.parentId === task.id);
   const activeChildren = children.filter(item => ['queued','running','cancelling'].includes(item.status));
-  const canMessage = ['queued','running'].includes(task.status);
-  const canSpawnChild = taskDepth(task) < 7;
+  const isSample = state.demoMode || task.createdBy === 'demo';
+  const canMessage = !isSample && ['queued','running'].includes(task.status);
+  const canSpawnChild = !isSample && taskDepth(task) < 7;
   const events = (task.events ?? []).slice(-10).reverse();
   const inboxItems = task.recentMessages ?? [];
   $('#agent-detail').innerHTML = `<header class="detail-head">
-      <div class="detail-kicker"><span class="eyebrow">AGENT INSPECTOR</span><span class="agent-id">${escapeHtml(task.id.slice(0,10))}</span></div>
+      <div class="detail-kicker"><span class="eyebrow">AGENT INSPECTOR</span>${isSample ? '<span class="sample-tag">SAMPLE DATA</span>' : ''}<span class="agent-id">${escapeHtml(task.id.slice(0,10))}</span></div>
       <div class="detail-title-row"><span class="detail-status ${escapeHtml(task.status)}">${statusIcon(task.status)}</span><div class="detail-title-wrap"><h3>${escapeHtml(task.createdBy === 'agent' ? 'Delegated agent' : task.parentId ? 'Child agent' : 'Root agent')}</h3><span class="detail-status-text ${escapeHtml(task.status)}">${escapeHtml(task.status)}</span></div></div>
       <p class="detail-prompt">${escapeHtml(task.prompt)}</p>
-      <div class="detail-actions">${canMessage ? `<button class="secondary" type="button" data-message="${escapeHtml(task.id)}">↗ <span>Send message</span></button>` : ''}${canSpawnChild ? `<button class="primary" type="button" data-child="${escapeHtml(task.id)}"><span>＋</span> Add child</button>` : '<span class="depth-limit">Maximum depth reached</span>'}${canMessage ? `<button class="icon-control stop" type="button" data-cancel="${escapeHtml(task.id)}" aria-label="Stop this task" title="Stop task">■</button>` : ''}</div>
+      <div class="detail-actions">${isSample ? '' : `${canMessage ? `<button class="secondary" type="button" data-message="${escapeHtml(task.id)}">↗ <span>Send message</span></button>` : ''}${canSpawnChild ? `<button class="primary" type="button" data-child="${escapeHtml(task.id)}"><span>＋</span> Add child</button>` : '<span class="depth-limit">Maximum depth reached</span>'}${canMessage ? `<button class="icon-control stop" type="button" data-cancel="${escapeHtml(task.id)}" aria-label="Stop this task" title="Stop task">■</button>` : ''}`}</div>
     </header>
     <section class="detail-section metadata-grid" aria-label="Agent metadata">
       <div class="meta-cell"><span>CREATED</span><strong>${escapeHtml(when(task.createdAt))}</strong></div><div class="meta-cell"><span>STARTED</span><strong>${escapeHtml(when(task.startedAt))}</strong></div><div class="meta-cell"><span>FINISHED</span><strong>${escapeHtml(when(task.finishedAt))}</strong></div><div class="meta-cell"><span>PROCESS</span><strong>${task.pid ? `PID ${escapeHtml(task.pid)}` : task.exitCode !== null ? `Exit ${escapeHtml(task.exitCode)}` : '—'}</strong></div>
     </section>
-    ${task.error ? `<section class="error-panel"><span class="error-icon">!</span><div><strong>Agent error</strong><p>${escapeHtml(task.error)}</p></div></section>` : ''}
+    ${isSample ? '<div class="sample-note">Illustrative data only. No Codex process was started.</div>' : ''}${task.error ? `<section class="error-panel"><span class="error-icon">!</span><div><strong>Agent error</strong><p>${escapeHtml(task.error)}</p></div></section>` : ''}
     <section class="detail-section"><div class="section-title"><h4>Task links</h4><span>${children.length} child${children.length === 1 ? '' : 'ren'}</span></div>${activeChildren.length && ['completed','failed','cancelled'].includes(task.status) ? `<div class="lifecycle-note"><span>↗</span><p>This task has ended. ${activeChildren.length} direct child agent${activeChildren.length === 1 ? '' : 's'} ${activeChildren.length === 1 ? 'is' : 'are'} still active and will continue independently.</p></div>` : ''}<div class="link-list">${parent ? `<button class="link-row" type="button" data-jump="${escapeHtml(parent.id)}"><span class="link-symbol">↑</span><span><small>PARENT AGENT</small><strong>${escapeHtml(parent.prompt)}</strong></span><span>↗</span></button>` : '<div class="root-marker"><span>◎</span> Root task</div>'}${children.map(child => `<button class="link-row" type="button" data-jump="${escapeHtml(child.id)}"><span class="link-symbol">↓</span><span><small>CHILD · ${escapeHtml(child.status.toUpperCase())}</small><strong>${escapeHtml(child.prompt)}</strong></span><span>↗</span></button>`).join('') || (!parent ? '' : '<div class="subtle-empty">No child agents yet</div>')}</div></section>
     <section id="agent-mailbox" class="detail-section mailbox-section"><div class="section-title"><h4><span class="section-icon">↳</span> Mailbox</h4><span class="mail-count">${Number(task.pendingMessageCount) || 0} pending · ${Number(task.pendingTaskResultCount) || 0} child results</span></div><p class="mailbox-proof">Returned means the coordinator supplied this message to the task tool; it does not prove the model interpreted it.</p>${inboxItems.length ? `<div class="inbox-list">${inboxItems.map(message => `<article class="inbox-item ${message.deliveryState === 'read' ? 'read' : 'pending'}"><div class="inbox-meta"><span class="mail-kind ${message.kind === 'task_result' ? 'result' : ''}">${message.kind === 'task_result' ? 'CHILD RESULT' : 'MESSAGE'}</span><span class="delivery-state ${message.deliveryState === 'read' ? 'read' : 'pending'}">${message.deliveryState === 'read' ? 'RETURNED' : 'PENDING'}</span><span>from ${escapeHtml(message.from)}</span><time>${escapeHtml(when(message.deliveryState === 'read' ? message.readAt : message.at))}</time></div><p>${escapeHtml(message.text)}</p></article>`).join('')}</div>` : `<div class="mailbox-empty"><span>✉</span><div><strong>Inbox is clear</strong><small>Messages and child results will show up here.</small></div></div>`}${canMessage ? `<button class="inbox-compose" type="button" data-message="${escapeHtml(task.id)}">＋ Send this agent a message</button>` : ''}</section>
     <section class="detail-section output-section"><div class="section-title"><h4>Latest output</h4><span>${task.output ? `${String(task.output).length.toLocaleString()} chars` : 'Awaiting output'}</span></div>${task.output ? `<pre class="output-text">${escapeHtml(task.output)}</pre>` : `<div class="output-empty"><span class="output-spinner ${task.status === 'running' ? 'active' : ''}">${task.status === 'running' ? '◌' : '·'}</span><span>${task.status === 'running' ? 'Agent is working. Output will stream in here.' : task.status === 'queued' ? 'Output will appear when this agent starts.' : 'This agent did not produce captured text output.'}</span></div>`}</section>
@@ -122,6 +123,8 @@ function render(next) {
   const pageScroll = window.scrollY;
   state = next;
   const tasks = Array.isArray(next.tasks) ? next.tasks : [];
+  $('#compose').hidden = Boolean(next.demoMode);
+  $('#demo-mode').hidden = !next.demoMode;
   $('#workspace').textContent = next.workspace || 'Local workspace';
   $('#task-count').textContent = tasks.length;
   $('#tree-task-count').textContent = tasks.length;

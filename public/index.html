@@ -10,14 +10,14 @@
 <body>
   <main class="shell">
     <header class="topbar">
-      <div class="brand"><div class="mark">C</div><div><div class="eyebrow">LOCAL EXPERIMENT</div><h1>Subagent Lab</h1></div></div>
+      <div class="brand"><div class="mark">C</div><div><div class="eyebrow">LOCAL EXPERIMENT</div><h1>Subagent Lab</h1></div><span id="demo-mode" class="sample-tag top-sample-tag" hidden>SAMPLE DATA</span></div>
       <div class="connection"><span class="pulse"></span><span id="connection" role="status" aria-live="polite">Connecting</span><button id="reload-session" class="session-reload" type="button" hidden>Reload</button><span class="divider"></span><span id="workspace" class="workspace">Loading workspace…</span></div>
     </header>
     <section class="intro">
       <div><div class="eyebrow">TASK ORCHESTRATION</div><h2>One goal. Multiple focused agents.</h2><p>Coordinate focused agents from one local workspace. Follow the task tree, review each agent’s output, and keep messages moving through its inbox.</p></div>
       <div class="guard"><span class="shield">⌑</span><div><strong>Read-only by default</strong><small>Local Codex CLI · isolated task sessions</small></div><span class="guard-check" aria-hidden="true">✓</span></div>
     </section>
-    <section class="compose card">
+    <section id="compose" class="compose card">
       <div class="compose-heading"><label for="prompt">NEW ROOT TASK</label><span class="compose-hint">Give your first agent a clear outcome</span></div>
       <textarea id="prompt" rows="3" maxlength="12000" placeholder="What should the agent investigate, build, or report back?"></textarea>
       <div class="compose-foot"><span>Separate local <code>codex exec</code> process<span class="prompt-count"><span id="root-prompt-count">0</span> / 12,000</span></span><button id="start-root" class="primary"><span aria-hidden="true">＋</span> Start root task <kbd>⌘ ↵</kbd></button></div>

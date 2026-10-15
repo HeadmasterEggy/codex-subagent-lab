@@ -9,6 +9,7 @@ const here = fileURLToPath(new URL('.', import.meta.url));
 const workspace = resolve(process.argv[2] ?? process.cwd());
 const port = Number(process.env.PORT ?? 4317);
 const concurrency = 4;
+const demoMode = process.env.DEMO_MODE === '1';
 const token = randomBytes(24).toString('hex');
 const tasks = new Map();
 const clients = new Set();
@@ -35,7 +36,7 @@ function snapshot() {
       })),
     };
   });
-  return { workspace, concurrency, active, queued: queue.length, tasks: publicTasks };
+  return { workspace, concurrency, active, queued: queue.length, demoMode, tasks: publicTasks };
 }
 function publish() {
   const data = `event: state\ndata: ${JSON.stringify(snapshot())}\n\n`;
@@ -230,6 +231,64 @@ function createTask({ prompt, parentId = null, includeParentContext = false, cre
   tasks.set(id, task); queue.push(id); publish(); pump();
   return task;
 }
+
+function seedDemoTasks() {
+  if (!demoMode) return;
+  const now = Date.now();
+  const stamp = minutesAgo => new Date(now - minutesAgo * 60_000).toISOString();
+  const samples = [
+    {
+      id: 'd00000000000000000000001', parentId: null, createdBy: 'demo',
+      prompt: 'Map the subagent lifecycle from spawn to parent result', status: 'completed',
+      createdAt: stamp(24), startedAt: stamp(23), finishedAt: stamp(8), exitCode: 0,
+      output: 'Found three distinct paths: task creation, child execution, and result delivery to the parent inbox.',
+      events: [
+        { at: stamp(23), kind: 'started', detail: 'Demo task started' },
+        { at: stamp(17), kind: 'agent_spawned', detail: 'Created two focused child tasks' },
+        { at: stamp(8), kind: 'finished', detail: 'status=completed exit=0' },
+      ],
+      messages: [
+        { id: 'd10000000000000000000001', from: 'd00000000000000000000002', at: stamp(9), text: 'Lifecycle trace is ready. Spawn returns after the child input is accepted; it does not wait for child completion.', kind: 'task_result' },
+      ],
+      messageHistory: [], error: null, pid: null, signal: null,
+    },
+    {
+      id: 'd00000000000000000000002', parentId: 'd00000000000000000000001', createdBy: 'agent',
+      prompt: 'Trace spawn admission and child session creation', status: 'completed',
+      createdAt: stamp(20), startedAt: stamp(20), finishedAt: stamp(9), exitCode: 0,
+      output: 'The handler builds a SpawnRequest, AgentControl creates a thread-backed child session, then the first input is submitted.',
+      events: [
+        { at: stamp(20), kind: 'started', detail: 'Delegated by parent task' },
+        { at: stamp(9), kind: 'finished', detail: 'status=completed exit=0' },
+      ], messages: [], messageHistory: [], error: null, pid: null, signal: null,
+    },
+    {
+      id: 'd00000000000000000000003', parentId: 'd00000000000000000000001', createdBy: 'agent',
+      prompt: 'Follow completion messages through the parent mailbox', status: 'completed',
+      createdAt: stamp(19), startedAt: stamp(19), finishedAt: stamp(10), exitCode: 0,
+      output: 'Child completion is queued as inter-agent communication. The activity item and mailbox message have separate delivery semantics.',
+      events: [
+        { at: stamp(19), kind: 'started', detail: 'Delegated by parent task' },
+        { at: stamp(10), kind: 'finished', detail: 'status=completed exit=0' },
+      ], messages: [], messageHistory: [], error: null, pid: null, signal: null,
+    },
+    {
+      id: 'd00000000000000000000004', parentId: 'd00000000000000000000003', createdBy: 'agent',
+      prompt: 'Check how unread results appear in the inbox', status: 'failed',
+      createdAt: stamp(14), startedAt: stamp(14), finishedAt: stamp(11), exitCode: 1,
+      output: 'The trace stopped at a version-dependent UI projection boundary.',
+      events: [
+        { at: stamp(14), kind: 'started', detail: 'Delegated by child task' },
+        { at: stamp(11), kind: 'finished', detail: 'status=failed exit=1' },
+      ], messages: [], messageHistory: [], error: 'Sample failure: UI projection not confirmed', pid: null, signal: null,
+    },
+  ];
+  for (const sample of samples) {
+    tasks.set(sample.id, { ...sample, contextIncluded: false, effectivePrompt: '', waiters: new Set(), resultDelivered: true });
+  }
+}
+
+seedDemoTasks();
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url ?? '/', `http://127.0.0.1:${port}`);
