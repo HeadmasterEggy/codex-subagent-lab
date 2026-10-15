@@ -14,13 +14,13 @@
       <div class="connection"><span class="pulse"></span><span id="connection">Connecting</span><span class="divider"></span><span id="workspace" class="workspace">Loading workspace…</span></div>
     </header>
     <section class="intro">
-      <div><div class="eyebrow">TASK ORCHESTRATION</div><h2>One goal. Multiple focused agents.</h2><p>Start a task and let its agent delegate through MCP tools. Watch the live tree, send inbox messages, and inspect each agent’s output.</p></div>
+      <div><div class="eyebrow">TASK ORCHESTRATION</div><h2>One goal. Multiple focused agents.</h2><p>Coordinate focused agents from one local workspace. Follow the task tree, review each agent’s output, and keep messages moving through its inbox.</p></div>
       <div class="guard"><span class="shield">⌑</span><div><strong>Read-only by default</strong><small>Local Codex CLI · isolated task sessions</small></div><span class="guard-check" aria-hidden="true">✓</span></div>
     </section>
     <section class="compose card">
-      <label for="prompt">NEW ROOT TASK</label>
-      <textarea id="prompt" rows="3" maxlength="12000" placeholder="Describe a focused task for a new agent…"></textarea>
-      <div class="compose-foot"><span>Agents run as separate <code>codex exec</code> processes.<span class="prompt-count"><span id="root-prompt-count">0</span> / 12,000</span></span><button id="start-root" class="primary"><span aria-hidden="true">＋</span> Start root task <kbd>⌘ ↵</kbd></button></div>
+      <div class="compose-heading"><label for="prompt">NEW ROOT TASK</label><span class="compose-hint">Give your first agent a clear outcome</span></div>
+      <textarea id="prompt" rows="3" maxlength="12000" placeholder="What should the agent investigate, build, or report back?"></textarea>
+      <div class="compose-foot"><span>Separate local <code>codex exec</code> process<span class="prompt-count"><span id="root-prompt-count">0</span> / 12,000</span></span><button id="start-root" class="primary"><span aria-hidden="true">＋</span> Start root task <kbd>⌘ ↵</kbd></button></div>
     </section>
     <section class="board-head"><div><div class="eyebrow">YOUR WORK</div><h2>Agent tree <span id="task-count" class="count">0</span></h2></div><div class="capacity-card" aria-label="Parallel task capacity"><div class="capacity-copy"><span class="capacity-label">PARALLEL CAPACITY</span><strong><span id="active-count">0</span><span class="capacity-separator"> / </span><span id="capacity-limit">4</span><small> active sessions</small></strong></div><div class="capacity-track" role="progressbar" aria-label="Active session capacity" aria-valuemin="0" aria-valuemax="4" aria-valuenow="0"><span id="capacity-fill"></span></div><div class="capacity-foot"><span id="queue-count">0 waiting</span><span id="capacity-state">Ready</span></div></div></section>
     <section class="overview" aria-label="Task summary">
@@ -36,9 +36,19 @@
       <span id="visible-count" class="visible-count" aria-live="polite">0 matches</span>
       <button id="clear-filters" class="clear-filters" type="button" hidden>Clear filters</button>
     </section>
-    <section id="empty" class="empty card"><div class="empty-icon">⌘</div><strong>No tasks yet</strong><p>Start a root task above. Agents can spawn children through MCP, and you can also add a child from the interface.</p></section>
-    <section id="no-matches" class="empty card" hidden><strong>No matching tasks</strong><p>Try a different search or status filter.</p></section>
-    <section id="tree" class="tree"></section>
+    <section class="workspace-grid" aria-label="Agent workspace">
+      <section class="tree-panel card" aria-label="Agent task tree">
+        <header class="panel-heading"><div><div class="eyebrow">HIERARCHY</div><h3>Tasks <span id="tree-task-count">0</span></h3></div><span class="panel-live"><i></i> LIVE</span></header>
+        <section id="empty" class="empty"><div class="empty-icon">⌘</div><strong>No agents yet</strong><p>Start a root task above. New agents and child tasks will appear here.</p></section>
+        <section id="no-matches" class="empty" hidden><div class="empty-icon">⌕</div><strong>No matching tasks</strong><p>Try another search or status filter.</p></section>
+        <section id="tree" class="tree" role="tree" aria-label="Tasks"></section>
+      </section>
+      <section id="inspector" class="inspector card" aria-label="Selected agent details" aria-live="polite">
+        <div id="inspector-empty" class="inspector-empty"><div class="inspector-orbit"><span>✳</span></div><div class="eyebrow">AGENT INSPECTOR</div><h3>Select an agent</h3><p>Choose a task in the tree to see its status, mailbox, output, and activity.</p></div>
+        <div id="agent-detail" hidden></div>
+      </section>
+    </section>
+    <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
     <footer>Prototype · Runs only on this machine · Task output is held in memory and cleared when the server stops</footer>
   </main>
   <dialog id="child-dialog"><form method="dialog" class="dialog-card"><div class="dialog-head"><div><div class="eyebrow">DELEGATE TO CHILD</div><h2>Add a focused agent</h2></div><button class="icon-button" value="cancel" aria-label="Close">×</button></div><p id="parent-label" class="parent-label"></p><textarea id="child-prompt" rows="5" placeholder="What should this child agent investigate or produce?"></textarea><label class="context-option"><input id="include-context" type="checkbox"><span><strong>Include parent context snapshot</strong><small>Parent task and latest output (up to 8,000 characters)</small></span></label><div class="dialog-foot"><button class="secondary" value="cancel">Cancel</button><button id="create-child" class="primary" value="default">Start child</button></div></form></dialog>

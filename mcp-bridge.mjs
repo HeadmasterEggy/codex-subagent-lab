@@ -26,7 +26,7 @@ const tools = [
   },
   {
     name: 'wait_agent',
-    description: 'Wait for activity in this task’s inbox, including a child result or a message from the parent. This does not consume inbox messages; use read_messages to retrieve them.',
+    description: 'Wait for activity in this task’s inbox, including a child result or a message from the parent. Returns only whether activity arrived and the pending count; use read_messages to retrieve message contents.',
     annotations: { title: 'Wait for child agent', readOnlyHint: true, destructiveHint: false, openWorldHint: false },
     inputSchema: {
       type: 'object', additionalProperties: false,
@@ -96,7 +96,7 @@ async function callTool(name, args) {
     const value = await request(`/api/coordination/tasks/${taskId}/wait?timeout_ms=${Math.round(seconds * 1000)}`);
     return value.timedOut
       ? { timed_out: true, pending_message_count: value.pendingMessageCount }
-      : { timed_out: false, pending_message_count: value.pendingMessageCount, messages: value.messages };
+      : { timed_out: false, pending_message_count: value.pendingMessageCount, note: 'Inbox activity arrived. Call read_messages to retrieve pending contents.' };
   }
   if (name === 'send_message') {
     const value = await request(`/api/coordination/tasks/${encodeURIComponent(args.task_id)}/messages`, {

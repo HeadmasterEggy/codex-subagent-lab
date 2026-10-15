@@ -19,10 +19,15 @@ const appJs = await readFile(new URL('./public/app.js', import.meta.url), 'utf8'
 const styleCss = await readFile(new URL('./public/style.css', import.meta.url), 'utf8');
 
 function snapshot() {
-  const publicTasks = [...tasks.values()].map(({ child, effectivePrompt, messages, waiters, resultDelivered, ...task }) => ({
+  const publicTasks = [...tasks.values()].map(({ child, effectivePrompt, messages, messageHistory, waiters, resultDelivered, ...task }) => ({
     ...task,
     pendingMessageCount: messages.length,
-    recentMessages: messages.slice(-3).map(({ id, from, at, text, kind }) => ({ id, from, at, text: text.slice(0, 2000), kind: kind ?? 'message' })),
+    recentMessages: [
+      ...messageHistory.slice(-5),
+      ...messages.map(message => ({ ...message, deliveryState: 'pending' })),
+    ].slice(-8).map(({ id, from, at, text, kind, deliveryState, readAt }) => ({
+      id, from, at, text: text.slice(0, 2000), kind: kind ?? 'message', deliveryState, readAt,
+    })),
   }));
   return { workspace, concurrency, active, queued: queue.length, tasks: publicTasks };
 }
@@ -211,7 +216,7 @@ function createTask({ prompt, parentId = null, includeParentContext = false, cre
     id, parentId, prompt, contextIncluded, createdBy,
     effectivePrompt: `${coordination}${parentContext}\nTask:\n${prompt}`,
     status: 'queued', createdAt: new Date().toISOString(), startedAt: null, finishedAt: null,
-    pid: null, exitCode: null, signal: null, error: null, output: '', events: [], messages: [], waiters: new Set(), child: null, resultDelivered: false,
+    pid: null, exitCode: null, signal: null, error: null, output: '', events: [], messages: [], messageHistory: [], waiters: new Set(), child: null, resultDelivered: false,
   };
   tasks.set(id, task); queue.push(id); publish(); pump();
   return task;
@@ -264,7 +269,6 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, {
         timedOut: !receivedActivity,
         pendingMessageCount: task.messages.length,
-        messages: task.messages.map(({ id, from, at, text, kind }) => ({ id, from, at, text: text.slice(0, 2000), kind: kind ?? 'message' })),
       });
     }
     if (action === 'messages' && req.method === 'POST') {
@@ -294,7 +298,13 @@ const server = http.createServer(async (req, res) => {
           task.waiters.add(checkMessages);
         });
       }
-      return sendJson(res, 200, { messages: task.messages.splice(0) });
+      const messages = task.messages.splice(0).map(message => ({ ...message, readAt: new Date().toISOString() }));
+      for (const message of messages) {
+        task.messageHistory.push({ ...message, deliveryState: 'read' });
+      }
+      if (task.messageHistory.length > 120) task.messageHistory.splice(0, task.messageHistory.length - 120);
+      if (messages.length) appendEvent(task, 'messages_read', `${messages.length} message${messages.length === 1 ? '' : 's'} returned to the task process`);
+      return sendJson(res, 200, { messages });
     }
     if (action === 'close' && req.method === 'POST') {
       const requesterId = req.headers['x-lab-task-id'];
