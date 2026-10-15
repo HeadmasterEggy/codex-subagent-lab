@@ -153,8 +153,7 @@ function run(task) {
     pump();
   });
 }
-function cancel(task) {
-  for (const childTask of tasks.values()) if (childTask.parentId === task.id) cancel(childTask);
+function cancelTask(task) {
   if (task.status === 'queued') {
     task.status = 'cancelled'; task.finishedAt = new Date().toISOString();
     const i = queue.indexOf(task.id); if (i >= 0) queue.splice(i, 1);
@@ -171,6 +170,10 @@ function cancel(task) {
       try { if (process.platform !== 'win32') process.kill(-task.child.pid, 'SIGKILL'); else task.child.kill('SIGKILL'); } catch {}
     }
   }, 2500).unref();
+}
+function closeTaskTree(task) {
+  for (const childTask of tasks.values()) if (childTask.parentId === task.id) closeTaskTree(childTask);
+  cancelTask(task);
 }
 
 const terminal = task => ['completed', 'failed', 'cancelled'].includes(task.status);
@@ -310,7 +313,7 @@ const server = http.createServer(async (req, res) => {
       const requesterId = req.headers['x-lab-task-id'];
       const requester = tasks.get(requesterId);
       if (!requester || !(task.parentId === requester.id || task.id === requester.id)) return sendJson(res, 403, { error: 'A task can close itself or a direct child' });
-      cancel(task);
+      closeTaskTree(task);
       return sendJson(res, 200, { status: task.status });
     }
   }
@@ -347,7 +350,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'POST' && match) {
       const task = tasks.get(match[1]);
       if (!task) return sendJson(res, 404, { error: 'Task not found' });
-      cancel(task); return sendJson(res, 200, { status: task.status });
+      cancelTask(task); return sendJson(res, 200, { status: task.status });
     }
     return sendJson(res, 404, { error: 'Not found' });
   }
@@ -357,7 +360,7 @@ server.listen(port, '127.0.0.1', () => {
   process.stdout.write(`Codex Subagent Lab: http://127.0.0.1:${port}/\nWorkspace (fixed): ${workspace}\nConcurrency: ${concurrency}\n`);
 });
 function shutdown() {
-  for (const task of tasks.values()) if (task.status === 'running' || task.status === 'cancelling') cancel(task);
+  for (const task of tasks.values()) if (task.status === 'running' || task.status === 'cancelling') closeTaskTree(task);
   for (const res of clients) res.end();
   server.close(() => process.exit(0));
   setTimeout(() => process.exit(1), 3500).unref();

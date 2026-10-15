@@ -8,3 +8,4 @@
 .tree-status.cancelling,.detail-status.cancelling{background:#2a2418;color:var(--amber)}.status-label.cancelling,.detail-status-text.cancelling{color:var(--amber)}.depth-limit{color:#747b85;font-size:9px}
 
 .mailbox-proof{margin:-2px 0 9px;color:#838b80;font-size:9px;line-height:1.5}.delivery-state{padding:2px 5px;border:1px solid #594c2c;border-radius:999px;color:#e3c27b;font-size:7px;letter-spacing:.04em}.delivery-state.read{border-color:#30412a;color:#b7d58c}.inbox-item.read{background:#11140f}.inbox-item.pending{background:#14170f}
+ .lifecycle-note{display:flex;align-items:flex-start;gap:9px;margin:0 0 10px;padding:10px 12px;border:1px solid #c5f36a26;border-radius:10px;background:linear-gradient(110deg,#c5f36a0d,#c5f36a04);color:#dbe7c6}.lifecycle-note>span{display:grid;flex:0 0 20px;height:20px;place-items:center;border-radius:7px;background:#c5f36a18;color:var(--lime);font-size:12px}.lifecycle-note p{margin:1px 0 0;font-size:10px;line-height:1.55}
