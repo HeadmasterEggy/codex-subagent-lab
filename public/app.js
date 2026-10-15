@@ -44,6 +44,18 @@ function render(next) {
   state = next;
   $('#workspace').textContent = next.workspace;
   $('#task-count').textContent = next.tasks.length;
+  const capacity = Math.max(1, Number(next.concurrency) || 1);
+  const active = Math.max(0, Number(next.active) || 0);
+  const queued = Math.max(0, Number(next.queued) || 0);
+  $('#active-count').textContent = active;
+  $('#capacity-limit').textContent = capacity;
+  $('.capacity-track').setAttribute('aria-valuemax', String(capacity));
+  $('.capacity-track').setAttribute('aria-valuenow', String(Math.min(active, capacity)));
+  $('#capacity-fill').style.width = `${Math.min(100, active / capacity * 100)}%`;
+  $('#queue-count').textContent = `${queued} waiting`;
+  $('#capacity-state').textContent = active >= capacity ? 'At capacity' : queued ? 'Queue active' : 'Ready';
+  $('.capacity-card').classList.toggle('at-capacity', active >= capacity);
+  $('#root-prompt-count').textContent = $('#prompt').value.length.toLocaleString();
   $('#empty').hidden = next.tasks.length > 0;
   for (const status of ['all','running','queued','completed','failed','cancelled']) {
     const count = status === 'all' ? next.tasks.length : next.tasks.filter(task => task.status === status).length;
@@ -85,6 +97,9 @@ $('#task-search').addEventListener('input', event => {
   taskSearch = event.target.value.trim();
   render(state);
 });
+$('#prompt').addEventListener('input', () => {
+  $('#root-prompt-count').textContent = $('#prompt').value.length.toLocaleString();
+});
 $('#clear-filters').addEventListener('click', () => {
   activeFilter = 'all';
   taskSearch = '';
@@ -99,6 +114,12 @@ $('#start-root').addEventListener('click', async () => {
   try { await request('/api/tasks', { prompt, parentId:null }); $('#prompt').value = ''; }
   catch (error) { alert(error.message); }
   finally { button.disabled = false; }
+});
+$('#prompt').addEventListener('keydown', event => {
+  if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+    event.preventDefault();
+    $('#start-root').click();
+  }
 });
 $('#tree').addEventListener('click', async event => {
   const cancelButton = event.target.closest('[data-cancel]');

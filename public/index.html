@@ -15,14 +15,14 @@
     </header>
     <section class="intro">
       <div><div class="eyebrow">TASK ORCHESTRATION</div><h2>One goal. Multiple focused agents.</h2><p>Start a task and let its agent delegate through MCP tools. Watch the live tree, send inbox messages, and inspect each agent’s output.</p></div>
-      <div class="guard"><span class="shield">⌑</span><div><strong>Read-only by default</strong><small>Local Codex CLI · max 4 managed sessions</small></div></div>
+      <div class="guard"><span class="shield">⌑</span><div><strong>Read-only by default</strong><small>Local Codex CLI · isolated task sessions</small></div><span class="guard-check" aria-hidden="true">✓</span></div>
     </section>
     <section class="compose card">
       <label for="prompt">NEW ROOT TASK</label>
-      <textarea id="prompt" rows="3" placeholder="Describe a focused task for a new agent…"></textarea>
-      <div class="compose-foot"><span>Agents run as separate <code>codex exec</code> processes.</span><button id="start-root" class="primary">＋ Start root task</button></div>
+      <textarea id="prompt" rows="3" maxlength="12000" placeholder="Describe a focused task for a new agent…"></textarea>
+      <div class="compose-foot"><span>Agents run as separate <code>codex exec</code> processes.<span class="prompt-count"><span id="root-prompt-count">0</span> / 12,000</span></span><button id="start-root" class="primary"><span aria-hidden="true">＋</span> Start root task <kbd>⌘ ↵</kbd></button></div>
     </section>
-    <section class="board-head"><div><div class="eyebrow">YOUR WORK</div><h2>Agent tree <span id="task-count" class="count">0</span></h2></div><div class="legend"><span class="dot running"></span>Running <span class="dot done"></span>Done <span class="dot queued"></span>Queued</div></section>
+    <section class="board-head"><div><div class="eyebrow">YOUR WORK</div><h2>Agent tree <span id="task-count" class="count">0</span></h2></div><div class="capacity-card" aria-label="Parallel task capacity"><div class="capacity-copy"><span class="capacity-label">PARALLEL CAPACITY</span><strong><span id="active-count">0</span><span class="capacity-separator"> / </span><span id="capacity-limit">4</span><small> active sessions</small></strong></div><div class="capacity-track" role="progressbar" aria-label="Active session capacity" aria-valuemin="0" aria-valuemax="4" aria-valuenow="0"><span id="capacity-fill"></span></div><div class="capacity-foot"><span id="queue-count">0 waiting</span><span id="capacity-state">Ready</span></div></div></section>
     <section class="overview" aria-label="Task summary">
       <button class="metric active" data-filter="all" aria-pressed="true"><span>All tasks</span><strong id="metric-all">0</strong></button>
       <button class="metric" data-filter="running" aria-pressed="false"><span>Running</span><strong id="metric-running">0</strong></button>
