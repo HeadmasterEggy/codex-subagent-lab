@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="lab-token" content="__LAB_TOKEN__">
+  <title>Codex Subagent Lab</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div class="brand"><div class="mark">C</div><div><div class="eyebrow">LOCAL EXPERIMENT</div><h1>Subagent Lab</h1></div></div>
+      <div class="connection"><span class="pulse"></span><span id="connection">Connecting</span><span class="divider"></span><span id="workspace" class="workspace">Loading workspace…</span></div>
+    </header>
+    <section class="intro">
+      <div><div class="eyebrow">TASK ORCHESTRATION</div><h2>One goal. Multiple focused agents.</h2><p>Start a task, then delegate focused work to child agents. Follow their live events and results in one tree.</p></div>
+      <div class="guard"><span class="shield">⌑</span><div><strong>Read-only by default</strong><small>Local Codex CLI · max 4 concurrent agents</small></div></div>
+    </section>
+    <section class="compose card">
+      <label for="prompt">NEW ROOT TASK</label>
+      <textarea id="prompt" rows="3" placeholder="Describe a focused task for a new agent…"></textarea>
+      <div class="compose-foot"><span>Agents run as separate <code>codex exec</code> processes.</span><button id="start-root" class="primary">＋ Start root task</button></div>
+    </section>
+    <section class="board-head"><div><div class="eyebrow">YOUR WORK</div><h2>Agent tree <span id="task-count" class="count">0</span></h2></div><div class="legend"><span class="dot running"></span>Running <span class="dot done"></span>Done <span class="dot queued"></span>Queued</div></section>
+    <section id="empty" class="empty card"><div class="empty-icon">⌘</div><strong>No tasks yet</strong><p>Start a root task above. You can add child agents to any task once it appears here.</p></section>
+    <section id="tree" class="tree"></section>
+    <footer>Prototype · Runs only on this machine · Task output is held in memory and cleared when the server stops</footer>
+  </main>
+  <dialog id="child-dialog"><form method="dialog" class="dialog-card"><div class="dialog-head"><div><div class="eyebrow">DELEGATE TO CHILD</div><h2>Add a focused agent</h2></div><button class="icon-button" value="cancel" aria-label="Close">×</button></div><p id="parent-label" class="parent-label"></p><textarea id="child-prompt" rows="5" placeholder="What should this child agent investigate or produce?"></textarea><div class="dialog-foot"><button class="secondary" value="cancel">Cancel</button><button id="create-child" class="primary" value="default">Start child</button></div></form></dialog>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

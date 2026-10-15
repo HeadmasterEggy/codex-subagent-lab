@@ -1,0 +1,69 @@
+const token = document.querySelector('meta[name="lab-token"]').content;
+const headers = { 'content-type': 'application/json', 'x-lab-token': token };
+const $ = selector => document.querySelector(selector);
+let state = { tasks: [] };
+let selectedParent = null;
+const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const when = value => value ? new Date(value).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'}) : '';
+function taskTree(parentId = null, depth = 0) {
+  return state.tasks.filter(t => t.parentId === parentId).map(task => {
+    const status = task.status;
+    const icon = status === 'running' ? '◉' : status === 'completed' ? '✓' : status === 'failed' ? '!' : status === 'cancelled' ? '×' : status === 'queued' ? '◷' : '…';
+    const canCancel = ['queued','running'].includes(status);
+    const events = task.events.slice(-7).map(e => `<div class="event"><time>${escapeHtml(when(e.at))}</time><span class="event-type">${escapeHtml(e.kind)}</span><span class="event-detail">${escapeHtml(e.detail.replace(/\s+/g,' ').slice(0,180))}</span></div>`).join('');
+    const output = task.output ? `<div class="output"><div class="output-head"><span>AGENT OUTPUT</span><span>${task.output.length.toLocaleString()} chars</span></div><div class="output-text">${escapeHtml(task.output)}</div></div>` : '';
+    const actions = `<div class="task-actions">${canCancel ? `<button class="small-button stop" data-cancel="${task.id}">Stop</button>` : ''}<button class="small-button" data-child="${task.id}">＋ Child agent</button></div>`;
+    return `<article class="task ${depth ? 'child' : ''}"><div class="task-top"><div class="status-mark ${escapeHtml(status)}">${icon}</div><div class="task-main"><div class="task-title">${escapeHtml(task.prompt)}</div><div class="task-meta"><span class="badge">${escapeHtml(status)}</span><span>created ${escapeHtml(when(task.createdAt))}</span>${task.pid ? `<span>pid ${task.pid}</span>` : ''}${task.exitCode !== null ? `<span>exit ${task.exitCode}</span>` : ''}</div></div>${actions}</div>${output}${events}</article>${taskTree(task.id, depth + 1)}`;
+  }).join('');
+}
+function render(next) {
+  state = next;
+  $('#workspace').textContent = next.workspace;
+  $('#task-count').textContent = next.tasks.length;
+  $('#empty').hidden = next.tasks.length > 0;
+  $('#tree').innerHTML = taskTree();
+}
+async function request(path, data) {
+  const response = await fetch(path, { method: 'POST', headers, body: JSON.stringify(data) });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.error ?? `Request failed (${response.status})`);
+  return result;
+}
+function connect() {
+  const events = new EventSource(`/api/events?token=${encodeURIComponent(token)}`, { withCredentials:false });
+  // EventSource cannot set a custom header, so include the local per-run token in this same-origin URL.
+  events.onopen = () => { $('#connection').textContent = 'Live'; $('.pulse').classList.add('online'); };
+  events.onerror = () => { $('#connection').textContent = 'Reconnecting'; $('.pulse').classList.remove('online'); };
+  events.addEventListener('state', event => render(JSON.parse(event.data)));
+}
+$('#start-root').addEventListener('click', async () => {
+  const button = $('#start-root'); const prompt = $('#prompt').value.trim();
+  if (!prompt) { $('#prompt').focus(); return; }
+  button.disabled = true;
+  try { await request('/api/tasks', { prompt, parentId:null }); $('#prompt').value = ''; }
+  catch (error) { alert(error.message); }
+  finally { button.disabled = false; }
+});
+$('#tree').addEventListener('click', async event => {
+  const cancelButton = event.target.closest('[data-cancel]');
+  const childButton = event.target.closest('[data-child]');
+  if (cancelButton) { try { await request(`/api/tasks/${cancelButton.dataset.cancel}/cancel`, {}); } catch(error) { alert(error.message); } }
+  if (childButton) {
+    selectedParent = childButton.dataset.child;
+    const parent = state.tasks.find(t => t.id === selectedParent);
+    $('#parent-label').textContent = parent ? `Parent: ${parent.prompt.slice(0,160)}` : '';
+    $('#child-prompt').value = '';
+    $('#child-dialog').showModal();
+    $('#child-prompt').focus();
+  }
+});
+$('#create-child').addEventListener('click', async event => {
+  event.preventDefault();
+  const prompt = $('#child-prompt').value.trim();
+  if (!prompt || !selectedParent) return;
+  const button = $('#create-child'); button.disabled = true;
+  try { await request('/api/tasks', { prompt, parentId:selectedParent }); $('#child-dialog').close(); }
+  catch(error) { alert(error.message); }
+  finally { button.disabled = false; }
+});
+connect();
