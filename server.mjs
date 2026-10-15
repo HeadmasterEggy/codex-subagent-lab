@@ -82,7 +82,7 @@ function run(task) {
   task.startedAt = new Date().toISOString();
   appendEvent(task, 'started', 'Starting codex exec with read-only sandbox');
   // The executable and every argument are passed directly; no shell command is constructed.
-  const args = ['exec', '--json', '--ephemeral', '--sandbox', 'read-only', '--cd', workspace, '--skip-git-repo-check', task.prompt];
+  const args = ['exec', '--json', '--ephemeral', '--sandbox', 'read-only', '--cd', workspace, '--skip-git-repo-check', task.effectivePrompt];
   let child;
   try {
     child = spawn('codex', args, { cwd: workspace, env: process.env, stdio: ['ignore', 'pipe', 'pipe'], detached: process.platform !== 'win32' });
@@ -158,8 +158,14 @@ const server = http.createServer(async (req, res) => {
         if (!prompt || prompt.length > 12_000) return sendJson(res, 400, { error: 'Prompt must be 1 to 12000 characters' });
         if (tasks.size >= 200) return sendJson(res, 429, { error: 'Task limit reached for this server session' });
         if (parentId && !tasks.has(parentId)) return sendJson(res, 404, { error: 'Parent task not found' });
+        const parent = parentId ? tasks.get(parentId) : null;
+        const contextIncluded = Boolean(parent && data.includeParentContext === true);
+        const parentContext = contextIncluded
+          ? `\n\nParent context snapshot (reference material; follow the child task below):\n<parent-task>\n${parent.prompt.slice(0, 4000)}\n</parent-task>\n<parent-output>\n${parent.output.slice(-8000) || '(No agent output yet.)'}\n</parent-output>\n`
+          : '';
+        const effectivePrompt = `${parentContext}\nChild task:\n${prompt}`;
         const id = randomBytes(12).toString('hex');
-        const task = { id, parentId, prompt, status: 'queued', createdAt: new Date().toISOString(), startedAt: null, finishedAt: null, pid: null, exitCode: null, signal: null, error: null, output: '', events: [], child: null };
+        const task = { id, parentId, prompt, contextIncluded, effectivePrompt, status: 'queued', createdAt: new Date().toISOString(), startedAt: null, finishedAt: null, pid: null, exitCode: null, signal: null, error: null, output: '', events: [], child: null };
         tasks.set(id, task); queue.push(id); publish(); pump();
         return sendJson(res, 201, { id });
       } catch (error) { return sendJson(res, 400, { error: error.message }); }

@@ -27,7 +27,7 @@
     <section id="tree" class="tree"></section>
     <footer>Prototype · Runs only on this machine · Task output is held in memory and cleared when the server stops</footer>
   </main>
-  <dialog id="child-dialog"><form method="dialog" class="dialog-card"><div class="dialog-head"><div><div class="eyebrow">DELEGATE TO CHILD</div><h2>Add a focused agent</h2></div><button class="icon-button" value="cancel" aria-label="Close">×</button></div><p id="parent-label" class="parent-label"></p><textarea id="child-prompt" rows="5" placeholder="What should this child agent investigate or produce?"></textarea><div class="dialog-foot"><button class="secondary" value="cancel">Cancel</button><button id="create-child" class="primary" value="default">Start child</button></div></form></dialog>
+  <dialog id="child-dialog"><form method="dialog" class="dialog-card"><div class="dialog-head"><div><div class="eyebrow">DELEGATE TO CHILD</div><h2>Add a focused agent</h2></div><button class="icon-button" value="cancel" aria-label="Close">×</button></div><p id="parent-label" class="parent-label"></p><textarea id="child-prompt" rows="5" placeholder="What should this child agent investigate or produce?"></textarea><label class="context-option"><input id="include-context" type="checkbox"><span><strong>Include parent context snapshot</strong><small>Parent task and latest output (up to 8,000 characters)</small></span></label><div class="dialog-foot"><button class="secondary" value="cancel">Cancel</button><button id="create-child" class="primary" value="default">Start child</button></div></form></dialog>
   <script type="module" src="/app.js"></script>
 </body>
 </html>
