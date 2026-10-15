@@ -121,6 +121,8 @@ function run(task) {
     '--config', 'mcp_servers.subagent_lab.env_vars=["LAB_COORDINATOR_URL","LAB_COORDINATOR_TOKEN","LAB_TASK_ID"]',
     '--cd', workspace, '--skip-git-repo-check', '-',
   ];
+  if (task.model) args.push('--model', task.model);
+  if (task.reasoningEffort) args.push('--config', `model_reasoning_effort="${task.reasoningEffort}"`);
   let child;
   try {
     const env = {
@@ -214,8 +216,10 @@ function waitForInboxActivity(task, timeoutMs) {
     task.waiters.add(check);
   });
 }
-function createTask({ prompt, parentId = null, includeParentContext = false, createdBy = 'user' }) {
+function createTask({ prompt, parentId = null, includeParentContext = false, model = '', modelMode = 'inherit', reasoningEffort = '', effortMode = 'inherit', createdBy = 'user' }) {
   const parent = parentId ? tasks.get(parentId) : null;
+  const selectedModel = modelMode === 'custom' ? model : modelMode === 'default' ? '' : parent?.model || '';
+  const selectedEffort = effortMode === 'custom' ? reasoningEffort : effortMode === 'default' ? '' : parent?.reasoningEffort || '';
   const contextIncluded = Boolean(parent && includeParentContext);
   const parentContext = contextIncluded
     ? `\n\nParent context snapshot (reference material; follow the child task below):\n<parent-task>\n${parent.prompt.slice(0, 4000)}\n</parent-task>\n<parent-output>\n${parent.output.slice(-8000) || '(No agent output yet.)'}\n</parent-output>\n`
@@ -223,7 +227,7 @@ function createTask({ prompt, parentId = null, includeParentContext = false, cre
   const id = randomBytes(12).toString('hex');
   const coordination = `\n\nSubagent Lab coordination: your task ID is ${id}. You may use the subagent_lab MCP tools to create child agents, list them, wait for inbox activity, send messages, read messages sent to you, and close child agents. Child tasks run as separate Codex CLI processes in the same read-only workspace. Child completion results are delivered to this task's inbox; use wait_agent, then read_messages to inspect them. Report important child results in your final response.`;
   const task = {
-    id, parentId, prompt, contextIncluded, createdBy,
+    id, parentId, prompt, contextIncluded, createdBy, model: selectedModel, reasoningEffort: selectedEffort,
     effectivePrompt: `${coordination}${parentContext}\nTask:\n${prompt}`,
     status: 'queued', createdAt: new Date().toISOString(), startedAt: null, finishedAt: null,
     pid: null, exitCode: null, signal: null, error: null, output: '', events: [], messages: [], messageHistory: [], waiters: new Set(), child: null, resultDelivered: false,
@@ -390,11 +394,19 @@ const server = http.createServer(async (req, res) => {
         const data = await bodyJson(req);
         const prompt = typeof data.prompt === 'string' ? data.prompt.trim() : '';
         const parentId = data.parentId == null ? null : String(data.parentId);
+        const model = typeof data.model === 'string' ? data.model.trim() : '';
+        const reasoningEffort = typeof data.reasoningEffort === 'string' ? data.reasoningEffort : '';
+        const modelMode = ['inherit', 'default', 'custom'].includes(data.modelMode) ? data.modelMode : parentId ? 'inherit' : 'default';
+        const effortMode = ['inherit', 'default', 'custom'].includes(data.effortMode) ? data.effortMode : parentId ? 'inherit' : 'default';
         if (!prompt || prompt.length > 12_000) return sendJson(res, 400, { error: 'Prompt must be 1 to 12000 characters' });
+        if (model.length > 128 || /[\u0000-\u001f]/.test(model)) return sendJson(res, 400, { error: 'Model must be at most 128 printable characters' });
+        if (modelMode === 'custom' && !model) return sendJson(res, 400, { error: 'A custom model name is required' });
+        if (effortMode === 'custom' && !reasoningEffort) return sendJson(res, 400, { error: 'A custom reasoning effort is required' });
+        if (reasoningEffort && !['minimal', 'low', 'medium', 'high', 'xhigh'].includes(reasoningEffort)) return sendJson(res, 400, { error: 'Unsupported reasoning effort' });
         if (tasks.size >= 100) return sendJson(res, 429, { error: 'Task limit reached for this server session (100 tasks)' });
         if (parentId && !tasks.has(parentId)) return sendJson(res, 404, { error: 'Parent task not found' });
         if (parentId && taskDepth(tasks.get(parentId)) >= 7) return sendJson(res, 429, { error: 'Maximum task nesting depth is 8' });
-        const task = createTask({ prompt, parentId, includeParentContext: data.includeParentContext === true, createdBy: 'user' });
+        const task = createTask({ prompt, parentId, includeParentContext: data.includeParentContext === true, model, modelMode, reasoningEffort, effortMode, createdBy: 'user' });
         return sendJson(res, 201, { id: task.id });
       } catch (error) { return sendJson(res, 400, { error: error.message }); }
     }

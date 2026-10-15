@@ -107,6 +107,7 @@ function renderInspector() {
     <section class="detail-section metadata-grid" aria-label="Agent metadata">
       <div class="meta-cell"><span>CREATED</span><strong>${escapeHtml(when(task.createdAt))}</strong></div><div class="meta-cell"><span>STARTED</span><strong>${escapeHtml(when(task.startedAt))}</strong></div><div class="meta-cell"><span>FINISHED</span><strong>${escapeHtml(when(task.finishedAt))}</strong></div><div class="meta-cell"><span>PROCESS</span><strong>${task.pid ? `PID ${escapeHtml(task.pid)}` : task.exitCode !== null ? `Exit ${escapeHtml(task.exitCode)}` : '—'}</strong></div>
     </section>
+    <section class="detail-section agent-config" aria-label="Agent model configuration"><div class="meta-cell"><span>MODEL</span><strong title="${escapeHtml(task.model || 'Codex default')}">${escapeHtml(task.model || 'Codex default')}</strong></div><div class="meta-cell"><span>REASONING EFFORT</span><strong>${escapeHtml(task.reasoningEffort || 'Codex default')}</strong></div></section>
     ${isSample ? '<div class="sample-note">Illustrative data only. No Codex process was started.</div>' : ''}${task.error ? `<section class="error-panel"><span class="error-icon">!</span><div><strong>Agent error</strong><p>${escapeHtml(task.error)}</p></div></section>` : ''}
     <section class="detail-section"><div class="section-title"><h4>Task links</h4><span>${children.length} child${children.length === 1 ? '' : 'ren'}</span></div>${activeChildren.length && ['completed','failed','cancelled'].includes(task.status) ? `<div class="lifecycle-note"><span>↗</span><p>This task has ended. ${activeChildren.length} direct child agent${activeChildren.length === 1 ? '' : 's'} ${activeChildren.length === 1 ? 'is' : 'are'} still active and will continue independently.</p></div>` : ''}<div class="link-list">${parent ? `<button class="link-row" type="button" data-jump="${escapeHtml(parent.id)}"><span class="link-symbol">↑</span><span><small>PARENT AGENT</small><strong>${escapeHtml(parent.prompt)}</strong></span><span>↗</span></button>` : '<div class="root-marker"><span>◎</span> Root task</div>'}${children.map(child => `<button class="link-row" type="button" data-jump="${escapeHtml(child.id)}"><span class="link-symbol">↓</span><span><small>CHILD · ${escapeHtml(child.status.toUpperCase())}</small><strong>${escapeHtml(child.prompt)}</strong></span><span>↗</span></button>`).join('') || (!parent ? '' : '<div class="subtle-empty">No child agents yet</div>')}</div></section>
     <section id="agent-mailbox" class="detail-section mailbox-section"><div class="section-title"><h4><span class="section-icon">↳</span> Mailbox</h4><span class="mail-count">${Number(task.pendingMessageCount) || 0} pending · ${Number(task.pendingTaskResultCount) || 0} child results</span></div><p class="mailbox-proof">Returned means the coordinator supplied this message to the task tool; it does not prove the model interpreted it.</p>${inboxItems.length ? `<div class="inbox-list">${inboxItems.map(message => `<article class="inbox-item ${message.deliveryState === 'read' ? 'read' : 'pending'}"><div class="inbox-meta"><span class="mail-kind ${message.kind === 'task_result' ? 'result' : ''}">${message.kind === 'task_result' ? 'CHILD RESULT' : 'MESSAGE'}</span><span class="delivery-state ${message.deliveryState === 'read' ? 'read' : 'pending'}">${message.deliveryState === 'read' ? 'RETURNED' : 'PENDING'}</span><span>from ${escapeHtml(message.from)}</span><time>${escapeHtml(when(message.deliveryState === 'read' ? message.readAt : message.at))}</time></div><p>${escapeHtml(message.text)}</p></article>`).join('')}</div>` : `<div class="mailbox-empty"><span>✉</span><div><strong>Inbox is clear</strong><small>Messages and child results will show up here.</small></div></div>`}${canMessage ? `<button class="inbox-compose" type="button" data-message="${escapeHtml(task.id)}">＋ Send this agent a message</button>` : ''}</section>
@@ -234,7 +235,8 @@ async function startRoot() {
   const button = $('#start-root'); const prompt = $('#prompt').value.trim();
   if (!prompt) { $('#prompt').focus(); notify('Describe the task before starting an agent.', true); return; }
   button.disabled = true;
-  try { await request('/api/tasks', { prompt, parentId:null }); $('#prompt').value = ''; $('#root-prompt-count').textContent = '0'; notify('Root agent added to the task queue.'); }
+  const model = $('#root-model').value.trim(); const reasoningEffort = $('#root-effort').value;
+  try { await request('/api/tasks', { prompt, parentId:null, model, modelMode:model ? 'custom' : 'default', reasoningEffort, effortMode:reasoningEffort ? 'custom' : 'default' }); $('#prompt').value = ''; $('#root-prompt-count').textContent = '0'; notify('Root agent added to the task queue.'); }
   catch (error) { notify(error.message, true); }
   finally { button.disabled = false; }
 }
@@ -247,8 +249,28 @@ function openChildDialog(id) {
   const parent = taskById(id);
   $('#parent-label').textContent = parent ? `Parent: ${parent.prompt.slice(0,160)}` : '';
   $('#child-prompt').value = ''; $('#include-context').checked = false;
+  $('#child-model-mode').value = 'inherit';
+  $('#child-model').value = '';
+  $('#child-model').hidden = true;
+  $('#child-model-hint').textContent = `Parent: ${parent?.model || 'Codex default'}`;
+  $('#child-effort').value = 'inherit';
+  $('#child-effort-hint').textContent = `Parent: ${parent?.reasoningEffort || 'Codex default'}`;
   $('#child-dialog').showModal(); $('#child-prompt').focus();
 }
+$('#child-model-mode').addEventListener('change', () => {
+  const mode = $('#child-model-mode').value; const custom = mode === 'custom';
+  $('#child-model').hidden = !custom;
+  $('#child-model-hint').textContent = mode === 'inherit'
+    ? `Parent: ${taskById(selectedParent)?.model || 'Codex default'}`
+    : mode === 'default' ? 'Use the Codex default model.' : 'Overrides the parent model.';
+  if (custom) $('#child-model').focus();
+});
+$('#child-effort').addEventListener('change', () => {
+  const mode = $('#child-effort').value;
+  $('#child-effort-hint').textContent = mode === 'inherit'
+    ? `Parent: ${taskById(selectedParent)?.reasoningEffort || 'Codex default'}`
+    : mode === 'default' ? 'Use the Codex default reasoning effort.' : '';
+});
 function openMessageDialog(id) {
   selectedMessageTask = id;
   const task = taskById(id);
@@ -356,7 +378,11 @@ $('#create-child').addEventListener('click', async event => {
   const prompt = $('#child-prompt').value.trim();
   if (!prompt || !selectedParent) { $('#child-prompt').focus(); return; }
   const button = $('#create-child'); button.disabled = true;
-  try { await request('/api/tasks', { prompt, parentId:selectedParent, includeParentContext:$('#include-context').checked }); $('#child-dialog').close(); notify('Child agent added to the task queue.'); }
+  const modelMode = $('#child-model-mode').value; const model = modelMode === 'custom' ? $('#child-model').value.trim() : '';
+  const effortChoice = $('#child-effort').value; const effortMode = ['inherit','default'].includes(effortChoice) ? effortChoice : 'custom';
+  const reasoningEffort = effortMode === 'custom' ? effortChoice : '';
+  if (modelMode === 'custom' && !model) { $('#child-model').focus(); notify('Enter a model name or choose another model setting.', true); button.disabled = false; return; }
+  try { await request('/api/tasks', { prompt, parentId:selectedParent, includeParentContext:$('#include-context').checked, model, modelMode, reasoningEffort, effortMode }); $('#child-dialog').close(); notify('Child agent added to the task queue.'); }
   catch(error) { notify(error.message, true); }
   finally { button.disabled = false; }
 });

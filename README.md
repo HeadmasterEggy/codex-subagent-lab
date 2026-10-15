@@ -23,6 +23,7 @@ Demo mode loads a fixed four-task hierarchy with completed and failed outcomes p
 ## Current behavior and limits
 
 - Each agent is a separate `codex exec --json --ephemeral` process with `--sandbox read-only` and the same fixed working directory.
+- Root tasks can select a model and reasoning effort; each child can inherit its parent setting, explicitly use the Codex default, or choose a custom value. These choices are passed as `codex exec --model` and `model_reasoning_effort` config overrides; blank root settings delegate to the CLI default.
 - The server binds to loopback, creates a per-run random token, and keeps task state in memory. Stopping the server clears the UI history.
 - Restarting the server rotates the UI token. An already-open page detects the rejected token and offers a `Reload` action to reconnect to the new server session.
 - At most four CLI processes and 100 total tasks run per server session; additional tasks queue until a process slot opens. Any task can have child tasks, up to eight levels deep. The UI stop action terminates only the selected task; its children continue independently.
