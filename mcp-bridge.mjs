@@ -26,12 +26,11 @@ const tools = [
   },
   {
     name: 'wait_agent',
-    description: 'Wait for a direct child agent to finish or for a timeout. Returns its final output and exit status when finished.',
+    description: 'Wait for activity in this task’s inbox, including a child result or a message from the parent. This does not consume inbox messages; use read_messages to retrieve them.',
     annotations: { title: 'Wait for child agent', readOnlyHint: true, destructiveHint: false, openWorldHint: false },
     inputSchema: {
-      type: 'object', additionalProperties: false, required: ['task_id'],
+      type: 'object', additionalProperties: false,
       properties: {
-        task_id: { type: 'string', description: 'Child task ID returned by spawn_agent.' },
         timeout_seconds: { type: 'number', minimum: 0, maximum: 300, default: 120 },
       },
     },
@@ -94,10 +93,10 @@ async function callTool(name, args) {
   if (name === 'list_agents') return await request(`/api/coordination/tasks/${taskId}/children`);
   if (name === 'wait_agent') {
     const seconds = Number.isFinite(args.timeout_seconds) ? Math.max(0, Math.min(300, args.timeout_seconds)) : 120;
-    const value = await request(`/api/coordination/tasks/${encodeURIComponent(args.task_id)}/wait?timeout_ms=${Math.round(seconds * 1000)}`);
+    const value = await request(`/api/coordination/tasks/${taskId}/wait?timeout_ms=${Math.round(seconds * 1000)}`);
     return value.timedOut
-      ? { timed_out: true, task_id: args.task_id }
-      : { timed_out: false, task_id: value.task.id, status: value.task.status, exit_code: value.task.exitCode, output: value.task.output };
+      ? { timed_out: true, pending_message_count: value.pendingMessageCount }
+      : { timed_out: false, pending_message_count: value.pendingMessageCount, messages: value.messages };
   }
   if (name === 'send_message') {
     const value = await request(`/api/coordination/tasks/${encodeURIComponent(args.task_id)}/messages`, {

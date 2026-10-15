@@ -19,7 +19,11 @@ const appJs = await readFile(new URL('./public/app.js', import.meta.url), 'utf8'
 const styleCss = await readFile(new URL('./public/style.css', import.meta.url), 'utf8');
 
 function snapshot() {
-  const publicTasks = [...tasks.values()].map(({ child, effectivePrompt, messages, waiters, ...task }) => task);
+  const publicTasks = [...tasks.values()].map(({ child, effectivePrompt, messages, waiters, resultDelivered, ...task }) => ({
+    ...task,
+    pendingMessageCount: messages.length,
+    recentMessages: messages.slice(-3).map(({ id, from, at, text, kind }) => ({ id, from, at, text: text.slice(0, 2000), kind: kind ?? 'message' })),
+  }));
   return { workspace, concurrency, active, queued: queue.length, tasks: publicTasks };
 }
 function publish() {
@@ -70,6 +74,20 @@ function parseLine(task, line) {
   if (extracted && /(agent|message|output|text)/i.test(`${type} ${payload?.type ?? ''}`)) appendEvent(task, 'message', extracted + (extracted.endsWith('\n') ? '' : '\n'));
   appendEvent(task, type, JSON.stringify(event).slice(0, 6000));
 }
+function deliverTaskResult(task) {
+  if (task.resultDelivered || !terminal(task)) return;
+  task.resultDelivered = true;
+  const parent = task.parentId ? tasks.get(task.parentId) : null;
+  if (!parent) return;
+  const result = [
+    `Child agent ${task.id} finished with status=${task.status}, exit_code=${task.exitCode ?? 'null'}, signal=${task.signal ?? 'none'}${task.error ? `, error=${task.error}` : ''}.`,
+    task.output ? `Final output:\n${task.output.slice(-8000)}` : 'The child produced no captured text output.',
+  ].join('\n\n');
+  enqueueMessage(parent, {
+    id: randomBytes(8).toString('hex'), from: task.id, at: task.finishedAt ?? new Date().toISOString(),
+    text: result, kind: 'task_result',
+  }, { internal: true });
+}
 function pump() {
   while (active < concurrency && queue.length) {
     const task = tasks.get(queue.shift());
@@ -104,7 +122,7 @@ function run(task) {
     task.child = child;
     child.stdin.end(task.effectivePrompt);
   } catch (error) {
-    task.status = 'failed'; task.error = error.message; task.finishedAt = new Date().toISOString(); active--; appendEvent(task, 'error', error.message); pump(); return;
+    task.status = 'failed'; task.error = error.message; task.finishedAt = new Date().toISOString(); active--; appendEvent(task, 'error', error.message); deliverTaskResult(task); pump(); return;
   }
   let stdout = '';
   child.stdout.setEncoding('utf8');
@@ -126,6 +144,7 @@ function run(task) {
     else if (task.status === 'running') task.status = code === 0 ? 'completed' : 'failed';
     active--;
     appendEvent(task, 'finished', `status=${task.status} exit=${code ?? 'null'} signal=${signal ?? 'none'}`);
+    deliverTaskResult(task);
     pump();
   });
 }
@@ -134,7 +153,7 @@ function cancel(task) {
   if (task.status === 'queued') {
     task.status = 'cancelled'; task.finishedAt = new Date().toISOString();
     const i = queue.indexOf(task.id); if (i >= 0) queue.splice(i, 1);
-    appendEvent(task, 'cancelled', 'Cancelled before start'); pump(); return;
+    appendEvent(task, 'cancelled', 'Cancelled before start'); deliverTaskResult(task); pump(); return;
   }
   if (task.status !== 'running' || !task.child) return;
   task.status = 'cancelling'; appendEvent(task, 'cancelling', 'Sending termination signal');
@@ -155,14 +174,17 @@ function taskDepth(task) {
   while (cursor?.parentId) { depth++; cursor = tasks.get(cursor.parentId); }
   return depth;
 }
-function enqueueMessage(task, item) {
-  if (task.messages.length >= 100) return false;
+function enqueueMessage(task, item, { internal = false } = {}) {
+  const internalCount = task.messages.filter(message => message.kind === 'task_result').length;
+  const externalCount = task.messages.length - internalCount;
+  if (internal ? internalCount >= 100 : externalCount >= 100) return false;
+  if (task.messages.length >= 200) return false;
   task.messages.push(item);
   appendEvent(task, 'message_received', JSON.stringify({ from: item.from, message: item.text.slice(0, 300) }));
   return true;
 }
-function waitForTask(task, timeoutMs) {
-  if (terminal(task)) return Promise.resolve(task);
+function waitForInboxActivity(task, timeoutMs) {
+  if (task.messages.length > 0) return Promise.resolve(true);
   return new Promise(resolve => {
     let finished = false;
     const done = value => {
@@ -172,8 +194,8 @@ function waitForTask(task, timeoutMs) {
       task.waiters.delete(check);
       resolve(value);
     };
-    const check = () => { if (terminal(task)) done(task); };
-    const timer = setTimeout(() => done(null), timeoutMs);
+    const check = () => { if (task.messages.length > 0) done(true); };
+    const timer = setTimeout(() => done(false), timeoutMs);
     task.waiters.add(check);
   });
 }
@@ -184,12 +206,12 @@ function createTask({ prompt, parentId = null, includeParentContext = false, cre
     ? `\n\nParent context snapshot (reference material; follow the child task below):\n<parent-task>\n${parent.prompt.slice(0, 4000)}\n</parent-task>\n<parent-output>\n${parent.output.slice(-8000) || '(No agent output yet.)'}\n</parent-output>\n`
     : '';
   const id = randomBytes(12).toString('hex');
-  const coordination = `\n\nSubagent Lab coordination: your task ID is ${id}. You may use the subagent_lab MCP tools to create child agents, list them, wait for them, send them messages, read messages sent to you, and close them. Child tasks run as separate Codex CLI processes in the same read-only workspace. Report important child results in your final response.`;
+  const coordination = `\n\nSubagent Lab coordination: your task ID is ${id}. You may use the subagent_lab MCP tools to create child agents, list them, wait for inbox activity, send messages, read messages sent to you, and close child agents. Child tasks run as separate Codex CLI processes in the same read-only workspace. Child completion results are delivered to this task's inbox; use wait_agent, then read_messages to inspect them. Report important child results in your final response.`;
   const task = {
     id, parentId, prompt, contextIncluded, createdBy,
     effectivePrompt: `${coordination}${parentContext}\nTask:\n${prompt}`,
     status: 'queued', createdAt: new Date().toISOString(), startedAt: null, finishedAt: null,
-    pid: null, exitCode: null, signal: null, error: null, output: '', events: [], messages: [], waiters: new Set(), child: null,
+    pid: null, exitCode: null, signal: null, error: null, output: '', events: [], messages: [], waiters: new Set(), child: null, resultDelivered: false,
   };
   tasks.set(id, task); queue.push(id); publish(); pump();
   return task;
@@ -233,15 +255,17 @@ const server = http.createServer(async (req, res) => {
       } catch (error) { return sendJson(res, 400, { error: error.message }); }
     }
     if (action === 'wait' && req.method === 'GET') {
-      const requesterId = req.headers['x-lab-task-id'];
-      const requester = tasks.get(requesterId);
-      if (!requester || !(task.parentId === requester.id || requester.parentId === task.id)) return sendJson(res, 403, { error: 'Tasks can wait only for a direct parent or child' });
+      if (req.headers['x-lab-task-id'] !== task.id) return sendJson(res, 403, { error: 'A task can wait only for activity in its own inbox' });
       const rawTimeout = Number(url.searchParams.get('timeout_ms'));
       const timeoutMs = url.searchParams.has('timeout_ms') && Number.isFinite(rawTimeout)
         ? Math.max(0, Math.min(300_000, rawTimeout))
         : 120_000;
-      const completed = await waitForTask(task, timeoutMs);
-      return sendJson(res, 200, { timedOut: completed == null, task: completed ? snapshot().tasks.find(item => item.id === completed.id) : snapshot().tasks.find(item => item.id === task.id) });
+      const receivedActivity = await waitForInboxActivity(task, timeoutMs);
+      return sendJson(res, 200, {
+        timedOut: !receivedActivity,
+        pendingMessageCount: task.messages.length,
+        messages: task.messages.map(({ id, from, at, text, kind }) => ({ id, from, at, text: text.slice(0, 2000), kind: kind ?? 'message' })),
+      });
     }
     if (action === 'messages' && req.method === 'POST') {
       const senderId = req.headers['x-lab-task-id'];
