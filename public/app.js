@@ -27,6 +27,7 @@ let requestWireContent = 'plaintext';
 let desktopPanelStatus = 'active';
 let desktopPanelInline = true;
 let desktopPanelSelected = null;
+let desktopPanelCanInteract = true;
 let spawnConfigMode = 'fresh-v2';
 let spawnConfigModelSource = 'inherited';
 let spawnConfigRole = false;
@@ -683,7 +684,7 @@ function desktopSubagentsMarkup() {
   const agents = [
     { id:'agent-a', name:'Index transcript', role:'Trace analyst', model:'Codex default', status:'active', showInlineActivity:true },
     { id:'agent-b', name:'Inspect renderer', role:'UI investigator', model:'Codex default', status:'done', showInlineActivity:true },
-    { id:'agent-c', name:'Map event route', role:'Protocol analyst', model:'Codex default', status:desktopPanelStatus, showInlineActivity:desktopPanelInline },
+    { id:'agent-c', name:'Map event route', role:'Protocol analyst', model:'Codex default', status:desktopPanelStatus, showInlineActivity:desktopPanelInline, canInteract:desktopPanelCanInteract },
     { id:'agent-empty', name:'   ', role:null, model:null, status:'active', showInlineActivity:false },
   ];
   const named = agents.filter(agent => agent.name.trim().length > 0);
@@ -692,13 +693,14 @@ function desktopSubagentsMarkup() {
   const working = summaryAgents.filter(agent => agent.status !== 'done');
   const done = summaryAgents.filter(agent => agent.status === 'done');
   const selected = agents.find(agent => agent.id === desktopPanelSelected);
+  const selectedRoute = desktopPanelSelected === 'summary' ? 'summary' : selected ? (selected.canInteract === false ? 'panel' : 'thread') : 'idle';
   const avatar = agent => `<span class="desktop-agent-avatar ${agent.status === 'done' ? 'is-done' : 'is-active'}" aria-label="${escapeHtml(agent.name)} · ${agent.status}">${escapeHtml(agent.name.slice(0,1))}</span>`;
   return `<section class="desktop-subagents" aria-labelledby="desktop-subagents-title">
     <div class="desktop-subagents-head"><div><span class="desktop-subagents-eyebrow">INSTALLED CODEX · STATIC UI TRACE</span><h5 id="desktop-subagents-title">One child set, two panel projections</h5></div><span class="desktop-subagents-version">26.1007.71326</span></div>
     <p class="desktop-subagents-intro">A local bundle snapshot shows named background agents split by <code>showInlineActivity</code>. Change the sample child below to see which projection receives it.</p>
     <div class="desktop-subagents-source" aria-label="Illustrative background agent records">
       <div class="desktop-subagents-source-label"><span>INPUT</span><strong>backgroundAgents</strong><small>Illustrative records · not captured session data</small></div>
-      <article class="desktop-agent-record ${desktopPanelInline ? 'is-routed-summary' : 'is-routed-row'}"><span class="desktop-record-icon">A</span><div><strong>Map event route</strong><small>Protocol analyst · ${desktopPanelStatus === 'active' ? 'active' : 'done'}</small></div><span class="desktop-route-pill">${desktopPanelInline ? 'INLINE ACTIVITY' : 'PANEL ROW'}</span></article>
+      <article class="desktop-agent-record ${desktopPanelInline ? 'is-routed-summary' : 'is-routed-row'}"><span class="desktop-record-icon">A</span><div><strong>Map event route</strong><small>Protocol analyst · ${desktopPanelStatus === 'active' ? 'active' : 'done'} · canInteract ${desktopPanelCanInteract}</small></div><span class="desktop-route-pill">${desktopPanelInline ? 'INLINE ACTIVITY' : 'PANEL ROW'}</span></article>
       <article class="desktop-agent-record is-routed-summary"><span class="desktop-record-icon">I</span><div><strong>Index transcript</strong><small>Trace analyst · active</small></div><span class="desktop-route-pill">INLINE ACTIVITY</span></article>
       <article class="desktop-agent-record is-routed-summary"><span class="desktop-record-icon">R</span><div><strong>Inspect renderer</strong><small>UI investigator · done</small></div><span class="desktop-route-pill">INLINE ACTIVITY</span></article>
       <article class="desktop-agent-record is-filtered"><span class="desktop-record-icon">∅</span><div><strong>Unnamed record</strong><small>displayName.trim().length === 0</small></div><span class="desktop-route-pill">FILTERED OUT</span></article>
@@ -719,10 +721,13 @@ function desktopSubagentsMarkup() {
         <p>Clicking a row calls <code>onOpenBackgroundAgent(agent)</code>. The active row gets an “is working” label; other statuses can remain unlabeled.</p>
       </article>
     </div>
-    <div class="desktop-projection-controls"><div><span>LIVE SAMPLE CONTROLS</span><strong>Map event route</strong></div><div class="desktop-control-group" role="group" aria-label="Sample agent status"><button type="button" data-native-panel-status="active" aria-pressed="${desktopPanelStatus === 'active'}">active</button><button type="button" data-native-panel-status="done" aria-pressed="${desktopPanelStatus === 'done'}">done</button></div><label class="desktop-inline-toggle"><input type="checkbox" data-native-panel-inline ${desktopPanelInline ? 'checked' : ''}><span>showInlineActivity</span></label></div>
-    <div class="desktop-panel-selection" aria-live="polite"><span>${selected ? 'ROW CLICK PATH' : desktopPanelSelected === 'summary' ? 'SUMMARY CLICK PATH' : 'STATIC BEHAVIOR'}</span><strong>${selected ? `Selected “${escapeHtml(selected.name)}” → onOpenBackgroundAgent → child conversation view` : desktopPanelSelected === 'summary' ? 'Compact summary → onOpenSubagentsPanel → subagents overview.' : 'The compact summary opens the overview; a named detail row opens that selected child.'}</strong></div>
-    <p class="desktop-subagents-boundary">Static extraction from the installed app bundle; example records and controls are illustrative. This does not capture a live Desktop session, prove a React commit or visible paint, or represent the Lab’s CLI process tree.</p>
-    <p class="desktop-subagents-source-link"><code>local-conversation-thread-269c4ee9ddf0.js</code> · chars 30,957–40,247 · REA Evidence <code>ev_9a2e1d42897d8f73d61bea38956116d402057de54c34849710d94e1956ca3dde</code></p>
+    <div class="desktop-projection-controls"><div><span>ILLUSTRATIVE ROUTE CONTROLS</span><strong>Map event route</strong></div><div class="desktop-control-group" role="group" aria-label="Sample agent status"><button type="button" data-native-panel-status="active" aria-pressed="${desktopPanelStatus === 'active'}">active</button><button type="button" data-native-panel-status="done" aria-pressed="${desktopPanelStatus === 'done'}">done</button></div><div class="desktop-control-group" role="group" aria-label="Parent-thread interactivity evidence"><button type="button" data-native-panel-interact="true" aria-pressed="${desktopPanelCanInteract}">canInteract true</button><button type="button" data-native-panel-interact="false" aria-pressed="${!desktopPanelCanInteract}">false</button></div><label class="desktop-inline-toggle"><input type="checkbox" data-native-panel-inline ${desktopPanelInline ? 'checked' : ''}><span>showInlineActivity</span></label></div>
+    <div class="desktop-panel-selection" aria-live="polite"><span>${selected ? (selectedRoute === 'panel' ? 'SELECTED CHILD · PANEL ROUTE' : 'SELECTED CHILD · THREAD ROUTE') : desktopPanelSelected === 'summary' ? 'SUMMARY CLICK PATH' : 'CLICK PATH'}</span><strong>${selected ? `Selected “${escapeHtml(selected.name)}” → ${selectedRoute === 'panel' ? 'parent Subagents panel with this child selected' : 'validated local child thread'}` : desktopPanelSelected === 'summary' ? 'Compact summary → onOpenSubagentsPanel → Subagents overview.' : 'Choose the summary or a named child row to reveal the next UI route.'}</strong></div>
+    <div class="desktop-open-route" data-route="${selectedRoute}" aria-live="polite">
+      ${selectedRoute === 'summary' ? `<div class="desktop-open-route-head"><span>OVERVIEW ROUTE</span><strong>Summary click opens the parent’s Subagents overview</strong></div><div class="desktop-route-steps"><article><small>01 · CLICK</small><b>Compact summary row</b><span>onOpenSubagentsPanel</span></article><i aria-hidden="true">→</i><article><small>02 · DESTINATION</small><b>Parent Subagents overview</b><span>Child selection happens in a separate step.</span></article></div>` : selectedRoute === 'idle' ? `<div class="desktop-route-idle"><span>↗</span><div><b>Two click destinations</b><small>Summary opens the overview; a child row routes according to its parent-thread evidence.</small></div></div>` : selectedRoute === 'thread' ? `<div class="desktop-open-route-head"><span>CANINTERACT = TRUE · LOCAL THREAD ROUTE</span><strong>Resolve the child before mounting its conversation</strong></div><div class="desktop-route-steps"><article><small>01 · LOOK UP</small><b>Indexed child or parent history</b><span>Find the matching spawn/activity reference.</span></article><i aria-hidden="true">→</i><article><small>02 · VALIDATE</small><b>Parent ancestry + first page</b><span>Check the requested parent, then require child first-page readiness.</span></article><i aria-hidden="true">→</i><article><small>03 · OPEN</small><b>Durable local thread tab</b><span>Composer and resume can be enabled, subject to writer conflict.</span></article></div>` : `<div class="desktop-open-route-head"><span>CANINTERACT = FALSE · EMBEDDED PANEL ROUTE</span><strong>Keep the selected child inside the parent’s Subagents panel</strong></div><div class="desktop-route-steps"><article><small>01 · SELECT</small><b>Activity-only or non-interactive child</b><span>Open the parent panel with this child selected.</span></article><i aria-hidden="true">→</i><article><small>02 · CHECK</small><b>Verify descendant relationship</b><span>Missing ancestry can be hydrated without loading turns.</span></article><i aria-hidden="true">→</i><article><small>03 · PROJECT</small><b>Embedded child transcript</b><span>Composer stays hidden; the interactive resume hook is gated off.</span></article></div>`}
+    </div>
+    <p class="desktop-subagents-boundary">Static extraction from the installed app bundle; example records and controls are illustrative. <code>canInteract</code> describes client routing and composer/resume UI gates, not server authorization or current runtime status. This does not capture a live Desktop session, prove a React commit or visible paint, or represent the Lab’s CLI process tree.</p>
+    <p class="desktop-subagents-source-link"><a href="https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#local-desktop-panel-entry-point" target="_blank" rel="noreferrer">Panel entry and child routing</a> · <a href="https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#installed-desktop-26100771326-selected-child-panel-path" target="_blank" rel="noreferrer">canInteract derivation and UI gates</a> · <code>local-conversation-thread-269c4ee9ddf0.js</code> · chars 30,957–40,247 · REA Evidence <code>ev_9a2e1d42897d8f73d61bea38956116d402057de54c34849710d94e1956ca3dde</code></p>
   </section>`;
 }
 
@@ -1468,6 +1473,12 @@ $('#tree').addEventListener('keydown', event => {
   }
 });
 document.addEventListener('click', async event => {
+  const nativePanelInteract = event.target.closest('[data-native-panel-interact]');
+  if (nativePanelInteract) {
+    desktopPanelCanInteract = nativePanelInteract.dataset.nativePanelInteract === 'true';
+    nativePanelInteract.closest('.desktop-subagents').outerHTML = desktopSubagentsMarkup();
+    return;
+  }
   const nativePanelStatus = event.target.closest('[data-native-panel-status]');
   if (nativePanelStatus) {
     desktopPanelStatus = nativePanelStatus.dataset.nativePanelStatus === 'done' ? 'done' : 'active';

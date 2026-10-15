@@ -676,11 +676,29 @@ button.relation-node:hover,button.relation-node:focus-visible{border-color:#c5f3
 .desktop-panel-selection{display:flex;align-items:center;gap:9px;margin-top:8px;padding:8px 9px;border-left:2px solid #9b83e1;border-radius:0 6px 6px 0;background:#211e29}
 .desktop-panel-selection>span{flex:none;color:#c2aaff}
 .desktop-panel-selection>strong{color:#ddd6e9;font-size:8px;line-height:1.45}
+.desktop-open-route{margin-top:7px;padding:9px;border:1px solid #a88cff24;border-radius:8px;background:linear-gradient(145deg,#171820,#131719)}
+.desktop-open-route-head{display:flex;flex-direction:column;gap:4px}
+.desktop-open-route-head>span{color:#bba4f2;font:7px var(--mono);letter-spacing:.08em}
+.desktop-open-route-head>strong{color:#e4dfec;font-size:9px;line-height:1.4}
+.desktop-route-steps{display:grid;grid-template-columns:minmax(0,1fr) 18px minmax(0,1fr) 18px minmax(0,1fr);align-items:stretch;gap:5px;margin-top:8px}
+.desktop-route-steps>article{display:flex;min-width:0;flex-direction:column;gap:5px;padding:8px;border:1px solid #ffffff12;border-radius:7px;background:#1b1d23}
+.desktop-route-steps>article>small{color:#b39de8;font:7px var(--mono);line-height:1.4}
+.desktop-route-steps>article>b{color:#e1dde8;font-size:8px;line-height:1.35;overflow-wrap:anywhere}
+.desktop-route-steps>article>span{color:#a5a3ae;font-size:8px;line-height:1.45;overflow-wrap:anywhere}
+.desktop-route-steps>i{align-self:center;color:#ac95e2;font:12px var(--mono);font-style:normal;text-align:center}
+.desktop-route-idle{display:flex;align-items:center;gap:8px;color:#cfc6df}
+.desktop-route-idle>span{display:grid;width:25px;height:25px;flex:none;place-items:center;border-radius:7px;background:#a88cff19;color:#c1a9fb}
+.desktop-route-idle>div{display:grid;gap:3px}
+.desktop-route-idle b{font-size:8px}
+.desktop-route-idle small{color:#aaa6b3;font-size:8px;line-height:1.45}
 .desktop-subagents-boundary{margin:8px 0 0;padding:7px 8px;border:1px solid #e7c47f22;border-radius:6px;background:#211d16;color:#d0c2a9;font-size:8px}
 .desktop-subagents-source-link{margin:7px 0 0;color:#918b9d;font-size:7px}
 .desktop-subagents-source-link code{overflow-wrap:anywhere}
+.desktop-subagents-source-link a{color:#c1a9fb;text-decoration:none}
+.desktop-subagents-source-link a:hover{text-decoration:underline}
+.desktop-subagents button:focus-visible{outline:2px solid #c1a9fb;outline-offset:2px}
 @media(max-width:900px){.desktop-subagents-source{grid-template-columns:repeat(2,minmax(0,1fr))}.desktop-subagents-source-label{grid-column:1/-1}.desktop-subagents-projections{grid-template-columns:1fr}.desktop-projection-connectors{display:none}}
-@media(max-width:560px){.desktop-subagents{padding:10px}.desktop-subagents-head{align-items:flex-start}.desktop-subagents-head h5{font-size:12px}.desktop-subagents-source{grid-template-columns:1fr}.desktop-subagents-source-label{grid-column:auto}.desktop-agent-record{min-height:45px}.desktop-projection-controls{align-items:flex-start;flex-wrap:wrap}.desktop-projection-controls>div:first-child{width:100%}.desktop-inline-toggle{min-height:28px}.desktop-panel-selection{align-items:flex-start;flex-direction:column;gap:4px}.desktop-panel-selection>strong{font-size:9px}.desktop-subagents-intro,.desktop-subagents-boundary,.desktop-projection-card>p{font-size:9px}}
+@media(max-width:560px){.desktop-subagents{padding:10px}.desktop-subagents-head{align-items:flex-start}.desktop-subagents-head h5{font-size:12px}.desktop-subagents-source{grid-template-columns:1fr}.desktop-subagents-source-label{grid-column:auto}.desktop-agent-record{min-height:45px}.desktop-projection-controls{align-items:flex-start;flex-wrap:wrap}.desktop-projection-controls>div:first-child{width:100%}.desktop-inline-toggle{min-height:28px}.desktop-panel-selection{align-items:flex-start;flex-direction:column;gap:4px}.desktop-panel-selection>strong{font-size:9px}.desktop-route-steps{grid-template-columns:1fr}.desktop-route-steps>i{transform:rotate(90deg)}.desktop-subagents-intro,.desktop-subagents-boundary,.desktop-projection-card>p,.desktop-route-steps>article>span,.desktop-route-idle small{font-size:9px}}
 
 /* Show V2 child terminal status, activity, and parent result as separate channels. */
 .terminal-lifecycle{margin:12px 0 2px;padding:12px;border:1px solid #87b9d12e;border-radius:10px;background:radial-gradient(ellipse at 92% 0%,#254e6038,transparent 46%),linear-gradient(145deg,#151e22,#111417 70%);box-shadow:inset 0 1px #ffffff08}
