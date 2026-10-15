@@ -35,3 +35,10 @@ dialog{max-width:none;max-height:calc(100dvh - 24px);overflow:auto;padding:0;bor
   .detail-section[id="agent-mailbox"]{scroll-margin-top:12px}
 }
 @media(max-width:680px){.inspector{position:static;max-height:none;overflow:visible;scrollbar-gutter:auto}.detail-head{position:static;backdrop-filter:none}}
+
+.inspector-nav{display:flex;gap:5px;margin-top:13px;padding-top:10px;border-top:1px solid #ffffff0b;overflow-x:auto;scrollbar-width:none}
+.inspector-nav::-webkit-scrollbar{display:none}
+.inspector-nav button{flex:0 0 auto;padding:6px 8px;border:1px solid #30343a;border-radius:7px;background:#191b1f;color:#9da4ae;font-size:9px;cursor:pointer}
+.inspector-nav button:hover,.inspector-nav button:focus-visible{border-color:#71834f;color:#d9e6c5;outline:none}
+@media(max-width:680px){.inspector-nav{margin-top:11px}.inspector-nav button{padding:7px 9px}}
+@media(prefers-reduced-motion:reduce){.inspector{scroll-behavior:auto}.inspector-nav button{scroll-behavior:auto}}
