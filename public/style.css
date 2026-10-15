@@ -123,6 +123,32 @@ button.relation-node:hover,button.relation-node:focus-visible{border-color:#c5f3
 .delivery-mode-title div span{color:#818b92;font:7px var(--mono)}
 .delivery-mode-title>b{margin-left:auto;padding:3px 5px;border-radius:4px;background:#ffffff09;color:#aeb7bc;font:700 7px var(--mono);letter-spacing:.06em}
 .queue-only .delivery-mode-title>b{color:#dfbd82;background:#d7aa6312}
+.mailbox-timing{margin:0 10px 12px;padding:12px;border:1px solid #d7aa6326;border-radius:9px;background:radial-gradient(ellipse at 12% 0%,#d7aa630c,transparent 65%),#111416}
+.timing-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
+.timing-eyebrow{color:#d4b174;font:7px var(--mono);letter-spacing:.1em}
+.timing-heading h5{margin:4px 0 0;color:#e1e6e9;font-size:11px;line-height:1.5}
+.timing-version{flex:0 0 auto;padding:4px 6px;border:1px solid #ffffff10;border-radius:5px;color:#89939a;font:7px var(--mono)}
+.timing-scenarios{display:flex;gap:5px;margin:10px 0}
+.timing-scenarios button{min-height:30px;padding:0 9px;border:1px solid #ffffff16;border-radius:6px;background:#ffffff05;color:#aab4ba;font:8px var(--mono);cursor:pointer}
+.timing-scenarios button[aria-pressed="true"]{border-color:#d7aa6366;background:#d7aa6314;color:#efd19a}
+.timing-scenarios button:focus-visible{outline:2px solid #e2bd79;outline-offset:2px}
+.timing-flow{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;margin:0;padding:0;list-style:none}
+.timing-step{position:relative;display:flex;gap:7px;min-width:0;min-height:82px;padding:8px 7px;border:1px solid #ffffff12;border-radius:7px;background:#ffffff04}
+.timing-step:not(:last-child)::after{position:absolute;z-index:1;top:50%;right:-8px;width:8px;color:#788178;content:"→";font:9px var(--mono);text-align:center}
+.timing-index{display:grid;place-items:center;width:17px;height:17px;flex:0 0 auto;border-radius:5px;background:#ffffff09;color:#a3adb3;font:7px var(--mono)}
+.timing-step>div{display:flex;min-width:0;flex-direction:column;gap:4px}
+.timing-step small{color:#818b90;font:6px var(--mono);letter-spacing:.07em}
+.timing-step strong{color:#d9e0e3;font-size:8px;line-height:1.45;overflow-wrap:anywhere}
+.timing-step>div>span{color:#919ba1;font-size:7px;line-height:1.45}
+.timing-step.arrived{border-top-color:#d7aa6366}.timing-step.running{border-top-color:#7998ae66}.timing-step.gate{border-top-color:#aa90c666}.timing-step.outcome{border-top-color:#91b77677}
+.timing-step.gate strong{color:#c5b1e0;font-family:var(--mono)}
+.timing-step.outcome strong{color:#c3dcae}
+.timing-boundary{margin:9px 0 0;color:#a4adb2;font-size:8px;line-height:1.55}
+.timing-sources{margin:7px 0 0;color:#778188;font-size:7px;line-height:1.5}
+.timing-sources a{color:#9eae91;text-decoration:underline;text-underline-offset:2px}
+@media(max-width:680px){.mailbox-timing{margin-right:7px;margin-left:7px;padding:10px}.timing-flow{grid-template-columns:repeat(2,minmax(0,1fr))}.timing-step{min-height:72px}.timing-step:nth-child(2)::after{display:none}.timing-step:not(:last-child)::after{right:-8px}}
+@media(max-width:380px){.timing-heading h5{font-size:10px}.timing-step{gap:5px;padding:7px 5px}.timing-step strong{font-size:7px}.timing-step>div>span{font-size:6px}}
+@media(prefers-reduced-motion:reduce){.timing-scenarios button{transition:none}}
 .trigger-turn .delivery-mode-title>b{color:#c1dda0;background:#9ac46b12}
 .mode-flow{display:grid;grid-template-columns:minmax(0,1fr) 13px minmax(0,1.15fr) 13px minmax(0,1.4fr);align-items:center;gap:3px;margin:12px 0 9px}
 .mode-flow>span{display:grid;min-height:38px;place-items:center;padding:5px;border:1px solid #ffffff10;border-radius:6px;background:#0c0e10;color:#bec7cc;font-size:7px;line-height:1.35;text-align:center;overflow-wrap:anywhere}
