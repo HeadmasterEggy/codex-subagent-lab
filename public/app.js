@@ -182,6 +182,25 @@ function spawnProtocolMarkup() {
     <div class="spawn-protocol-flow" aria-live="polite">${stages.map(([label,title,detail],index) => `<article class="spawn-protocol-step ${failed && ((v2 && index === 1) || (!v2 && index === 2)) ? 'failed' : ''} ${failed && index > (v2 ? 1 : 2) ? 'not-reached' : ''}"><span>${label}</span><strong>${title}</strong><small>${detail}</small></article>${index < stages.length-1 ? '<i aria-hidden="true">→</i>' : ''}`).join('')}</div>
     <p class="spawn-protocol-boundary">V1 config-preparation failure occurs after an InProgress turn item was emitted and returns before this handler emits its completion item. V2 config-preparation failure is recorded by the outer executor as a failed tool call; the Started activity follows successful thread creation. Static source ordering only: no live Desktop event stream or rendered React state was captured.</p>
     <p class="spawn-protocol-sources"><a href="https://github.com/openai/codex/blob/7ae831991792744434027c431dfbc7e81dd5c12c/codex-rs/core/src/tools/handlers/multi_agents/spawn.rs#L53-L190" target="_blank" rel="noreferrer">V1 handler and turn items</a> · <a href="https://github.com/openai/codex/blob/7ae831991792744434027c431dfbc7e81dd5c12c/codex-rs/core/src/tools/handlers/multi_agents_v2/spawn.rs#L43-L240" target="_blank" rel="noreferrer">V2 handler and analytics</a> · <a href="https://github.com/openai/codex/blob/7ae831991792744434027c431dfbc7e81dd5c12c/codex-rs/core/src/tools/handlers/multi_agents_spec.rs#L65-L145" target="_blank" rel="noreferrer">tool schemas</a> · <a href="https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#spawn-call-records-have-different-failure-ordering-in-v1-and-v2-2026-10-16" target="_blank" rel="noreferrer">evidence ledger</a></p>
+    ${nativeCliTraceMarkup()}
+  </section>`;
+}
+function nativeCliTraceMarkup() {
+  const events = [
+    ['01', 'spawn_agent · started', 'in_progress', 'The parent begins the collaboration tool call.'],
+    ['02', 'spawn_agent · completed', 'child: pending_init', 'One receiver is returned before the child initializes.'],
+    ['03', 'wait · started', 'in_progress', 'The parent waits on that same child thread.'],
+    ['04', 'wait · completed', 'child: completed', 'The wait result carries the child status and message.'],
+    ['05', 'parent · agent_message', 'result returned', 'The root turn reports the child marker and finding.']
+  ];
+  return `<section class="native-cli-trace" aria-labelledby="native-cli-trace-title">
+    <div class="native-cli-heading"><div><span class="native-cli-eyebrow">OBSERVED RUN · STANDALONE CODEX CLI 0.162.1</span><h6 id="native-cli-trace-title">One child, from spawn receipt to parent result</h6></div><span class="native-cli-proof">JSONL · read-only · ephemeral</span></div>
+    <p class="native-cli-intro">The captured event stream separates “spawn completed” from “child completed”. Select a step to inspect the evidence.</p>
+    <ol class="native-cli-timeline" aria-label="Observed native CLI event sequence">${events.map(([index,title,status],i) => `<li><button type="button" class="native-cli-event ${i===1?'is-active':''}" data-native-cli-step="${i}" aria-pressed="${i===1}"><span class="native-cli-index">${index}</span><span class="native-cli-copy"><strong>${title}</strong><small>${status}</small></span></button>${i<events.length-1?'<i aria-hidden="true">↓</i>':''}</li>`).join('')}</ol>
+    <div class="native-cli-detail" aria-live="polite"><span>EVENT 02 · SPAWN RECEIPT</span><p>The receiver list contains one child; its state is <code>pending_init</code> and its message is <code>null</code>. A separate <code>wait</code> call later observes completion.</p></div>
+    <div class="native-cli-meta"><span><b>FLAGS</b> <code>multi_agent=true</code> · <code>multi_agent_v2=false</code></span><span><b>CHILD OUTPUT</b> README observation returned through <code>wait</code>, then parent message</span></div>
+    <p class="native-cli-boundary">This is an observed standalone CLI JSONL sequence, not a Desktop capture. It proves serialized event order and reported statuses; it does not expose the child’s internal transcript.</p>
+    <p class="native-cli-source"><a href="https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/native-cli-v1-run.md" target="_blank" rel="noreferrer">Run details, redacted excerpt and SHA-256</a></p>
   </section>`;
 }
 function selectSpawnProtocol(key, value) {
@@ -189,6 +208,25 @@ function selectSpawnProtocol(key, value) {
   if (key === 'outcome') spawnProtocolOutcome = value === 'prepare-failure' ? 'prepare-failure' : 'success';
   const panel = $('.spawn-protocol-trace');
   if (panel) panel.outerHTML = spawnProtocolMarkup();
+}
+function selectNativeCliStep(index) {
+  const steps = [
+    ['EVENT 01 · SPAWN STARTED', 'The JSONL item begins with <code>tool=spawn_agent</code> and <code>status=in_progress</code>; no receiver is listed yet.'],
+    ['EVENT 02 · SPAWN RECEIPT', 'The receiver list contains one child; its state is <code>pending_init</code> and its message is <code>null</code>. A separate <code>wait</code> call later observes completion.'],
+    ['EVENT 03 · WAIT STARTED', 'The parent starts <code>tool=wait</code> for the same child ID. This is a new collaboration tool call after the spawn receipt.'],
+    ['EVENT 04 · CHILD COMPLETED', 'The wait call completes with child state <code>completed</code> and returns the README finding in the child message field.'],
+    ['EVENT 05 · PARENT RESULT', 'After wait returns, the root agent emits an <code>agent_message</code> containing the child marker and finding.']
+  ];
+  const trace = $('.native-cli-trace');
+  if (!trace) return;
+  const selected = Math.max(0, Math.min(steps.length - 1, Number(index) || 0));
+  trace.querySelectorAll('[data-native-cli-step]').forEach(button => {
+    const active = Number(button.dataset.nativeCliStep) === selected;
+    button.classList.toggle('is-active', active);
+    button.setAttribute('aria-pressed', String(active));
+  });
+  const [label,copy] = steps[selected];
+  trace.querySelector('.native-cli-detail').innerHTML = `<span>${label}</span><p>${copy}</p>`;
 }
 function terminalLifecycleMarkup() {
   const scenarios = {
@@ -1385,6 +1423,8 @@ document.addEventListener('click', async event => {
   if (spawnProtocolVersionButton) { selectSpawnProtocol('version', spawnProtocolVersionButton.dataset.spawnProtocolVersion); return; }
   const spawnProtocolOutcomeButton = event.target.closest('[data-spawn-protocol-outcome]');
   if (spawnProtocolOutcomeButton) { selectSpawnProtocol('outcome', spawnProtocolOutcomeButton.dataset.spawnProtocolOutcome); return; }
+  const nativeCliStepButton = event.target.closest('[data-native-cli-step]');
+  if (nativeCliStepButton) { selectNativeCliStep(nativeCliStepButton.dataset.nativeCliStep); return; }
   const terminalScenarioButton = event.target.closest('[data-terminal-scenario]');
   if (terminalScenarioButton) { selectTerminalScenario(terminalScenarioButton.dataset.terminalScenario); return; }
   const spawnConfigModeButton = event.target.closest('[data-spawn-config-mode]');
