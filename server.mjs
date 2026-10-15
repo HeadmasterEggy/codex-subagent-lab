@@ -20,12 +20,13 @@ const appJs = await readFile(new URL('./public/app.js', import.meta.url), 'utf8'
 const styleCss = await readFile(new URL('./public/style.css', import.meta.url), 'utf8');
 
 function snapshot() {
-  const publicTasks = [...tasks.values()].map(({ child, effectivePrompt, messages, messageHistory, waiters, resultDelivered, timeoutHandle, timeoutKillHandle, ...task }) => {
+  const publicTasks = [...tasks.values()].map(({ child, effectivePrompt, messages, messageHistory, waiters, resultDelivered, timeoutHandle, timeoutKillHandle, sessionId, ...task }) => {
     const recentPending = messages.slice(-8);
     const latestPendingResult = [...messages].reverse().find(message => message.kind === 'task_result');
     if (latestPendingResult && !recentPending.includes(latestPendingResult)) recentPending.splice(0, 1, latestPendingResult);
     return {
       ...task,
+      canResume: Boolean(task.keepSession && sessionId),
       pendingMessageCount: messages.length,
       pendingTaskResultCount: messages.filter(message => message.kind === 'task_result').length,
       recentMessages: [
@@ -82,6 +83,10 @@ function parseLine(task, line) {
   let event;
   try { event = JSON.parse(line); } catch { appendEvent(task, 'raw', line); return; }
   const type = event.type ?? event.event ?? 'event';
+  if (type === 'thread.started' && typeof event.thread_id === 'string') {
+    task.sessionId = event.thread_id;
+    appendEvent(task, 'session_ready', `Codex session ${event.thread_id} is available for resume`);
+  }
   const payload = event.item ?? event;
   const extracted = textFrom(payload) || (typeof event.delta === 'string' ? event.delta : '');
   if (extracted && /(agent|message|output|text)/i.test(`${type} ${payload?.type ?? ''}`)) appendEvent(task, 'message', extracted + (extracted.endsWith('\n') ? '' : '\n'));
@@ -112,15 +117,18 @@ function pump() {
 function run(task) {
   task.status = 'running';
   task.startedAt = new Date().toISOString();
-  appendEvent(task, 'started', 'Starting codex exec with read-only sandbox');
+  const isResume = Boolean(task.sessionId && task.nextPrompt);
+  const prompt = isResume ? task.nextPrompt : task.effectivePrompt;
+  task.nextPrompt = null;
+  appendEvent(task, isResume ? 'resumed' : 'started', isResume ? 'Resuming the retained Codex session' : 'Starting codex exec with read-only sandbox');
   // The executable and every argument are passed directly; no shell command is constructed.
   const bridge = fileURLToPath(new URL('./mcp-bridge.mjs', import.meta.url));
   const args = [
-    'exec', '--json', '--ephemeral', '--ignore-user-config', '--sandbox', 'read-only',
+    'exec', ...(isResume ? ['resume', task.sessionId] : task.keepSession ? [] : ['--ephemeral']), '--json', '--ignore-user-config', ...(isResume ? [] : ['--sandbox', 'read-only']),
     '--config', `mcp_servers.subagent_lab.command=${JSON.stringify(process.execPath)}`,
     '--config', `mcp_servers.subagent_lab.args=${JSON.stringify([bridge])}`,
     '--config', 'mcp_servers.subagent_lab.env_vars=["LAB_COORDINATOR_URL","LAB_COORDINATOR_TOKEN","LAB_TASK_ID"]',
-    '--cd', workspace, '--skip-git-repo-check', '-',
+    ...(isResume ? ['--skip-git-repo-check'] : ['--cd', workspace, '--skip-git-repo-check']), '-'
   ];
   if (task.model) args.push('--model', task.model);
   if (task.reasoningEffort) args.push('--config', `model_reasoning_effort="${task.reasoningEffort}"`);
@@ -135,7 +143,7 @@ function run(task) {
     child = spawn('codex', args, { cwd: workspace, env, stdio: ['pipe', 'pipe', 'pipe'], detached: process.platform !== 'win32' });
     task.pid = child.pid ?? null;
     task.child = child;
-    child.stdin.end(task.effectivePrompt);
+    child.stdin.end(prompt);
   } catch (error) {
     task.status = 'failed'; task.error = error.message; task.finishedAt = new Date().toISOString(); active--; appendEvent(task, 'error', error.message); deliverTaskResult(task); pump(); return;
   }
@@ -233,18 +241,19 @@ function waitForInboxActivity(task, timeoutMs) {
     task.waiters.add(check);
   });
 }
-function createTask({ prompt, parentId = null, includeParentContext = false, model = '', modelMode = 'inherit', reasoningEffort = '', effortMode = 'inherit', timeoutSeconds, createdBy = 'user' }) {
+function createTask({ prompt, parentId = null, includeParentContext = false, keepSession, model = '', modelMode = 'inherit', reasoningEffort = '', effortMode = 'inherit', timeoutSeconds, createdBy = 'user' }) {
   const parent = parentId ? tasks.get(parentId) : null;
   const selectedModel = modelMode === 'custom' ? model : modelMode === 'default' ? '' : parent?.model || '';
   const selectedEffort = effortMode === 'custom' ? reasoningEffort : effortMode === 'default' ? '' : parent?.reasoningEffort || '';
   const contextIncluded = Boolean(parent && includeParentContext);
+  const preserveSession = typeof keepSession === 'boolean' ? keepSession : Boolean(parent?.keepSession);
   const parentContext = contextIncluded
     ? `\n\nParent context snapshot (reference material; follow the child task below):\n<parent-task>\n${parent.prompt.slice(0, 4000)}\n</parent-task>\n<parent-output>\n${parent.output.slice(-8000) || '(No agent output yet.)'}\n</parent-output>\n`
     : '';
   const id = randomBytes(12).toString('hex');
   const coordination = `\n\nSubagent Lab coordination: your task ID is ${id}. You may use the subagent_lab MCP tools to create child agents, list them, wait for inbox activity, send messages, read messages sent to you, and close child agents. Child tasks run as separate Codex CLI processes in the same read-only workspace. Child completion results are delivered to this task's inbox; use wait_agent, then read_messages to inspect them. Report important child results in your final response.`;
   const task = {
-    id, parentId, prompt, contextIncluded, createdBy, model: selectedModel, reasoningEffort: selectedEffort,
+    id, parentId, prompt, contextIncluded, keepSession: preserveSession, sessionId: null, nextPrompt: null, createdBy, model: selectedModel, reasoningEffort: selectedEffort,
     timeoutSeconds: timeoutSeconds ?? parent?.timeoutSeconds ?? 0, timeoutReason: null,
     effectivePrompt: `${coordination}${parentContext}\nTask:\n${prompt}`,
     status: 'queued', createdAt: new Date().toISOString(), startedAt: null, finishedAt: null,
@@ -306,7 +315,7 @@ function seedDemoTasks() {
     },
   ];
   for (const sample of samples) {
-    tasks.set(sample.id, { ...sample, contextIncluded: false, effectivePrompt: '', waiters: new Set(), resultDelivered: true });
+    tasks.set(sample.id, { ...sample, contextIncluded: false, keepSession: false, sessionId: null, nextPrompt: null, effectivePrompt: '', waiters: new Set(), resultDelivered: true });
   }
 }
 
@@ -344,7 +353,7 @@ const server = http.createServer(async (req, res) => {
         if (!prompt || prompt.length > 12_000) return sendJson(res, 400, { error: 'Prompt must be 1 to 12000 characters' });
         if (taskDepth(task) >= 7) return sendJson(res, 429, { error: 'Maximum task nesting depth is 8' });
         if (tasks.size >= 100) return sendJson(res, 429, { error: 'Task limit reached for this server session (100 tasks)' });
-        const child = createTask({ prompt, parentId: task.id, includeParentContext: data.includeParentContext === true, createdBy: 'agent' });
+        const child = createTask({ prompt, parentId: task.id, includeParentContext: data.includeParentContext === true, keepSession: typeof data.keepSession === 'boolean' ? data.keepSession : undefined, createdBy: 'agent' });
         appendEvent(task, 'agent_spawned', JSON.stringify({ childId: child.id, prompt: prompt.slice(0, 200) }));
         return sendJson(res, 201, { id: child.id, status: child.status });
       } catch (error) { return sendJson(res, 400, { error: error.message }); }
@@ -426,8 +435,26 @@ const server = http.createServer(async (req, res) => {
         if (tasks.size >= 100) return sendJson(res, 429, { error: 'Task limit reached for this server session (100 tasks)' });
         if (parentId && !tasks.has(parentId)) return sendJson(res, 404, { error: 'Parent task not found' });
         if (parentId && taskDepth(tasks.get(parentId)) >= 7) return sendJson(res, 429, { error: 'Maximum task nesting depth is 8' });
-        const task = createTask({ prompt, parentId, includeParentContext: data.includeParentContext === true, model, modelMode, reasoningEffort, effortMode, timeoutSeconds, createdBy: 'user' });
+        const task = createTask({ prompt, parentId, includeParentContext: data.includeParentContext === true, keepSession: data.keepSession === true, model, modelMode, reasoningEffort, effortMode, timeoutSeconds, createdBy: 'user' });
         return sendJson(res, 201, { id: task.id });
+      } catch (error) { return sendJson(res, 400, { error: error.message }); }
+    }
+    const followupMatch = url.pathname.match(/^\/api\/tasks\/([a-f0-9]+)\/followup$/);
+    if (req.method === 'POST' && followupMatch) {
+      const task = tasks.get(followupMatch[1]);
+      if (!task) return sendJson(res, 404, { error: 'Task not found' });
+      if (!task.keepSession || !task.sessionId) return sendJson(res, 409, { error: 'This agent has no retained Codex session to resume' });
+      if (!['completed', 'failed', 'cancelled', 'timed_out'].includes(task.status)) return sendJson(res, 409, { error: 'Only a finished agent can be continued' });
+      try {
+        const data = await bodyJson(req);
+        const prompt = typeof data.prompt === 'string' ? data.prompt.trim() : '';
+        if (!prompt || prompt.length > 12_000) return sendJson(res, 400, { error: 'Follow-up must be 1 to 12000 characters' });
+        task.nextPrompt = `Follow-up from the Subagent Lab user:\n${prompt}\n\nContinue the same agent task using your existing conversation context. Keep the reply focused on this follow-up.`;
+        task.status = 'queued'; task.startedAt = null; task.finishedAt = null; task.exitCode = null; task.signal = null; task.error = null; task.timeoutReason = null; task.resultDelivered = false;
+        queue.push(task.id);
+        appendEvent(task, 'followup_queued', 'A follow-up turn was queued for the retained Codex session');
+        pump();
+        return sendJson(res, 202, { id: task.id, status: task.status });
       } catch (error) { return sendJson(res, 400, { error: error.message }); }
     }
     const messageMatch = url.pathname.match(/^\/api\/tasks\/([a-f0-9]+)\/message$/);

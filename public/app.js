@@ -103,6 +103,7 @@ function renderInspector() {
   const isSample = state.demoMode || task.createdBy === 'demo';
   const canMessage = !isSample && ['queued','running'].includes(task.status);
   const canSpawnChild = !isSample && taskDepth(task) < 7;
+  const canContinue = !isSample && task.canResume && ['completed','failed','cancelled','timed_out'].includes(task.status);
   const events = (task.events ?? []).slice(-10).reverse();
   const inboxItems = task.recentMessages ?? [];
   $('#agent-detail').innerHTML = `<header class="detail-head">
@@ -110,7 +111,7 @@ function renderInspector() {
       <div class="detail-title-row"><span class="detail-status ${escapeHtml(task.status)}">${statusIcon(task.status)}</span><div class="detail-title-wrap"><h3>${escapeHtml(task.createdBy === 'agent' ? 'Delegated agent' : task.parentId ? 'Child agent' : 'Root agent')}</h3><span class="detail-status-text ${escapeHtml(task.status)}">${escapeHtml(task.status.replaceAll('_',' '))}</span></div></div>
       <div class="detail-config-chips" aria-label="Agent configuration"><span class="config-model" title="Model: ${escapeHtml(task.model || 'Codex default')}">${escapeHtml(task.model || 'Codex default')}</span><span class="config-effort" title="Reasoning effort: ${escapeHtml(task.reasoningEffort || 'Codex default')}">${escapeHtml(task.reasoningEffort || 'Codex default')}</span><span class="config-timeout" title="Task runtime limit">${task.timeoutSeconds ? `limit ${durationLabel(task.timeoutSeconds * 1000)}` : 'no runtime limit'}</span></div>
       <p class="detail-prompt">${escapeHtml(task.prompt)}</p>
-      <div class="detail-actions">${isSample ? '' : `${canMessage ? `<button class="secondary" type="button" data-message="${escapeHtml(task.id)}">↗ <span>Send message</span></button>` : ''}${canSpawnChild ? `<button class="primary" type="button" data-child="${escapeHtml(task.id)}"><span>＋</span> Add child</button>` : '<span class="depth-limit">Maximum depth reached</span>'}${canMessage ? `<button class="icon-control stop" type="button" data-cancel="${escapeHtml(task.id)}" aria-label="Stop this task" title="Stop task">■</button>` : ''}`}</div>
+      <div class="detail-actions">${isSample ? '' : `${canMessage ? `<button class="secondary" type="button" data-message="${escapeHtml(task.id)}">↗ <span>Send message</span></button>` : ''}${canContinue ? `<button class="primary" type="button" data-followup="${escapeHtml(task.id)}">↻ Continue agent</button>` : ''}${canSpawnChild ? `<button class="primary" type="button" data-child="${escapeHtml(task.id)}"><span>＋</span> Add child</button>` : '<span class="depth-limit">Maximum depth reached</span>'}${canMessage ? `<button class="icon-control stop" type="button" data-cancel="${escapeHtml(task.id)}" aria-label="Stop this task" title="Stop task">■</button>` : ''}`}</div>
       <nav class="inspector-nav" aria-label="Jump to task details"><button type="button" data-inspector-target="context">Context</button><button type="button" data-inspector-target="links">Task links</button><button type="button" data-inspector-target="agent-mailbox">Mailbox</button><button type="button" data-inspector-target="output">Output</button><button type="button" data-inspector-target="activity">Activity</button></nav>
     </header>
     <section class="detail-section metadata-grid" aria-label="Agent metadata">
@@ -266,7 +267,7 @@ async function startRoot() {
   if (!prompt) { $('#prompt').focus(); notify('Describe the task before starting an agent.', true); return; }
   button.disabled = true;
   const model = $('#root-model').value.trim(); const reasoningEffort = $('#root-effort').value; const timeoutSeconds = Number($('#root-timeout').value);
-  try { await request('/api/tasks', { prompt, parentId:null, model, modelMode:model ? 'custom' : 'default', reasoningEffort, effortMode:reasoningEffort ? 'custom' : 'default', timeoutSeconds }); $('#prompt').value = ''; $('#root-prompt-count').textContent = '0'; notify('Root agent added to the task queue.'); }
+  try { await request('/api/tasks', { prompt, parentId:null, model, modelMode:model ? 'custom' : 'default', reasoningEffort, effortMode:reasoningEffort ? 'custom' : 'default', timeoutSeconds, keepSession:$('#root-keep-session').checked }); $('#prompt').value = ''; $('#root-prompt-count').textContent = '0'; notify('Root agent added to the task queue.'); }
   catch (error) { notify(error.message, true); }
   finally { button.disabled = false; }
 }
@@ -285,6 +286,7 @@ function openChildDialog(id) {
   $('#child-model-hint').textContent = `Parent: ${parent?.model || 'Codex default'}`;
   $('#child-effort').value = 'inherit';
   $('#child-effort-hint').textContent = `Parent: ${parent?.reasoningEffort || 'Codex default'}`;
+  $('#child-keep-session').checked = Boolean(parent?.keepSession);
   $('#child-dialog').showModal(); $('#child-prompt').focus();
 }
 $('#child-model-mode').addEventListener('change', () => {
@@ -306,6 +308,12 @@ function openMessageDialog(id) {
   const task = taskById(id);
   $('#message-label').textContent = task ? `Agent: ${task.prompt.slice(0,160)}` : '';
   $('#message-text').value = ''; $('#message-dialog').showModal(); $('#message-text').focus();
+}
+function openFollowupDialog(id) {
+  selectedMessageTask = id;
+  const task = taskById(id);
+  $('#followup-label').textContent = task ? `Agent: ${task.prompt.slice(0,160)}` : '';
+  $('#followup-prompt').value = ''; $('#followup-dialog').showModal(); $('#followup-prompt').focus();
 }
 function expandTaskAncestors(id) {
   const byId = new Map(state.tasks.map(task => [task.id, task]));
@@ -365,6 +373,7 @@ document.addEventListener('click', async event => {
   const inboxButton = event.target.closest('[data-open-inbox]');
   const childButton = event.target.closest('[data-child]');
   const messageButton = event.target.closest('[data-message]');
+  const followupButton = event.target.closest('[data-followup]');
   const selectButton = event.target.closest('[data-select]');
   const jumpButton = event.target.closest('[data-jump]');
   const inspectorTarget = event.target.closest('[data-inspector-target]');
@@ -384,6 +393,7 @@ document.addEventListener('click', async event => {
   if (inspectorTarget) { scrollInspectorTo(inspectorTarget.dataset.inspectorTarget); return; }
   if (childButton) { openChildDialog(childButton.dataset.child); return; }
   if (messageButton) { openMessageDialog(messageButton.dataset.message); return; }
+  if (followupButton) { openFollowupDialog(followupButton.dataset.followup); return; }
   if (selectButton) { selectedTaskId = selectButton.dataset.select; expandTaskAncestors(selectedTaskId); render(state); return; }
   if (jumpButton) { selectedTaskId = jumpButton.dataset.jump; expandTaskAncestors(selectedTaskId); render(state); return; }
   if (toggleButton) {
@@ -405,6 +415,15 @@ $('#send-message').addEventListener('click', async event => {
   catch(error) { notify(error.message, true); }
   finally { button.disabled = false; }
 });
+$('#continue-agent').addEventListener('click', async event => {
+  event.preventDefault();
+  const prompt = $('#followup-prompt').value.trim();
+  if (!prompt || !selectedMessageTask) { $('#followup-prompt').focus(); return; }
+  const button = $('#continue-agent'); button.disabled = true;
+  try { await request(`/api/tasks/${selectedMessageTask}/followup`, { prompt }); $('#followup-dialog').close(); notify('Follow-up turn queued for this agent.'); }
+  catch(error) { notify(error.message, true); }
+  finally { button.disabled = false; }
+});
 $('#create-child').addEventListener('click', async event => {
   event.preventDefault();
   const prompt = $('#child-prompt').value.trim();
@@ -414,7 +433,7 @@ $('#create-child').addEventListener('click', async event => {
   const effortChoice = $('#child-effort').value; const effortMode = ['inherit','default'].includes(effortChoice) ? effortChoice : 'custom';
   const reasoningEffort = effortMode === 'custom' ? effortChoice : '';
   if (modelMode === 'custom' && !model) { $('#child-model').focus(); notify('Enter a model name or choose another model setting.', true); button.disabled = false; return; }
-  try { await request('/api/tasks', { prompt, parentId:selectedParent, includeParentContext:$('#include-context').checked, model, modelMode, reasoningEffort, effortMode }); $('#child-dialog').close(); notify('Child agent added to the task queue.'); }
+  try { await request('/api/tasks', { prompt, parentId:selectedParent, includeParentContext:$('#include-context').checked, keepSession:$('#child-keep-session').checked, model, modelMode, reasoningEffort, effortMode }); $('#child-dialog').close(); notify('Child agent added to the task queue.'); }
   catch(error) { notify(error.message, true); }
   finally { button.disabled = false; }
 });

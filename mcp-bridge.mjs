@@ -15,6 +15,7 @@ const tools = [
       properties: {
         prompt: { type: 'string', minLength: 1, maxLength: 12000, description: 'A focused task for the child agent.' },
         include_parent_context: { type: 'boolean', description: 'Include a one-time snapshot of this task prompt and latest output.' },
+        keep_session: { type: 'boolean', description: 'Keep the child Codex session on disk so it can be resumed later. Defaults to this task’s setting.' },
       },
     },
   },
@@ -86,7 +87,7 @@ async function request(path, { method = 'GET', body } = {}) {
 async function callTool(name, args) {
   if (name === 'spawn_agent') {
     const value = await request(`/api/coordination/tasks/${taskId}/children`, {
-      method: 'POST', body: { prompt: args.prompt, includeParentContext: args.include_parent_context === true },
+      method: 'POST', body: { prompt: args.prompt, includeParentContext: args.include_parent_context === true, ...(typeof args.keep_session === 'boolean' ? { keepSession: args.keep_session } : {}) },
     });
     return { task_id: value.id, status: value.status, note: 'Child task created in the shared Subagent Lab tree.' };
   }
