@@ -19,16 +19,22 @@ const appJs = await readFile(new URL('./public/app.js', import.meta.url), 'utf8'
 const styleCss = await readFile(new URL('./public/style.css', import.meta.url), 'utf8');
 
 function snapshot() {
-  const publicTasks = [...tasks.values()].map(({ child, effectivePrompt, messages, messageHistory, waiters, resultDelivered, ...task }) => ({
-    ...task,
-    pendingMessageCount: messages.length,
-    recentMessages: [
-      ...messageHistory.slice(-5),
-      ...messages.map(message => ({ ...message, deliveryState: 'pending' })),
-    ].slice(-8).map(({ id, from, at, text, kind, deliveryState, readAt }) => ({
-      id, from, at, text: text.slice(0, 2000), kind: kind ?? 'message', deliveryState, readAt,
-    })),
-  }));
+  const publicTasks = [...tasks.values()].map(({ child, effectivePrompt, messages, messageHistory, waiters, resultDelivered, ...task }) => {
+    const recentPending = messages.slice(-8);
+    const latestPendingResult = [...messages].reverse().find(message => message.kind === 'task_result');
+    if (latestPendingResult && !recentPending.includes(latestPendingResult)) recentPending.splice(0, 1, latestPendingResult);
+    return {
+      ...task,
+      pendingMessageCount: messages.length,
+      pendingTaskResultCount: messages.filter(message => message.kind === 'task_result').length,
+      recentMessages: [
+        ...messageHistory.slice(-5),
+        ...recentPending.map(message => ({ ...message, deliveryState: 'pending' })),
+      ].slice(-8).map(({ id, from, at, text, kind, deliveryState, readAt }) => ({
+        id, from, at, text: text.slice(0, 2000), kind: kind ?? 'message', deliveryState, readAt,
+      })),
+    };
+  });
   return { workspace, concurrency, active, queued: queue.length, tasks: publicTasks };
 }
 function publish() {

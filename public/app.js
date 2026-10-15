@@ -3,6 +3,7 @@ const headers = { 'content-type': 'application/json', 'x-lab-token': token };
 const $ = selector => document.querySelector(selector);
 let state = { tasks: [] };
 let selectedTaskId = null;
+let pendingFocusTaskId = null;
 let selectedParent = null;
 let selectedMessageTask = null;
 let activeFilter = 'all';
@@ -74,11 +75,12 @@ function taskTree(parentId = null, depth = 0, visible = visibleTaskIds(), matche
     return `<div class="tree-node ${depth ? 'nested' : ''}" role="group">
       <div class="tree-entry ${selected ? 'selected' : ''} ${isContext ? 'context-task' : ''}">
         ${hasChildren ? `<button class="tree-toggle" type="button" data-toggle-children="${escapeHtml(task.id)}" aria-expanded="${expanded}" aria-label="${forcedExpanded ? 'Expanded to show matching tasks' : `${expanded ? 'Collapse' : 'Expand'} ${childCount} child task${childCount === 1 ? '' : 's'}`}" title="${forcedExpanded ? 'Expanded to show matching tasks' : `${expanded ? 'Collapse' : 'Expand'} child tasks`}" ${forcedExpanded ? 'disabled' : ''}><span aria-hidden="true">${expanded ? '▾' : '▸'}</span></button>` : ''}
-        <button class="tree-select" type="button" role="treeitem" aria-level="${depth + 1}" aria-selected="${selected}" aria-label="${escapeHtml(task.status)} agent: ${escapeHtml(task.prompt)}" data-select="${escapeHtml(task.id)}">
+        <button class="tree-select" type="button" role="treeitem" tabindex="${selected ? 0 : -1}" aria-level="${depth + 1}" aria-selected="${selected}" ${hasChildren ? `aria-expanded="${expanded}"` : ''} aria-label="${escapeHtml(task.status)} agent: ${escapeHtml(task.prompt)}" data-select="${escapeHtml(task.id)}">
           <span class="tree-status ${escapeHtml(task.status)}">${statusIcon(task.status)}</span>
-          <span class="tree-copy"><span class="tree-title">${escapeHtml(task.prompt)}</span><span class="tree-subline"><span class="status-label ${escapeHtml(task.status)}">${escapeHtml(task.status)}</span>${childCount ? `<span>${childCount} child${childCount === 1 ? '' : 'ren'}</span>` : ''}${task.pendingMessageCount ? `<span class="tree-inbox">↳ ${task.pendingMessageCount}</span>` : ''}</span></span>
+          <span class="tree-copy"><span class="tree-title">${escapeHtml(task.prompt)}</span><span class="tree-subline"><span class="status-label ${escapeHtml(task.status)}">${escapeHtml(task.status)}</span>${childCount ? `<span>${childCount} child${childCount === 1 ? '' : 'ren'}</span>` : ''}${task.pendingMessageCount ? `<span class="tree-inbox">↳ ${task.pendingMessageCount} message${task.pendingMessageCount === 1 ? '' : 's'}</span>` : ''}</span></span>
           ${isContext ? '<span class="context-label">context</span>' : ''}
         </button>
+        ${task.pendingTaskResultCount ? `<button class="tree-result-badge" type="button" data-open-inbox="${escapeHtml(task.id)}" aria-label="Open inbox: ${task.pendingTaskResultCount} pending child result${task.pendingTaskResultCount === 1 ? '' : 's'}">${task.pendingTaskResultCount} result${task.pendingTaskResultCount === 1 ? '' : 's'}</button>` : ''}
         <div class="tree-actions">${['queued','running'].includes(task.status) ? `<button class="tree-action stop" type="button" data-cancel="${escapeHtml(task.id)}" aria-label="Stop task">■</button>` : ''}${depth < 7 ? `<button class="tree-action" type="button" data-child="${escapeHtml(task.id)}" aria-label="Add child agent">＋</button>` : ''}</div>
       </div>${children}</div>`;
   }).join('');
@@ -106,13 +108,16 @@ function renderInspector() {
     </section>
     ${task.error ? `<section class="error-panel"><span class="error-icon">!</span><div><strong>Agent error</strong><p>${escapeHtml(task.error)}</p></div></section>` : ''}
     <section class="detail-section"><div class="section-title"><h4>Task links</h4><span>${children.length} child${children.length === 1 ? '' : 'ren'}</span></div>${activeChildren.length && ['completed','failed','cancelled'].includes(task.status) ? `<div class="lifecycle-note"><span>↗</span><p>This task has ended. ${activeChildren.length} direct child agent${activeChildren.length === 1 ? '' : 's'} ${activeChildren.length === 1 ? 'is' : 'are'} still active and will continue independently.</p></div>` : ''}<div class="link-list">${parent ? `<button class="link-row" type="button" data-jump="${escapeHtml(parent.id)}"><span class="link-symbol">↑</span><span><small>PARENT AGENT</small><strong>${escapeHtml(parent.prompt)}</strong></span><span>↗</span></button>` : '<div class="root-marker"><span>◎</span> Root task</div>'}${children.map(child => `<button class="link-row" type="button" data-jump="${escapeHtml(child.id)}"><span class="link-symbol">↓</span><span><small>CHILD · ${escapeHtml(child.status.toUpperCase())}</small><strong>${escapeHtml(child.prompt)}</strong></span><span>↗</span></button>`).join('') || (!parent ? '' : '<div class="subtle-empty">No child agents yet</div>')}</div></section>
-    <section class="detail-section mailbox-section"><div class="section-title"><h4><span class="section-icon">↳</span> Mailbox</h4><span class="mail-count">${Number(task.pendingMessageCount) || 0} pending</span></div><p class="mailbox-proof">Returned means the coordinator supplied this message to the task tool; it does not prove the model interpreted it.</p>${inboxItems.length ? `<div class="inbox-list">${inboxItems.map(message => `<article class="inbox-item ${message.deliveryState === 'read' ? 'read' : 'pending'}"><div class="inbox-meta"><span class="mail-kind ${message.kind === 'task_result' ? 'result' : ''}">${message.kind === 'task_result' ? 'CHILD RESULT' : 'MESSAGE'}</span><span class="delivery-state ${message.deliveryState === 'read' ? 'read' : 'pending'}">${message.deliveryState === 'read' ? 'RETURNED' : 'PENDING'}</span><span>from ${escapeHtml(message.from)}</span><time>${escapeHtml(when(message.deliveryState === 'read' ? message.readAt : message.at))}</time></div><p>${escapeHtml(message.text)}</p></article>`).join('')}</div>` : `<div class="mailbox-empty"><span>✉</span><div><strong>Inbox is clear</strong><small>Messages and child results will show up here.</small></div></div>`}${canMessage ? `<button class="inbox-compose" type="button" data-message="${escapeHtml(task.id)}">＋ Send this agent a message</button>` : ''}</section>
+    <section id="agent-mailbox" class="detail-section mailbox-section"><div class="section-title"><h4><span class="section-icon">↳</span> Mailbox</h4><span class="mail-count">${Number(task.pendingMessageCount) || 0} pending · ${Number(task.pendingTaskResultCount) || 0} child results</span></div><p class="mailbox-proof">Returned means the coordinator supplied this message to the task tool; it does not prove the model interpreted it.</p>${inboxItems.length ? `<div class="inbox-list">${inboxItems.map(message => `<article class="inbox-item ${message.deliveryState === 'read' ? 'read' : 'pending'}"><div class="inbox-meta"><span class="mail-kind ${message.kind === 'task_result' ? 'result' : ''}">${message.kind === 'task_result' ? 'CHILD RESULT' : 'MESSAGE'}</span><span class="delivery-state ${message.deliveryState === 'read' ? 'read' : 'pending'}">${message.deliveryState === 'read' ? 'RETURNED' : 'PENDING'}</span><span>from ${escapeHtml(message.from)}</span><time>${escapeHtml(when(message.deliveryState === 'read' ? message.readAt : message.at))}</time></div><p>${escapeHtml(message.text)}</p></article>`).join('')}</div>` : `<div class="mailbox-empty"><span>✉</span><div><strong>Inbox is clear</strong><small>Messages and child results will show up here.</small></div></div>`}${canMessage ? `<button class="inbox-compose" type="button" data-message="${escapeHtml(task.id)}">＋ Send this agent a message</button>` : ''}</section>
     <section class="detail-section output-section"><div class="section-title"><h4>Latest output</h4><span>${task.output ? `${String(task.output).length.toLocaleString()} chars` : 'Awaiting output'}</span></div>${task.output ? `<pre class="output-text">${escapeHtml(task.output)}</pre>` : `<div class="output-empty"><span class="output-spinner ${task.status === 'running' ? 'active' : ''}">${task.status === 'running' ? '◌' : '·'}</span><span>${task.status === 'running' ? 'Agent is working. Output will stream in here.' : task.status === 'queued' ? 'Output will appear when this agent starts.' : 'This agent did not produce captured text output.'}</span></div>`}</section>
     <section class="detail-section activity-section"><div class="section-title"><h4>Recent activity</h4><span>${(task.events ?? []).length} events</span></div>${events.length ? `<div class="activity-list">${events.map(event => `<div class="activity-item"><time>${escapeHtml(when(event.at))}</time><span class="activity-dot ${escapeHtml(event.kind)}"></span><span class="activity-copy"><strong>${escapeHtml(event.kind.replaceAll('_',' '))}</strong><small>${escapeHtml(String(event.detail ?? '').replace(/\s+/g,' ').slice(0,220))}</small></span></div>`).join('')}</div>` : '<div class="subtle-empty">No activity recorded yet.</div>'}</section>`;
 }
 function render(next) {
   const focused = document.activeElement?.dataset ?? {};
-  const focusTarget = focused.select ? `[data-select="${CSS.escape(focused.select)}"]` : focused.toggleChildren ? `[data-toggle-children="${CSS.escape(focused.toggleChildren)}"]` : focused.child ? `[data-child="${CSS.escape(focused.child)}"]` : focused.message ? `[data-message="${CSS.escape(focused.message)}"]` : focused.cancel ? `[data-cancel="${CSS.escape(focused.cancel)}"]` : focused.jump ? `[data-jump="${CSS.escape(focused.jump)}"]` : null;
+  const focusedId = document.activeElement?.id;
+  const explicitFocusTaskId = pendingFocusTaskId;
+  pendingFocusTaskId = null;
+  const focusTarget = explicitFocusTaskId ? `[data-select="${CSS.escape(explicitFocusTaskId)}"]` : focused.select ? `[data-select="${CSS.escape(focused.select)}"]` : focused.toggleChildren ? `[data-toggle-children="${CSS.escape(focused.toggleChildren)}"]` : focused.child ? `[data-child="${CSS.escape(focused.child)}"]` : focused.message ? `[data-message="${CSS.escape(focused.message)}"]` : focused.cancel ? `[data-cancel="${CSS.escape(focused.cancel)}"]` : focused.jump ? `[data-jump="${CSS.escape(focused.jump)}"]` : focused.openInbox ? `[data-open-inbox="${CSS.escape(focused.openInbox)}"]` : focusedId ? `#${CSS.escape(focusedId)}` : null;
   const treeScroll = $('#tree').scrollTop;
   const pageScroll = window.scrollY;
   state = next;
@@ -255,8 +260,54 @@ function expandTaskAncestors(id) {
     current = byId.get(current.parentId);
   }
 }
+function focusTask(id) {
+  if (!taskById(id)) return;
+  selectedTaskId = id;
+  expandTaskAncestors(id);
+  pendingFocusTaskId = id;
+  render(state);
+}
+$('#tree').addEventListener('keydown', event => {
+  const current = event.target.closest('[role="treeitem"][data-select]');
+  if (!current) return;
+  const items = [...$('#tree').querySelectorAll('[role="treeitem"][data-select]')];
+  const index = items.indexOf(current);
+  const task = taskById(current.dataset.select);
+  if (!task) return;
+
+  if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+    const next = items[index + (event.key === 'ArrowDown' ? 1 : -1)];
+    if (next) { event.preventDefault(); focusTask(next.dataset.select); }
+  } else if (event.key === 'Home' || event.key === 'End') {
+    const next = event.key === 'Home' ? items[0] : items.at(-1);
+    if (next) { event.preventDefault(); focusTask(next.dataset.select); }
+  } else if (event.key === 'ArrowRight') {
+    const hasChildren = state.tasks.some(item => item.parentId === task.id);
+    if (!hasChildren) return;
+    event.preventDefault();
+    if (collapsedTasks.has(task.id) && !current.parentElement?.querySelector('.tree-toggle[disabled]')) {
+      collapsedTasks.delete(task.id);
+      pendingFocusTaskId = task.id;
+      render(state);
+      return;
+    }
+    const next = items.slice(index + 1).find(item => Number(item.getAttribute('aria-level')) === Number(current.getAttribute('aria-level')) + 1);
+    if (next) focusTask(next.dataset.select);
+  } else if (event.key === 'ArrowLeft') {
+    const hasChildren = state.tasks.some(item => item.parentId === task.id);
+    const forcedOpen = current.parentElement?.querySelector('.tree-toggle[disabled]');
+    if (hasChildren && !collapsedTasks.has(task.id) && !forcedOpen) {
+      event.preventDefault();
+      collapsedTasks.add(task.id);
+      render(state);
+      return;
+    }
+    if (task.parentId) { event.preventDefault(); focusTask(task.parentId); }
+  }
+});
 document.addEventListener('click', async event => {
   const cancelButton = event.target.closest('[data-cancel]');
+  const inboxButton = event.target.closest('[data-open-inbox]');
   const childButton = event.target.closest('[data-child]');
   const messageButton = event.target.closest('[data-message]');
   const selectButton = event.target.closest('[data-select]');
@@ -265,6 +316,13 @@ document.addEventListener('click', async event => {
   if (cancelButton) {
     try { await request(`/api/tasks/${cancelButton.dataset.cancel}/cancel`, {}); notify('Stop requested. Child agents continue independently.'); }
     catch(error) { notify(error.message, true); }
+    return;
+  }
+  if (inboxButton) {
+    selectedTaskId = inboxButton.dataset.openInbox;
+    expandTaskAncestors(selectedTaskId);
+    render(state);
+    requestAnimationFrame(() => $('#agent-mailbox')?.scrollIntoView({ behavior:'smooth', block:'start' }));
     return;
   }
   if (childButton) { openChildDialog(childButton.dataset.child); return; }
