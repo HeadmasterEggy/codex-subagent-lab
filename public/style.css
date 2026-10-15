@@ -152,6 +152,28 @@ button.relation-node:hover,button.relation-node:focus-visible{border-color:#c5f3
 .sequence-eyebrow{color:#9bb8ed;font:700 7px var(--mono);letter-spacing:.1em}
 .sequence-heading h5{margin:0;color:#e0e6e9;font-size:10px}
 .sequence-heading>span{padding:4px 6px;border:1px solid #ffffff10;border-radius:5px;color:#89949c;font:7px var(--mono)}
+.sequence-plot-scroll{margin:10px -5px 0;overflow-x:auto;overscroll-behavior-x:contain;scrollbar-color:#39434a transparent;scrollbar-width:thin}
+.sequence-plot{display:block;width:100%;min-width:570px;height:auto;overflow:visible}
+.sequence-lane>line{stroke:#ffffff13;stroke-dasharray:2 4;stroke-width:1}
+.sequence-lane-role{fill:#73818b;font:700 7px var(--mono);letter-spacing:.08em}
+.sequence-lane-name{fill:#c5cdd1;font:8px var(--sans)}
+.sequence-handoff-line{fill:none;stroke:#83aef4;stroke-width:1.6;opacity:.82}
+.sequence-plot-event.result .sequence-handoff-line{stroke:#d6b06e}
+.sequence-plot-event .sequence-event-tick{stroke:#a6cb79;stroke-width:1.4;opacity:.8}
+.sequence-plot-mark{fill:#18212b;stroke:#a6cb79;stroke-width:1.3}
+.sequence-plot-event.handoff .sequence-plot-mark{fill:#17233a;stroke:#8fb6ff}
+.sequence-plot-event.result .sequence-plot-mark{fill:#2a2113;stroke:#d6b06e}
+.sequence-plot-event.attention .sequence-plot-mark{fill:#2b1717;stroke:#f48787}
+.sequence-plot-number{fill:#e2eaf0;font:700 6px var(--mono);text-anchor:middle;pointer-events:none}
+.sequence-plot-target{fill:#101315;stroke:#83aef4;stroke-width:1.5}
+.sequence-plot-event.result .sequence-plot-target{stroke:#d6b06e}
+.sequence-plot-event marker path{fill:#83aef4}
+.sequence-plot-event.result marker path{fill:#d6b06e}
+.sequence-legend{display:flex;flex-wrap:wrap;gap:10px;margin:7px 0 0;color:#89939a;font-size:7px}
+.sequence-legend span{display:inline-flex;align-items:center;gap:5px}
+.sequence-legend i{width:7px;height:7px;border:1px solid #a6cb79;border-radius:50%;background:#18212b}
+.sequence-legend .legend-message{border-color:#8fb6ff;background:#17233a}
+.sequence-legend .legend-result{border-color:#d6b06e;background:#2a2113}
 .sequence-list{position:relative;display:flex;flex-direction:column;gap:0;margin:10px 0 0;padding:0;list-style:none}
 .sequence-list::before{position:absolute;top:9px;bottom:9px;left:65px;width:1px;background:linear-gradient(#8fb6ff48,#ffffff0a);content:""}
 .sequence-event{position:relative;display:grid;grid-template-columns:48px 12px minmax(0,1fr) 19px;align-items:start;gap:8px;min-height:43px;padding:6px 0}
@@ -168,6 +190,7 @@ button.relation-node:hover,button.relation-node:focus-visible{border-color:#c5f3
 .sequence-copy p{margin:3px 0 0;color:#909ba1;font-size:7px;line-height:1.45;overflow-wrap:anywhere}
 .sequence-index{color:#56616b;font:6px var(--mono);text-align:right}
 .interaction-sequence>p{margin:7px 0 0;padding-top:8px;border-top:1px solid #ffffff0b;color:#89939a;font-size:7px;line-height:1.55}
+@media(max-width:560px){.sequence-plot{min-width:620px}.sequence-meta{align-items:flex-start;flex-direction:column;gap:2px}.sequence-meta span{text-align:left}}
 .concurrency-timeline{margin:13px 0 0;padding:12px;border:1px solid #9ab87725;border-radius:10px;background:radial-gradient(ellipse at 6% 0%,#9ab8770b,transparent 62%),#101315}
 .timeline-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
 .timeline-heading>div{display:flex;flex-direction:column;gap:4px}

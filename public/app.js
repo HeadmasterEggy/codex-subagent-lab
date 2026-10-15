@@ -140,12 +140,45 @@ function renderInteractionSequence(task, parent, children, interactionItems) {
   if (!ordered.length) return '';
   const visible = ordered.slice(-16);
   const actorName = id => id === task.id ? 'Selected task' : id === parent?.id ? 'Parent task' : 'Child task';
+  const laneTasks = participants;
+  const laneIndex = new Map(laneTasks.map((actor, index) => [actor.id, index]));
+  const laneHeight = 42;
+  const chartHeight = Math.max(72, laneTasks.length * laneHeight + 24);
+  const chartWidth = 960;
+  const labelWidth = 190;
+  const chartStart = labelWidth + 16;
+  const chartEnd = chartWidth - 20;
+  const xFor = index => visible.length < 2 ? (chartStart + chartEnd) / 2 : chartStart + (chartEnd - chartStart) * index / (visible.length - 1);
+  const kindClass = item => item.kind === 'result' ? 'result' : ['message','supplied'].includes(item.kind) ? 'handoff' : ['failed','timeout','timing_out','cancelled'].includes(item.kind) ? 'attention' : ['started','agent_spawned','created'].includes(item.kind) ? 'start' : 'finish';
+  const laneMarkup = laneTasks.map((actor, index) => {
+    const y = 20 + index * laneHeight;
+    const laneLabel = index === 0 && actor.id === parent?.id ? 'PARENT' : actor.id === task.id ? 'SELECTED' : actor.id === parent?.id ? 'PARENT' : 'CHILD';
+    const prompt = String(actor.prompt ?? 'Agent').length > 27 ? `${String(actor.prompt).slice(0,24)}…` : String(actor.prompt ?? 'Agent');
+    return `<g class="sequence-lane"><line x1="${chartStart}" x2="${chartEnd}" y1="${y}" y2="${y}"/><text class="sequence-lane-role" x="8" y="${y - 3}">${laneLabel}</text><text class="sequence-lane-name" x="8" y="${y + 10}">${escapeHtml(prompt)}</text></g>`;
+  }).join('');
+  const eventMarkup = visible.map((item, index) => {
+    const actorLane = laneIndex.get(item.actorId);
+    if (actorLane === undefined) return '';
+    const x = xFor(index);
+    const y = 20 + actorLane * laneHeight;
+    const kind = kindClass(item);
+    const number = String(ordered.length - visible.length + index + 1).padStart(2,'0');
+    const title = `${number} · ${item.label} · ${when(item.at)}${item.targetId ? ` · ${actorName(item.actorId)} → ${actorName(item.targetId)}` : ''}`;
+    if (item.targetId && laneIndex.has(item.targetId)) {
+      const targetY = 20 + laneIndex.get(item.targetId) * laneHeight;
+      const middleY = (y + targetY) / 2;
+      const path = `M ${x} ${y} Q ${x + 12} ${middleY} ${x} ${targetY}`;
+      return `<g class="sequence-plot-event ${kind}"><title>${escapeHtml(title)}</title><path class="sequence-handoff-line" d="${path}" marker-end="url(#sequence-arrow)"/><circle class="sequence-plot-mark" cx="${x}" cy="${y}" r="8"/><text class="sequence-plot-number" x="${x}" y="${y + 2.5}">${number.slice(-2)}</text><circle class="sequence-plot-target" cx="${x}" cy="${targetY}" r="3"/></g>`;
+    }
+    return `<g class="sequence-plot-event ${kind}"><title>${escapeHtml(title)}</title><line class="sequence-event-tick" x1="${x}" x2="${x}" y1="${y - 10}" y2="${y + 10}"/><circle class="sequence-plot-mark" cx="${x}" cy="${y}" r="8"/><text class="sequence-plot-number" x="${x}" y="${y + 2.5}">${number.slice(-2)}</text></g>`;
+  }).join('');
   const rows = visible.map((item, index) => {
     const target = item.targetId ? taskById(item.targetId) : null;
     const excerpt = item.detail ? escapeHtml(item.detail.length > 180 ? `${item.detail.slice(0,177)}…` : item.detail) : '';
-    return `<li class="sequence-event ${escapeHtml(item.kind)}"><time datetime="${escapeHtml(item.at)}">${escapeHtml(when(item.at))}</time><span class="sequence-mark" aria-hidden="true"></span><div class="sequence-copy"><div class="sequence-meta"><strong>${escapeHtml(item.label)}</strong><span>${escapeHtml(actorName(item.actorId))}${target ? ` → ${escapeHtml(actorName(target.id))}` : ''}</span></div>${excerpt ? `<p>${excerpt}</p>` : ''}</div><span class="sequence-index">${String(index + 1).padStart(2,'0')}</span></li>`;
+    const sequenceNumber = ordered.length - visible.length + index + 1;
+    return `<li class="sequence-event ${escapeHtml(item.kind)}"><time datetime="${escapeHtml(item.at)}">${escapeHtml(when(item.at))}</time><span class="sequence-mark" aria-hidden="true"></span><div class="sequence-copy"><div class="sequence-meta"><strong>${escapeHtml(item.label)}</strong><span>${escapeHtml(actorName(item.actorId))}${target ? ` → ${escapeHtml(actorName(target.id))}` : ''}</span></div>${excerpt ? `<p>${excerpt}</p>` : ''}</div><span class="sequence-index">${String(sequenceNumber).padStart(2,'0')}</span></li>`;
   }).join('');
-  return `<section class="interaction-sequence" aria-label="Chronological parent and child interaction sequence"><div class="sequence-heading"><div><span class="sequence-eyebrow">EVENT ORDER</span><h5>Lifecycle and handoffs</h5></div><span>${ordered.length} recorded</span></div><ol class="sequence-list">${rows}</ol><p>Times combine Lab task/mailbox records with captured CLI events. “Supplied” means the coordinator included the inbox item in a task-tool call; model interpretation is not observable here.${ordered.length > visible.length ? ` Showing the latest ${visible.length} of ${ordered.length} recorded events.` : ''}</p></section>`;
+  return `<section class="interaction-sequence" aria-label="Chronological parent and child interaction sequence"><div class="sequence-heading"><div><span class="sequence-eyebrow">EVENT ORDER</span><h5>Lifecycle and handoffs</h5></div><span>${ordered.length} recorded</span></div><div class="sequence-plot-scroll"><svg class="sequence-plot" viewBox="0 0 ${chartWidth} ${chartHeight}" role="img" aria-label="Swimlane diagram of the latest ${visible.length} events across ${laneTasks.length} agents"><defs><marker id="sequence-arrow" markerWidth="5" markerHeight="5" refX="3" refY="2.5" orient="auto"><path d="M0,0 L5,2.5 L0,5"/></marker></defs>${laneMarkup}${eventMarkup}</svg></div><div class="sequence-legend"><span><i class="legend-lifecycle"></i> lifecycle</span><span><i class="legend-message"></i> message handoff</span><span><i class="legend-result"></i> child result</span></div><ol class="sequence-list">${rows}</ol><p>Times combine Lab task/mailbox records with captured CLI events. Swimlane spacing shows event order, not elapsed-time scale. “Supplied” means the coordinator included the inbox item in a task-tool call; model interpretation is not observable here.${ordered.length > visible.length ? ` Showing the latest ${visible.length} of ${ordered.length} recorded events.` : ''}</p></section>`;
 }
 function taskTree(parentId = null, depth = 0, visible = visibleTaskIds(), matches = matchingTaskIds(), matchingAncestors = matchingAncestorIds(matches)) {
   return state.tasks.filter(task => task.parentId === parentId && visible.has(task.id)).map(task => {
