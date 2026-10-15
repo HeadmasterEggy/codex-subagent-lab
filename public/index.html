@@ -11,7 +11,7 @@
   <main class="shell">
     <header class="topbar">
       <div class="brand"><div class="mark">C</div><div><div class="eyebrow">LOCAL EXPERIMENT</div><h1>Subagent Lab</h1></div></div>
-      <div class="connection"><span class="pulse"></span><span id="connection">Connecting</span><span class="divider"></span><span id="workspace" class="workspace">Loading workspace…</span></div>
+      <div class="connection"><span class="pulse"></span><span id="connection" role="status" aria-live="polite">Connecting</span><button id="reload-session" class="session-reload" type="button" hidden>Reload</button><span class="divider"></span><span id="workspace" class="workspace">Loading workspace…</span></div>
     </header>
     <section class="intro">
       <div><div class="eyebrow">TASK ORCHESTRATION</div><h2>One goal. Multiple focused agents.</h2><p>Coordinate focused agents from one local workspace. Follow the task tree, review each agent’s output, and keep messages moving through its inbox.</p></div>

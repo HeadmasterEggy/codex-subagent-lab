@@ -8,6 +8,8 @@ let selectedMessageTask = null;
 let activeFilter = 'all';
 let taskSearch = '';
 let toastTimer;
+let connectionExpired = false;
+let connectionCheckPending = false;
 
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const when = value => value ? new Date(value).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'}) : '—';
@@ -144,8 +146,31 @@ function notify(message, isError = false) {
 }
 function connect() {
   const events = new EventSource(`/api/events?token=${encodeURIComponent(token)}`, { withCredentials:false });
-  events.onopen = () => { $('#connection').textContent = 'Live'; $('.pulse').classList.add('online'); };
-  events.onerror = () => { $('#connection').textContent = 'Reconnecting'; $('.pulse').classList.remove('online'); };
+  events.onopen = () => {
+    if (connectionExpired) return;
+    $('#connection').textContent = 'Live';
+    $('.pulse').classList.add('online');
+    $('.connection').classList.remove('expired');
+    $('#reload-session').hidden = true;
+  };
+  events.onerror = () => {
+    if (connectionExpired) return;
+    $('#connection').textContent = 'Reconnecting';
+    $('.pulse').classList.remove('online');
+    if (connectionCheckPending) return;
+    connectionCheckPending = true;
+    fetch('/api/state', { headers:{ 'x-lab-token':token } })
+      .then(response => {
+        if (response.status !== 403) return;
+        connectionExpired = true;
+        events.close();
+        $('#connection').textContent = 'Session expired';
+        $('.connection').classList.add('expired');
+        $('#reload-session').hidden = false;
+      })
+      .catch(() => {})
+      .finally(() => { connectionCheckPending = false; });
+  };
   events.addEventListener('state', event => {
     try { render(JSON.parse(event.data)); }
     catch { notify('Received an unreadable state update. Reconnecting…', true); }
@@ -221,4 +246,5 @@ $('#create-child').addEventListener('click', async event => {
   catch(error) { notify(error.message, true); }
   finally { button.disabled = false; }
 });
+$('#reload-session').addEventListener('click', () => location.reload());
 connect();
