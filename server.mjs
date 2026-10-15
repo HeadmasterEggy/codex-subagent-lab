@@ -47,7 +47,7 @@ async function bodyJson(req) {
 function appendEvent(task, kind, detail) {
   const event = { at: new Date().toISOString(), kind, detail: String(detail ?? '').slice(0, 20_000) };
   task.events.push(event);
-  if (task.events.length > 300) task.events.splice(0, task.events.length - 300);
+  if (task.events.length > 120) task.events.splice(0, task.events.length - 120);
   if (kind === 'message') task.output = (task.output + event.detail).slice(-40_000);
   publish();
 }
@@ -82,12 +82,13 @@ function run(task) {
   task.startedAt = new Date().toISOString();
   appendEvent(task, 'started', 'Starting codex exec with read-only sandbox');
   // The executable and every argument are passed directly; no shell command is constructed.
-  const args = ['exec', '--json', '--ephemeral', '--ignore-user-config', '--sandbox', 'read-only', '--cd', workspace, '--skip-git-repo-check', task.effectivePrompt];
+  const args = ['exec', '--json', '--ephemeral', '--ignore-user-config', '--sandbox', 'read-only', '--cd', workspace, '--skip-git-repo-check', '-'];
   let child;
   try {
-    child = spawn('codex', args, { cwd: workspace, env: process.env, stdio: ['ignore', 'pipe', 'pipe'], detached: process.platform !== 'win32' });
+    child = spawn('codex', args, { cwd: workspace, env: process.env, stdio: ['pipe', 'pipe', 'pipe'], detached: process.platform !== 'win32' });
     task.pid = child.pid ?? null;
     task.child = child;
+    child.stdin.end(task.effectivePrompt);
   } catch (error) {
     task.status = 'failed'; task.error = error.message; task.finishedAt = new Date().toISOString(); active--; appendEvent(task, 'error', error.message); pump(); return;
   }
@@ -156,7 +157,7 @@ const server = http.createServer(async (req, res) => {
         const prompt = typeof data.prompt === 'string' ? data.prompt.trim() : '';
         const parentId = data.parentId == null ? null : String(data.parentId);
         if (!prompt || prompt.length > 12_000) return sendJson(res, 400, { error: 'Prompt must be 1 to 12000 characters' });
-        if (tasks.size >= 200) return sendJson(res, 429, { error: 'Task limit reached for this server session' });
+        if (tasks.size >= 100) return sendJson(res, 429, { error: 'Task limit reached for this server session (100 tasks)' });
         if (parentId && !tasks.has(parentId)) return sendJson(res, 404, { error: 'Parent task not found' });
         const parent = parentId ? tasks.get(parentId) : null;
         const contextIncluded = Boolean(parent && data.includeParentContext === true);
