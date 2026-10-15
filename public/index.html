@@ -20,9 +20,10 @@
     <section id="compose" class="compose card">
       <div class="compose-heading"><label for="prompt">NEW ROOT TASK</label><span class="compose-hint">Give your first agent a clear outcome</span></div>
       <textarea id="prompt" rows="3" maxlength="12000" placeholder="What should the agent investigate, build, or report back?"></textarea>
-      <div class="compose-settings" aria-label="Root agent model settings">
+      <div class="compose-settings" aria-label="Root agent settings">
         <label class="field-control"><span>MODEL</span><input id="root-model" type="text" maxlength="128" placeholder="Codex default" autocomplete="off"></label>
         <label class="field-control"><span>REASONING EFFORT</span><select id="root-effort"><option value="">Codex default</option><option value="minimal">Minimal</option><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="xhigh">Extra high</option></select></label>
+        <label class="field-control"><span>TASK RUNTIME LIMIT</span><select id="root-timeout"><option value="0">No limit</option><option value="300">5 minutes</option><option value="900">15 minutes</option><option value="1800">30 minutes</option><option value="3600">60 minutes</option></select><small class="setting-hint">Applies to this agent tree; inbox wait time is separate.</small></label>
       </div>
       <div class="compose-foot"><span>Separate local <code>codex exec</code> process<span class="prompt-count"><span id="root-prompt-count">0</span> / 12,000</span></span><button id="start-root" class="primary"><span aria-hidden="true">＋</span> Start root task <kbd>⌘ ↵</kbd></button></div>
     </section>
@@ -34,6 +35,8 @@
       <button class="metric" data-filter="completed" aria-pressed="false"><span>Completed</span><strong id="metric-completed">0</strong></button>
       <button class="metric attention" data-filter="failed" aria-pressed="false"><span>Failed</span><strong id="metric-failed">0</strong></button>
       <button class="metric attention" data-filter="cancelled" aria-pressed="false"><span>Cancelled</span><strong id="metric-cancelled">0</strong></button>
+      <button class="metric attention" data-filter="timing_out" aria-pressed="false"><span>Stopping</span><strong id="metric-timing_out">0</strong></button>
+      <button class="metric attention" data-filter="timed_out" aria-pressed="false"><span>Timed out</span><strong id="metric-timed_out">0</strong></button>
     </section>
     <section class="task-tools" aria-label="Filter tasks">
       <label class="search-box"><span aria-hidden="true">⌕</span><input id="task-search" type="search" placeholder="Search task prompts…" autocomplete="off"></label>
@@ -46,6 +49,7 @@
         <section id="empty" class="empty"><div class="empty-icon">⌘</div><strong>No agents yet</strong><p>Start a root task above. New agents and child tasks will appear here.</p></section>
         <section id="no-matches" class="empty" hidden><div class="empty-icon">⌕</div><strong>No matching tasks</strong><p>Try another search or status filter.</p></section>
     <section id="tree" class="tree" role="tree" aria-label="Tasks" aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight Home End">
+      </section>
       </section>
       <section id="inspector" class="inspector card" aria-label="Selected agent details" aria-live="polite">
         <div id="inspector-empty" class="inspector-empty"><div class="inspector-orbit"><span>✳</span></div><div class="eyebrow">AGENT INSPECTOR</div><h3>Select an agent</h3><p>Choose a task in the tree to see its status, mailbox, output, and activity.</p></div>

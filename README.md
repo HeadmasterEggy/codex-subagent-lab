@@ -24,6 +24,7 @@ Demo mode loads a fixed four-task hierarchy with completed and failed outcomes p
 
 - Each agent is a separate `codex exec --json --ephemeral` process with `--sandbox read-only` and the same fixed working directory.
 - Root tasks can select a model and reasoning effort; each child can inherit its parent setting, explicitly use the Codex default, or choose a custom value. These choices are passed as `codex exec --model` and `model_reasoning_effort` config overrides; blank root settings delegate to the CLI default.
+- Root tasks can set a runtime limit from 5 to 60 minutes, or leave it unlimited. The limit begins when the process starts and is inherited by descendants; on expiry the server requests termination, waits for process exit, then records a distinct `timed_out` result. UI elapsed time and last activity are visible per task. `wait_agent.timeout_seconds` only bounds an inbox wait and does not change task runtime or task status.
 - The server binds to loopback, creates a per-run random token, and keeps task state in memory. Stopping the server clears the UI history.
 - Restarting the server rotates the UI token. An already-open page detects the rejected token and offers a `Reload` action to reconnect to the new server session.
 - At most four CLI processes and 100 total tasks run per server session; additional tasks queue until a process slot opens. Any task can have child tasks, up to eight levels deep. The UI stop action terminates only the selected task; its children continue independently.

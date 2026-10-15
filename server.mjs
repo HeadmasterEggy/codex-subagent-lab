@@ -20,7 +20,7 @@ const appJs = await readFile(new URL('./public/app.js', import.meta.url), 'utf8'
 const styleCss = await readFile(new URL('./public/style.css', import.meta.url), 'utf8');
 
 function snapshot() {
-  const publicTasks = [...tasks.values()].map(({ child, effectivePrompt, messages, messageHistory, waiters, resultDelivered, ...task }) => {
+  const publicTasks = [...tasks.values()].map(({ child, effectivePrompt, messages, messageHistory, waiters, resultDelivered, timeoutHandle, timeoutKillHandle, ...task }) => {
     const recentPending = messages.slice(-8);
     const latestPendingResult = [...messages].reverse().find(message => message.kind === 'task_result');
     if (latestPendingResult && !recentPending.includes(latestPendingResult)) recentPending.splice(0, 1, latestPendingResult);
@@ -62,6 +62,7 @@ async function bodyJson(req) {
 }
 function appendEvent(task, kind, detail) {
   const event = { at: new Date().toISOString(), kind, detail: String(detail ?? '').slice(0, 20_000) };
+  task.lastActivityAt = event.at;
   task.events.push(event);
   if (task.events.length > 120) task.events.splice(0, task.events.length - 120);
   if (kind === 'message') task.output = (task.output + event.detail).slice(-40_000);
@@ -148,13 +149,28 @@ function run(task) {
   child.stderr.setEncoding('utf8');
   child.stderr.on('data', chunk => appendEvent(task, 'stderr', chunk));
   child.on('error', error => { task.error = error.message; appendEvent(task, 'error', error.message); });
+  if (task.timeoutSeconds > 0) {
+    task.timeoutHandle = setTimeout(() => {
+      if (task.status !== 'running') return;
+      task.status = 'timing_out';
+      task.timeoutReason = `Runtime limit of ${task.timeoutSeconds} seconds reached`;
+      appendEvent(task, 'timing_out', `${task.timeoutReason}; waiting for the process to exit`);
+      signalTask(task, 'SIGTERM');
+      task.timeoutKillHandle = setTimeout(() => signalTask(task, 'SIGKILL'), 2500).unref();
+    }, task.timeoutSeconds * 1000);
+    task.timeoutHandle.unref();
+  }
   child.on('close', (code, signal) => {
+    clearTimeout(task.timeoutHandle);
+    clearTimeout(task.timeoutKillHandle);
+    task.timeoutHandle = null; task.timeoutKillHandle = null;
     if (stdout.trim()) parseLine(task, stdout);
     task.exitCode = code;
     task.signal = signal;
     task.finishedAt = new Date().toISOString();
     task.pid = null; task.child = null;
-    if (task.status === 'cancelling') task.status = 'cancelled';
+    if (task.status === 'timing_out') task.status = 'timed_out';
+    else if (task.status === 'cancelling') task.status = 'cancelled';
     else if (task.status === 'running') task.status = code === 0 ? 'completed' : 'failed';
     active--;
     appendEvent(task, 'finished', `status=${task.status} exit=${code ?? 'null'} signal=${signal ?? 'none'}`);
@@ -170,22 +186,23 @@ function cancelTask(task) {
   }
   if (task.status !== 'running' || !task.child) return;
   task.status = 'cancelling'; appendEvent(task, 'cancelling', 'Sending termination signal');
+  clearTimeout(task.timeoutHandle); task.timeoutHandle = null;
+  signalTask(task, 'SIGTERM');
+  task.timeoutKillHandle = setTimeout(() => signalTask(task, 'SIGKILL'), 2500).unref();
+}
+function signalTask(task, signal) {
+  if (!task.child?.pid) return;
   try {
-    if (process.platform !== 'win32' && task.child.pid) process.kill(-task.child.pid, 'SIGTERM');
-    else task.child.kill('SIGTERM');
+    if (process.platform !== 'win32') process.kill(-task.child.pid, signal);
+    else task.child.kill(signal);
   } catch {}
-  setTimeout(() => {
-    if (task.child?.pid) {
-      try { if (process.platform !== 'win32') process.kill(-task.child.pid, 'SIGKILL'); else task.child.kill('SIGKILL'); } catch {}
-    }
-  }, 2500).unref();
 }
 function closeTaskTree(task) {
   for (const childTask of tasks.values()) if (childTask.parentId === task.id) closeTaskTree(childTask);
   cancelTask(task);
 }
 
-const terminal = task => ['completed', 'failed', 'cancelled'].includes(task.status);
+const terminal = task => ['completed', 'failed', 'cancelled', 'timed_out'].includes(task.status);
 function taskDepth(task) {
   let depth = 0, cursor = task;
   while (cursor?.parentId) { depth++; cursor = tasks.get(cursor.parentId); }
@@ -216,7 +233,7 @@ function waitForInboxActivity(task, timeoutMs) {
     task.waiters.add(check);
   });
 }
-function createTask({ prompt, parentId = null, includeParentContext = false, model = '', modelMode = 'inherit', reasoningEffort = '', effortMode = 'inherit', createdBy = 'user' }) {
+function createTask({ prompt, parentId = null, includeParentContext = false, model = '', modelMode = 'inherit', reasoningEffort = '', effortMode = 'inherit', timeoutSeconds, createdBy = 'user' }) {
   const parent = parentId ? tasks.get(parentId) : null;
   const selectedModel = modelMode === 'custom' ? model : modelMode === 'default' ? '' : parent?.model || '';
   const selectedEffort = effortMode === 'custom' ? reasoningEffort : effortMode === 'default' ? '' : parent?.reasoningEffort || '';
@@ -228,9 +245,10 @@ function createTask({ prompt, parentId = null, includeParentContext = false, mod
   const coordination = `\n\nSubagent Lab coordination: your task ID is ${id}. You may use the subagent_lab MCP tools to create child agents, list them, wait for inbox activity, send messages, read messages sent to you, and close child agents. Child tasks run as separate Codex CLI processes in the same read-only workspace. Child completion results are delivered to this task's inbox; use wait_agent, then read_messages to inspect them. Report important child results in your final response.`;
   const task = {
     id, parentId, prompt, contextIncluded, createdBy, model: selectedModel, reasoningEffort: selectedEffort,
+    timeoutSeconds: timeoutSeconds ?? parent?.timeoutSeconds ?? 0, timeoutReason: null,
     effectivePrompt: `${coordination}${parentContext}\nTask:\n${prompt}`,
     status: 'queued', createdAt: new Date().toISOString(), startedAt: null, finishedAt: null,
-    pid: null, exitCode: null, signal: null, error: null, output: '', events: [], messages: [], messageHistory: [], waiters: new Set(), child: null, resultDelivered: false,
+    pid: null, exitCode: null, signal: null, error: null, output: '', events: [], messages: [], messageHistory: [], waiters: new Set(), child: null, timeoutHandle: null, timeoutKillHandle: null, resultDelivered: false,
   };
   tasks.set(id, task); queue.push(id); publish(); pump();
   return task;
@@ -396,6 +414,7 @@ const server = http.createServer(async (req, res) => {
         const parentId = data.parentId == null ? null : String(data.parentId);
         const model = typeof data.model === 'string' ? data.model.trim() : '';
         const reasoningEffort = typeof data.reasoningEffort === 'string' ? data.reasoningEffort : '';
+        const timeoutSeconds = data.timeoutSeconds === undefined ? null : Number(data.timeoutSeconds);
         const modelMode = ['inherit', 'default', 'custom'].includes(data.modelMode) ? data.modelMode : parentId ? 'inherit' : 'default';
         const effortMode = ['inherit', 'default', 'custom'].includes(data.effortMode) ? data.effortMode : parentId ? 'inherit' : 'default';
         if (!prompt || prompt.length > 12_000) return sendJson(res, 400, { error: 'Prompt must be 1 to 12000 characters' });
@@ -403,10 +422,11 @@ const server = http.createServer(async (req, res) => {
         if (modelMode === 'custom' && !model) return sendJson(res, 400, { error: 'A custom model name is required' });
         if (effortMode === 'custom' && !reasoningEffort) return sendJson(res, 400, { error: 'A custom reasoning effort is required' });
         if (reasoningEffort && !['minimal', 'low', 'medium', 'high', 'xhigh'].includes(reasoningEffort)) return sendJson(res, 400, { error: 'Unsupported reasoning effort' });
+        if (timeoutSeconds !== null && (!Number.isInteger(timeoutSeconds) || timeoutSeconds < 0 || timeoutSeconds > 3600)) return sendJson(res, 400, { error: 'Runtime limit must be 0 (unlimited) or an integer from 1 to 3600 seconds' });
         if (tasks.size >= 100) return sendJson(res, 429, { error: 'Task limit reached for this server session (100 tasks)' });
         if (parentId && !tasks.has(parentId)) return sendJson(res, 404, { error: 'Parent task not found' });
         if (parentId && taskDepth(tasks.get(parentId)) >= 7) return sendJson(res, 429, { error: 'Maximum task nesting depth is 8' });
-        const task = createTask({ prompt, parentId, includeParentContext: data.includeParentContext === true, model, modelMode, reasoningEffort, effortMode, createdBy: 'user' });
+        const task = createTask({ prompt, parentId, includeParentContext: data.includeParentContext === true, model, modelMode, reasoningEffort, effortMode, timeoutSeconds, createdBy: 'user' });
         return sendJson(res, 201, { id: task.id });
       } catch (error) { return sendJson(res, 400, { error: error.message }); }
     }
