@@ -19,7 +19,7 @@ const appJs = await readFile(new URL('./public/app.js', import.meta.url), 'utf8'
 const styleCss = await readFile(new URL('./public/style.css', import.meta.url), 'utf8');
 
 function snapshot() {
-  const publicTasks = [...tasks.values()].map(({ child, ...task }) => task);
+  const publicTasks = [...tasks.values()].map(({ child, effectivePrompt, ...task }) => task);
   return { workspace, concurrency, active, queued: queue.length, tasks: publicTasks };
 }
 function publish() {
@@ -82,7 +82,7 @@ function run(task) {
   task.startedAt = new Date().toISOString();
   appendEvent(task, 'started', 'Starting codex exec with read-only sandbox');
   // The executable and every argument are passed directly; no shell command is constructed.
-  const args = ['exec', '--json', '--ephemeral', '--sandbox', 'read-only', '--cd', workspace, '--skip-git-repo-check', task.effectivePrompt];
+  const args = ['exec', '--json', '--ephemeral', '--ignore-user-config', '--sandbox', 'read-only', '--cd', workspace, '--skip-git-repo-check', task.effectivePrompt];
   let child;
   try {
     child = spawn('codex', args, { cwd: workspace, env: process.env, stdio: ['ignore', 'pipe', 'pipe'], detached: process.platform !== 'win32' });
