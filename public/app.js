@@ -141,6 +141,8 @@ function render(next) {
   const contextCount = visible.size - matches.size;
   $('#visible-count').textContent = `${matches.size} match${matches.size === 1 ? '' : 'es'}${contextCount ? ` · ${contextCount} ancestor${contextCount === 1 ? '' : 's'} for context` : ''}`;
   $('#no-matches').hidden = tasks.length === 0 || matches.size > 0;
+  $('#expand-all').disabled = tasks.length === 0 || collapsedTasks.size === 0;
+  $('#collapse-all').disabled = tasks.length === 0 || tasks.every(task => !tasks.some(child => child.parentId === task.id) || collapsedTasks.has(task.id));
   document.querySelectorAll('.metric').forEach(button => {
     const isActive = button.dataset.filter === activeFilter;
     button.classList.toggle('active', isActive);
@@ -211,6 +213,14 @@ $('#task-search').addEventListener('input', event => { taskSearch = event.target
 $('#prompt').addEventListener('input', () => { $('#root-prompt-count').textContent = $('#prompt').value.length.toLocaleString(); });
 $('#clear-filters').addEventListener('click', () => {
   activeFilter = 'all'; taskSearch = ''; $('#task-search').value = ''; render(state); $('#task-search').focus();
+});
+$('#expand-all').addEventListener('click', () => { collapsedTasks.clear(); render(state); });
+$('#collapse-all').addEventListener('click', () => {
+  collapsedTasks.clear();
+  for (const task of state.tasks) {
+    if (state.tasks.some(child => child.parentId === task.id)) collapsedTasks.add(task.id);
+  }
+  render(state);
 });
 async function startRoot() {
   const button = $('#start-root'); const prompt = $('#prompt').value.trim();
