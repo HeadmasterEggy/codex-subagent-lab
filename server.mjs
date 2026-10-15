@@ -19,7 +19,7 @@ const appJs = await readFile(new URL('./public/app.js', import.meta.url), 'utf8'
 const styleCss = await readFile(new URL('./public/style.css', import.meta.url), 'utf8');
 
 function snapshot() {
-  const publicTasks = [...tasks.values()].map(({ child, effectivePrompt, ...task }) => task);
+  const publicTasks = [...tasks.values()].map(({ child, effectivePrompt, messages, waiters, ...task }) => task);
   return { workspace, concurrency, active, queued: queue.length, tasks: publicTasks };
 }
 function publish() {
@@ -49,6 +49,7 @@ function appendEvent(task, kind, detail) {
   task.events.push(event);
   if (task.events.length > 120) task.events.splice(0, task.events.length - 120);
   if (kind === 'message') task.output = (task.output + event.detail).slice(-40_000);
+  for (const waiter of [...task.waiters]) waiter();
   publish();
 }
 function textFrom(value, depth = 0) {
@@ -82,10 +83,23 @@ function run(task) {
   task.startedAt = new Date().toISOString();
   appendEvent(task, 'started', 'Starting codex exec with read-only sandbox');
   // The executable and every argument are passed directly; no shell command is constructed.
-  const args = ['exec', '--json', '--ephemeral', '--ignore-user-config', '--sandbox', 'read-only', '--cd', workspace, '--skip-git-repo-check', '-'];
+  const bridge = fileURLToPath(new URL('./mcp-bridge.mjs', import.meta.url));
+  const args = [
+    'exec', '--json', '--ephemeral', '--ignore-user-config', '--sandbox', 'read-only',
+    '--config', `mcp_servers.subagent_lab.command=${JSON.stringify(process.execPath)}`,
+    '--config', `mcp_servers.subagent_lab.args=${JSON.stringify([bridge])}`,
+    '--config', 'mcp_servers.subagent_lab.env_vars=["LAB_COORDINATOR_URL","LAB_COORDINATOR_TOKEN","LAB_TASK_ID"]',
+    '--cd', workspace, '--skip-git-repo-check', '-',
+  ];
   let child;
   try {
-    child = spawn('codex', args, { cwd: workspace, env: process.env, stdio: ['pipe', 'pipe', 'pipe'], detached: process.platform !== 'win32' });
+    const env = {
+      ...process.env,
+      LAB_COORDINATOR_URL: `http://127.0.0.1:${port}`,
+      LAB_COORDINATOR_TOKEN: token,
+      LAB_TASK_ID: task.id,
+    };
+    child = spawn('codex', args, { cwd: workspace, env, stdio: ['pipe', 'pipe', 'pipe'], detached: process.platform !== 'win32' });
     task.pid = child.pid ?? null;
     task.child = child;
     child.stdin.end(task.effectivePrompt);
@@ -116,6 +130,7 @@ function run(task) {
   });
 }
 function cancel(task) {
+  for (const childTask of tasks.values()) if (childTask.parentId === task.id) cancel(childTask);
   if (task.status === 'queued') {
     task.status = 'cancelled'; task.finishedAt = new Date().toISOString();
     const i = queue.indexOf(task.id); if (i >= 0) queue.splice(i, 1);
@@ -134,6 +149,52 @@ function cancel(task) {
   }, 2500).unref();
 }
 
+const terminal = task => ['completed', 'failed', 'cancelled'].includes(task.status);
+function taskDepth(task) {
+  let depth = 0, cursor = task;
+  while (cursor?.parentId) { depth++; cursor = tasks.get(cursor.parentId); }
+  return depth;
+}
+function enqueueMessage(task, item) {
+  if (task.messages.length >= 100) return false;
+  task.messages.push(item);
+  appendEvent(task, 'message_received', JSON.stringify({ from: item.from, message: item.text.slice(0, 300) }));
+  return true;
+}
+function waitForTask(task, timeoutMs) {
+  if (terminal(task)) return Promise.resolve(task);
+  return new Promise(resolve => {
+    let finished = false;
+    const done = value => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(timer);
+      task.waiters.delete(check);
+      resolve(value);
+    };
+    const check = () => { if (terminal(task)) done(task); };
+    const timer = setTimeout(() => done(null), timeoutMs);
+    task.waiters.add(check);
+  });
+}
+function createTask({ prompt, parentId = null, includeParentContext = false, createdBy = 'user' }) {
+  const parent = parentId ? tasks.get(parentId) : null;
+  const contextIncluded = Boolean(parent && includeParentContext);
+  const parentContext = contextIncluded
+    ? `\n\nParent context snapshot (reference material; follow the child task below):\n<parent-task>\n${parent.prompt.slice(0, 4000)}\n</parent-task>\n<parent-output>\n${parent.output.slice(-8000) || '(No agent output yet.)'}\n</parent-output>\n`
+    : '';
+  const id = randomBytes(12).toString('hex');
+  const coordination = `\n\nSubagent Lab coordination: your task ID is ${id}. You may use the subagent_lab MCP tools to create child agents, list them, wait for them, send them messages, read messages sent to you, and close them. Child tasks run as separate Codex CLI processes in the same read-only workspace. Report important child results in your final response.`;
+  const task = {
+    id, parentId, prompt, contextIncluded, createdBy,
+    effectivePrompt: `${coordination}${parentContext}\nTask:\n${prompt}`,
+    status: 'queued', createdAt: new Date().toISOString(), startedAt: null, finishedAt: null,
+    pid: null, exitCode: null, signal: null, error: null, output: '', events: [], messages: [], waiters: new Set(), child: null,
+  };
+  tasks.set(id, task); queue.push(id); publish(); pump();
+  return task;
+}
+
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url ?? '/', `http://127.0.0.1:${port}`);
   if (req.method === 'GET' && url.pathname === '/') {
@@ -148,6 +209,77 @@ const server = http.createServer(async (req, res) => {
     res.write(`event: state\ndata: ${JSON.stringify(snapshot())}\n\n`); clients.add(res);
     req.on('close', () => clients.delete(res)); return;
   }
+  const coordinationMatch = url.pathname.match(/^\/api\/coordination\/tasks\/([a-f0-9]+)\/(children|wait|messages|close)$/);
+  if (coordinationMatch) {
+    if (!authorized(req)) return sendJson(res, 403, { error: 'Forbidden' });
+    const [, id, action] = coordinationMatch;
+    const task = tasks.get(id);
+    if (!task) return sendJson(res, 404, { error: 'Task not found' });
+    if (action === 'children' && req.method === 'GET') {
+      if (req.headers['x-lab-task-id'] !== task.id) return sendJson(res, 403, { error: 'Only the parent task can list its children' });
+      return sendJson(res, 200, { children: snapshot().tasks.filter(child => child.parentId === task.id) });
+    }
+    if (action === 'children' && req.method === 'POST') {
+      if (req.headers['x-lab-task-id'] !== task.id || task.status !== 'running') return sendJson(res, 409, { error: 'Only a running parent task can spawn children' });
+      try {
+        const data = await bodyJson(req);
+        const prompt = typeof data.prompt === 'string' ? data.prompt.trim() : '';
+        if (!prompt || prompt.length > 12_000) return sendJson(res, 400, { error: 'Prompt must be 1 to 12000 characters' });
+        if (taskDepth(task) >= 7) return sendJson(res, 429, { error: 'Maximum task nesting depth is 8' });
+        if (tasks.size >= 100) return sendJson(res, 429, { error: 'Task limit reached for this server session (100 tasks)' });
+        const child = createTask({ prompt, parentId: task.id, includeParentContext: data.includeParentContext === true, createdBy: 'agent' });
+        appendEvent(task, 'agent_spawned', JSON.stringify({ childId: child.id, prompt: prompt.slice(0, 200) }));
+        return sendJson(res, 201, { id: child.id, status: child.status });
+      } catch (error) { return sendJson(res, 400, { error: error.message }); }
+    }
+    if (action === 'wait' && req.method === 'GET') {
+      const requesterId = req.headers['x-lab-task-id'];
+      const requester = tasks.get(requesterId);
+      if (!requester || !(task.parentId === requester.id || requester.parentId === task.id)) return sendJson(res, 403, { error: 'Tasks can wait only for a direct parent or child' });
+      const rawTimeout = Number(url.searchParams.get('timeout_ms'));
+      const timeoutMs = url.searchParams.has('timeout_ms') && Number.isFinite(rawTimeout)
+        ? Math.max(0, Math.min(300_000, rawTimeout))
+        : 120_000;
+      const completed = await waitForTask(task, timeoutMs);
+      return sendJson(res, 200, { timedOut: completed == null, task: completed ? snapshot().tasks.find(item => item.id === completed.id) : snapshot().tasks.find(item => item.id === task.id) });
+    }
+    if (action === 'messages' && req.method === 'POST') {
+      const senderId = req.headers['x-lab-task-id'];
+      const sender = tasks.get(senderId);
+      if (!sender || !(sender.parentId === task.id || task.parentId === sender.id)) return sendJson(res, 403, { error: 'Messages are limited to direct parent-child pairs' });
+      if (terminal(task)) return sendJson(res, 409, { error: 'Target task is already finished' });
+      try {
+        const data = await bodyJson(req);
+        const message = typeof data.message === 'string' ? data.message.trim() : '';
+        if (!message || message.length > 8000) return sendJson(res, 400, { error: 'Message must be 1 to 8000 characters' });
+        const item = { id: randomBytes(8).toString('hex'), from: sender.id, at: new Date().toISOString(), text: message };
+        if (!enqueueMessage(task, item)) return sendJson(res, 429, { error: 'Inbox is full (100 messages)' });
+        return sendJson(res, 201, { accepted: true, id: item.id });
+      } catch (error) { return sendJson(res, 400, { error: error.message }); }
+    }
+    if (action === 'messages' && req.method === 'GET') {
+      if (req.headers['x-lab-task-id'] !== task.id) return sendJson(res, 403, { error: 'A task can read only its own inbox' });
+      const rawWait = Number(url.searchParams.get('wait_ms'));
+      const waitMs = Number.isFinite(rawWait) ? Math.max(0, Math.min(30_000, rawWait)) : 0;
+      if (task.messages.length === 0 && waitMs > 0) {
+        await new Promise(resolveWait => {
+          let done = false;
+          const finish = () => { if (done) return; done = true; clearTimeout(timer); task.waiters.delete(checkMessages); resolveWait(); };
+          const checkMessages = () => { if (task.messages.length > 0 || terminal(task)) finish(); };
+          const timer = setTimeout(finish, waitMs);
+          task.waiters.add(checkMessages);
+        });
+      }
+      return sendJson(res, 200, { messages: task.messages.splice(0) });
+    }
+    if (action === 'close' && req.method === 'POST') {
+      const requesterId = req.headers['x-lab-task-id'];
+      const requester = tasks.get(requesterId);
+      if (!requester || !(task.parentId === requester.id || task.id === requester.id)) return sendJson(res, 403, { error: 'A task can close itself or a direct child' });
+      cancel(task);
+      return sendJson(res, 200, { status: task.status });
+    }
+  }
   if (url.pathname.startsWith('/api/')) {
     if (!authorized(req)) return sendJson(res, 403, { error: 'Forbidden' });
     if (req.method === 'GET' && url.pathname === '/api/state') return sendJson(res, 200, snapshot());
@@ -159,16 +291,22 @@ const server = http.createServer(async (req, res) => {
         if (!prompt || prompt.length > 12_000) return sendJson(res, 400, { error: 'Prompt must be 1 to 12000 characters' });
         if (tasks.size >= 100) return sendJson(res, 429, { error: 'Task limit reached for this server session (100 tasks)' });
         if (parentId && !tasks.has(parentId)) return sendJson(res, 404, { error: 'Parent task not found' });
-        const parent = parentId ? tasks.get(parentId) : null;
-        const contextIncluded = Boolean(parent && data.includeParentContext === true);
-        const parentContext = contextIncluded
-          ? `\n\nParent context snapshot (reference material; follow the child task below):\n<parent-task>\n${parent.prompt.slice(0, 4000)}\n</parent-task>\n<parent-output>\n${parent.output.slice(-8000) || '(No agent output yet.)'}\n</parent-output>\n`
-          : '';
-        const effectivePrompt = `${parentContext}\nChild task:\n${prompt}`;
-        const id = randomBytes(12).toString('hex');
-        const task = { id, parentId, prompt, contextIncluded, effectivePrompt, status: 'queued', createdAt: new Date().toISOString(), startedAt: null, finishedAt: null, pid: null, exitCode: null, signal: null, error: null, output: '', events: [], child: null };
-        tasks.set(id, task); queue.push(id); publish(); pump();
-        return sendJson(res, 201, { id });
+        if (parentId && taskDepth(tasks.get(parentId)) >= 7) return sendJson(res, 429, { error: 'Maximum task nesting depth is 8' });
+        const task = createTask({ prompt, parentId, includeParentContext: data.includeParentContext === true, createdBy: 'user' });
+        return sendJson(res, 201, { id: task.id });
+      } catch (error) { return sendJson(res, 400, { error: error.message }); }
+    }
+    const messageMatch = url.pathname.match(/^\/api\/tasks\/([a-f0-9]+)\/message$/);
+    if (req.method === 'POST' && messageMatch) {
+      const task = tasks.get(messageMatch[1]);
+      if (!task) return sendJson(res, 404, { error: 'Task not found' });
+      if (terminal(task)) return sendJson(res, 409, { error: 'Task is already finished' });
+      try {
+        const data = await bodyJson(req);
+        const message = typeof data.message === 'string' ? data.message.trim() : '';
+        if (!message || message.length > 8000) return sendJson(res, 400, { error: 'Message must be 1 to 8000 characters' });
+        if (!enqueueMessage(task, { id: randomBytes(8).toString('hex'), from: 'user', at: new Date().toISOString(), text: message })) return sendJson(res, 429, { error: 'Inbox is full (100 messages)' });
+        return sendJson(res, 201, { accepted: true });
       } catch (error) { return sendJson(res, 400, { error: error.message }); }
     }
     const match = url.pathname.match(/^\/api\/tasks\/([a-f0-9]+)\/cancel$/);

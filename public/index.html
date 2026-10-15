@@ -14,7 +14,7 @@
       <div class="connection"><span class="pulse"></span><span id="connection">Connecting</span><span class="divider"></span><span id="workspace" class="workspace">Loading workspace…</span></div>
     </header>
     <section class="intro">
-      <div><div class="eyebrow">TASK ORCHESTRATION</div><h2>One goal. Multiple focused agents.</h2><p>Start a task, then delegate focused work to child agents. Follow their live events and results in one tree.</p></div>
+      <div><div class="eyebrow">TASK ORCHESTRATION</div><h2>One goal. Multiple focused agents.</h2><p>Start a task and let its agent delegate through MCP tools. Watch the live tree, send inbox messages, and inspect each agent’s output.</p></div>
       <div class="guard"><span class="shield">⌑</span><div><strong>Read-only by default</strong><small>Local Codex CLI · max 4 managed sessions</small></div></div>
     </section>
     <section class="compose card">
@@ -23,11 +23,12 @@
       <div class="compose-foot"><span>Agents run as separate <code>codex exec</code> processes.</span><button id="start-root" class="primary">＋ Start root task</button></div>
     </section>
     <section class="board-head"><div><div class="eyebrow">YOUR WORK</div><h2>Agent tree <span id="task-count" class="count">0</span></h2></div><div class="legend"><span class="dot running"></span>Running <span class="dot done"></span>Done <span class="dot queued"></span>Queued</div></section>
-    <section id="empty" class="empty card"><div class="empty-icon">⌘</div><strong>No tasks yet</strong><p>Start a root task above. You can add child agents to any task once it appears here.</p></section>
+    <section id="empty" class="empty card"><div class="empty-icon">⌘</div><strong>No tasks yet</strong><p>Start a root task above. Agents can spawn children through MCP, and you can also add a child from the interface.</p></section>
     <section id="tree" class="tree"></section>
     <footer>Prototype · Runs only on this machine · Task output is held in memory and cleared when the server stops</footer>
   </main>
   <dialog id="child-dialog"><form method="dialog" class="dialog-card"><div class="dialog-head"><div><div class="eyebrow">DELEGATE TO CHILD</div><h2>Add a focused agent</h2></div><button class="icon-button" value="cancel" aria-label="Close">×</button></div><p id="parent-label" class="parent-label"></p><textarea id="child-prompt" rows="5" placeholder="What should this child agent investigate or produce?"></textarea><label class="context-option"><input id="include-context" type="checkbox"><span><strong>Include parent context snapshot</strong><small>Parent task and latest output (up to 8,000 characters)</small></span></label><div class="dialog-foot"><button class="secondary" value="cancel">Cancel</button><button id="create-child" class="primary" value="default">Start child</button></div></form></dialog>
+  <dialog id="message-dialog"><form method="dialog" class="dialog-card"><div class="dialog-head"><div><div class="eyebrow">TASK INBOX</div><h2>Send a message</h2></div><button class="icon-button" value="cancel" aria-label="Close">×</button></div><p id="message-label" class="parent-label"></p><textarea id="message-text" rows="4" maxlength="8000" placeholder="This is queued in the task inbox. The agent can read it with read_messages."></textarea><div class="dialog-foot"><button class="secondary" value="cancel">Cancel</button><button id="send-message" class="primary" value="default">Send to inbox</button></div></form></dialog>
   <script type="module" src="/app.js"></script>
 </body>
 </html>

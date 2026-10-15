@@ -3,6 +3,7 @@ const headers = { 'content-type': 'application/json', 'x-lab-token': token };
 const $ = selector => document.querySelector(selector);
 let state = { tasks: [] };
 let selectedParent = null;
+let selectedMessageTask = null;
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const when = value => value ? new Date(value).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'}) : '';
 function taskTree(parentId = null, depth = 0) {
@@ -12,8 +13,8 @@ function taskTree(parentId = null, depth = 0) {
     const canCancel = ['queued','running'].includes(status);
     const events = task.events.slice(-7).map(e => `<div class="event"><time>${escapeHtml(when(e.at))}</time><span class="event-type">${escapeHtml(e.kind)}</span><span class="event-detail">${escapeHtml(e.detail.replace(/\s+/g,' ').slice(0,180))}</span></div>`).join('');
     const output = task.output ? `<div class="output"><div class="output-head"><span>AGENT OUTPUT</span><span>${task.output.length.toLocaleString()} chars</span></div><div class="output-text">${escapeHtml(task.output)}</div></div>` : '';
-    const actions = `<div class="task-actions">${canCancel ? `<button class="small-button stop" data-cancel="${task.id}">Stop</button>` : ''}<button class="small-button" data-child="${task.id}">＋ Child agent</button></div>`;
-    return `<article class="task ${depth ? 'child' : ''}"><div class="task-top"><div class="status-mark ${escapeHtml(status)}">${icon}</div><div class="task-main"><div class="task-title">${escapeHtml(task.prompt)}</div><div class="task-meta"><span class="badge">${escapeHtml(status)}</span>${task.contextIncluded ? '<span class="badge">context snapshot</span>' : ''}<span>created ${escapeHtml(when(task.createdAt))}</span>${task.pid ? `<span>pid ${task.pid}</span>` : ''}${task.exitCode !== null ? `<span>exit ${task.exitCode}</span>` : ''}</div></div>${actions}</div>${output}${events}</article>${taskTree(task.id, depth + 1)}`;
+    const actions = `<div class="task-actions">${canCancel ? `<button class="small-button stop" data-cancel="${task.id}">Stop</button><button class="small-button" data-message="${task.id}">Message</button>` : ''}${depth < 7 ? `<button class="small-button" data-child="${task.id}">＋ Child agent</button>` : ''}</div>`;
+    return `<article class="task ${depth ? 'child' : ''}"><div class="task-top"><div class="status-mark ${escapeHtml(status)}">${icon}</div><div class="task-main"><div class="task-title">${escapeHtml(task.prompt)}</div><div class="task-meta"><span class="badge">${escapeHtml(status)}</span><span class="badge">${task.createdBy === 'agent' ? 'agent spawned' : 'user started'}</span>${task.contextIncluded ? '<span class="badge">context snapshot</span>' : ''}<span>created ${escapeHtml(when(task.createdAt))}</span>${task.pid ? `<span>pid ${task.pid}</span>` : ''}${task.exitCode !== null ? `<span>exit ${task.exitCode}</span>` : ''}</div></div>${actions}</div>${output}${events}</article>${taskTree(task.id, depth + 1)}`;
   }).join('');
 }
 function render(next) {
@@ -47,7 +48,16 @@ $('#start-root').addEventListener('click', async () => {
 $('#tree').addEventListener('click', async event => {
   const cancelButton = event.target.closest('[data-cancel]');
   const childButton = event.target.closest('[data-child]');
+  const messageButton = event.target.closest('[data-message]');
   if (cancelButton) { try { await request(`/api/tasks/${cancelButton.dataset.cancel}/cancel`, {}); } catch(error) { alert(error.message); } }
+  if (messageButton) {
+    selectedMessageTask = messageButton.dataset.message;
+    const task = state.tasks.find(t => t.id === selectedMessageTask);
+    $('#message-label').textContent = task ? `Task: ${task.prompt.slice(0,160)}` : '';
+    $('#message-text').value = '';
+    $('#message-dialog').showModal();
+    $('#message-text').focus();
+  }
   if (childButton) {
     selectedParent = childButton.dataset.child;
     const parent = state.tasks.find(t => t.id === selectedParent);
@@ -57,6 +67,15 @@ $('#tree').addEventListener('click', async event => {
     $('#child-dialog').showModal();
     $('#child-prompt').focus();
   }
+});
+$('#send-message').addEventListener('click', async event => {
+  event.preventDefault();
+  const message = $('#message-text').value.trim();
+  if (!message || !selectedMessageTask) return;
+  const button = $('#send-message'); button.disabled = true;
+  try { await request(`/api/tasks/${selectedMessageTask}/message`, { message }); $('#message-dialog').close(); }
+  catch(error) { alert(error.message); }
+  finally { button.disabled = false; }
 });
 $('#create-child').addEventListener('click', async event => {
   event.preventDefault();
