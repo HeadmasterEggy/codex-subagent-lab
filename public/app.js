@@ -7,6 +7,7 @@ let selectedParent = null;
 let selectedMessageTask = null;
 let activeFilter = 'all';
 let taskSearch = '';
+const collapsedTasks = new Set();
 let toastTimer;
 let connectionExpired = false;
 let connectionCheckPending = false;
@@ -20,6 +21,14 @@ function taskDepth(task) {
   let current = task;
   while (current?.parentId) { depth++; current = taskById(current.parentId); }
   return depth;
+}
+function isTaskDescendant(id, ancestorId) {
+  let current = taskById(id);
+  while (current?.parentId) {
+    if (current.parentId === ancestorId) return true;
+    current = taskById(current.parentId);
+  }
+  return false;
 }
 
 function matchingTaskIds() {
@@ -41,14 +50,30 @@ function visibleTaskIds(matches = matchingTaskIds()) {
   }
   return visible;
 }
-function taskTree(parentId = null, depth = 0, visible = visibleTaskIds(), matches = matchingTaskIds()) {
+function matchingAncestorIds(matches) {
+  const byId = new Map(state.tasks.map(task => [task.id, task]));
+  const ancestors = new Set();
+  for (const id of matches) {
+    let parent = byId.get(id)?.parentId ? byId.get(byId.get(id).parentId) : null;
+    while (parent && !ancestors.has(parent.id)) {
+      ancestors.add(parent.id);
+      parent = parent.parentId ? byId.get(parent.parentId) : null;
+    }
+  }
+  return ancestors;
+}
+function taskTree(parentId = null, depth = 0, visible = visibleTaskIds(), matches = matchingTaskIds(), matchingAncestors = matchingAncestorIds(matches)) {
   return state.tasks.filter(task => task.parentId === parentId && visible.has(task.id)).map(task => {
     const selected = task.id === selectedTaskId;
     const isContext = !matches.has(task.id);
-    const children = taskTree(task.id, depth + 1, visible, matches);
+    const hasChildren = state.tasks.some(item => item.parentId === task.id && visible.has(item.id));
     const childCount = state.tasks.filter(item => item.parentId === task.id).length;
+    const forcedExpanded = hasChildren && matchingAncestors.has(task.id);
+    const expanded = hasChildren && (!collapsedTasks.has(task.id) || forcedExpanded);
+    const children = expanded ? taskTree(task.id, depth + 1, visible, matches, matchingAncestors) : '';
     return `<div class="tree-node ${depth ? 'nested' : ''}" role="group">
       <div class="tree-entry ${selected ? 'selected' : ''} ${isContext ? 'context-task' : ''}">
+        ${hasChildren ? `<button class="tree-toggle" type="button" data-toggle-children="${escapeHtml(task.id)}" aria-expanded="${expanded}" aria-label="${forcedExpanded ? 'Expanded to show matching tasks' : `${expanded ? 'Collapse' : 'Expand'} ${childCount} child task${childCount === 1 ? '' : 's'}`}" title="${forcedExpanded ? 'Expanded to show matching tasks' : `${expanded ? 'Collapse' : 'Expand'} child tasks`}" ${forcedExpanded ? 'disabled' : ''}><span aria-hidden="true">${expanded ? '▾' : '▸'}</span></button>` : ''}
         <button class="tree-select" type="button" role="treeitem" aria-level="${depth + 1}" aria-selected="${selected}" aria-label="${escapeHtml(task.status)} agent: ${escapeHtml(task.prompt)}" data-select="${escapeHtml(task.id)}">
           <span class="tree-status ${escapeHtml(task.status)}">${statusIcon(task.status)}</span>
           <span class="tree-copy"><span class="tree-title">${escapeHtml(task.prompt)}</span><span class="tree-subline"><span class="status-label ${escapeHtml(task.status)}">${escapeHtml(task.status)}</span>${childCount ? `<span>${childCount} child${childCount === 1 ? '' : 'ren'}</span>` : ''}${task.pendingMessageCount ? `<span class="tree-inbox">↳ ${task.pendingMessageCount}</span>` : ''}</span></span>
@@ -87,7 +112,7 @@ function renderInspector() {
 }
 function render(next) {
   const focused = document.activeElement?.dataset ?? {};
-  const focusTarget = focused.select ? `[data-select="${CSS.escape(focused.select)}"]` : focused.child ? `[data-child="${CSS.escape(focused.child)}"]` : focused.message ? `[data-message="${CSS.escape(focused.message)}"]` : focused.cancel ? `[data-cancel="${CSS.escape(focused.cancel)}"]` : focused.jump ? `[data-jump="${CSS.escape(focused.jump)}"]` : null;
+  const focusTarget = focused.select ? `[data-select="${CSS.escape(focused.select)}"]` : focused.toggleChildren ? `[data-toggle-children="${CSS.escape(focused.toggleChildren)}"]` : focused.child ? `[data-child="${CSS.escape(focused.child)}"]` : focused.message ? `[data-message="${CSS.escape(focused.message)}"]` : focused.cancel ? `[data-cancel="${CSS.escape(focused.cancel)}"]` : focused.jump ? `[data-jump="${CSS.escape(focused.jump)}"]` : null;
   const treeScroll = $('#tree').scrollTop;
   const pageScroll = window.scrollY;
   state = next;
@@ -212,12 +237,21 @@ function openMessageDialog(id) {
   $('#message-label').textContent = task ? `Agent: ${task.prompt.slice(0,160)}` : '';
   $('#message-text').value = ''; $('#message-dialog').showModal(); $('#message-text').focus();
 }
+function expandTaskAncestors(id) {
+  const byId = new Map(state.tasks.map(task => [task.id, task]));
+  let current = byId.get(id);
+  while (current?.parentId) {
+    collapsedTasks.delete(current.parentId);
+    current = byId.get(current.parentId);
+  }
+}
 document.addEventListener('click', async event => {
   const cancelButton = event.target.closest('[data-cancel]');
   const childButton = event.target.closest('[data-child]');
   const messageButton = event.target.closest('[data-message]');
   const selectButton = event.target.closest('[data-select]');
   const jumpButton = event.target.closest('[data-jump]');
+  const toggleButton = event.target.closest('[data-toggle-children]');
   if (cancelButton) {
     try { await request(`/api/tasks/${cancelButton.dataset.cancel}/cancel`, {}); notify('Stop requested. Child agents continue independently.'); }
     catch(error) { notify(error.message, true); }
@@ -225,8 +259,17 @@ document.addEventListener('click', async event => {
   }
   if (childButton) { openChildDialog(childButton.dataset.child); return; }
   if (messageButton) { openMessageDialog(messageButton.dataset.message); return; }
-  if (selectButton) { selectedTaskId = selectButton.dataset.select; render(state); return; }
-  if (jumpButton) { selectedTaskId = jumpButton.dataset.jump; render(state); }
+  if (selectButton) { selectedTaskId = selectButton.dataset.select; expandTaskAncestors(selectedTaskId); render(state); return; }
+  if (jumpButton) { selectedTaskId = jumpButton.dataset.jump; expandTaskAncestors(selectedTaskId); render(state); return; }
+  if (toggleButton) {
+    const id = toggleButton.dataset.toggleChildren;
+    if (collapsedTasks.has(id)) collapsedTasks.delete(id);
+    else {
+      collapsedTasks.add(id);
+      if (selectedTaskId && selectedTaskId !== id && isTaskDescendant(selectedTaskId, id)) selectedTaskId = id;
+    }
+    render(state);
+  }
 });
 $('#send-message').addEventListener('click', async event => {
   event.preventDefault();
