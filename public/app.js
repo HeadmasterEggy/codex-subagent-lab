@@ -105,12 +105,24 @@ function renderInspector() {
   const canMessage = !isSample && ['queued','running'].includes(task.status);
   const canSpawnChild = !isSample && taskDepth(task) < 7;
   const canContinue = !isSample && task.canResume && ['completed','failed','cancelled','timed_out'].includes(task.status);
+  const terminalStatuses = ['completed','failed','cancelled','timed_out'];
+  const sessionState = !task.keepSession
+    ? { className:'ephemeral', label:'Ephemeral session', detail:'This run is not retained in Codex history.' }
+    : task.canResume && terminalStatuses.includes(task.status)
+      ? { className:'ready', label:'Follow-up ready', detail:'Codex returned a thread ID and this task can start a follow-up turn.' }
+      : task.canResume
+        ? { className:'retained', label:'Session retained · turn active', detail:'The current process owns the active turn; follow-up becomes available after it exits.' }
+        : task.status === 'queued'
+          ? { className:'pending', label:'Retention enabled · queued', detail:'A resumable Codex session is not available until the task starts and returns a thread ID.' }
+          : terminalStatuses.includes(task.status)
+            ? { className:'unavailable', label:'No resumable session', detail:'Retention was enabled, but no resumable thread ID was captured for this task.' }
+            : { className:'pending', label:'Session starting', detail:'Retention is enabled; waiting for Codex to return a thread ID.' };
   const events = (task.events ?? []).slice(-10).reverse();
   const inboxItems = task.recentMessages ?? [];
   $('#agent-detail').innerHTML = `<header class="detail-head">
       <div class="detail-kicker"><span class="eyebrow">AGENT INSPECTOR</span>${isSample ? '<span class="sample-tag">SAMPLE DATA</span>' : ''}<span class="agent-id">${escapeHtml(task.id.slice(0,10))}</span></div>
       <div class="detail-title-row"><span class="detail-status ${escapeHtml(task.status)}">${statusIcon(task.status)}</span><div class="detail-title-wrap"><h3>${escapeHtml(task.createdBy === 'agent' ? 'Delegated agent' : task.parentId ? 'Child agent' : 'Root agent')}</h3><span class="detail-status-text ${escapeHtml(task.status)}">${escapeHtml(task.status.replaceAll('_',' '))}</span></div></div>
-      <div class="detail-config-chips" aria-label="Agent configuration"><span class="config-model" title="Model: ${escapeHtml(task.model || 'Codex default')}">${escapeHtml(task.model || 'Codex default')}</span><span class="config-effort" title="Reasoning effort: ${escapeHtml(task.reasoningEffort || 'Codex default')}">${escapeHtml(task.reasoningEffort || 'Codex default')}</span><span class="config-timeout" title="Task runtime limit">${task.timeoutSeconds ? `limit ${durationLabel(task.timeoutSeconds * 1000)}` : 'no runtime limit'}</span></div>
+      <div class="detail-config-chips" aria-label="Agent configuration"><span class="config-model" title="Model: ${escapeHtml(task.model || 'Codex default')}">${escapeHtml(task.model || 'Codex default')}</span><span class="config-effort" title="Reasoning effort: ${escapeHtml(task.reasoningEffort || 'Codex default')}">${escapeHtml(task.reasoningEffort || 'Codex default')}</span><span class="config-timeout" title="Task runtime limit">${task.timeoutSeconds ? `limit ${durationLabel(task.timeoutSeconds * 1000)}` : 'no runtime limit'}</span><span class="session-chip ${sessionState.className}" title="${escapeHtml(sessionState.detail)}"><i aria-hidden="true"></i>${escapeHtml(sessionState.label)}</span></div>
       <p class="detail-prompt">${escapeHtml(task.prompt)}</p>
       <div class="detail-actions">${isSample ? '' : `${canMessage ? `<button class="secondary" type="button" data-message="${escapeHtml(task.id)}">↗ <span>Send message</span></button>` : ''}${canContinue ? `<button class="primary" type="button" data-followup="${escapeHtml(task.id)}">↻ Continue agent</button>` : ''}${canSpawnChild ? `<button class="primary" type="button" data-child="${escapeHtml(task.id)}"><span>＋</span> Add child</button>` : '<span class="depth-limit">Maximum depth reached</span>'}${canMessage ? `<button class="icon-control stop" type="button" data-cancel="${escapeHtml(task.id)}" aria-label="Stop this task" title="Stop task">■</button>` : ''}`}</div>
       <nav class="inspector-nav" aria-label="Jump to task details"><button type="button" data-inspector-target="context">Context</button><button type="button" data-inspector-target="links">Task links</button><button type="button" data-inspector-target="agent-mailbox">Mailbox</button><button type="button" data-inspector-target="output">Output</button><button type="button" data-inspector-target="activity">Activity</button></nav>
