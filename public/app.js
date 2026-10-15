@@ -10,6 +10,24 @@ let selectedParent = null;
 let selectedMessageTask = null;
 let mailboxScenario = 'before-final';
 let deliveryModelOpen = false;
+let boardWriteScenario = 'busy-clears';
+let toolExposureScenario = 'child-unknown';
+let toolExposureDisableMessages = false;
+let toolExposureWaitEnabled = true;
+let waitScopeScenario = 'nested-relay';
+let residencyScenario = 'completed-followup';
+let interruptCloseScenario = 'interrupt-resident';
+let admissionScenario = 'sequential';
+let topologyScenario = 'panel-open';
+let fullFidelityScenario = 'background';
+let rendererDeltaScenario = 'conversation-missing';
+let completionPayloadScenario = 'parent-input';
+let spawnConfigMode = 'fresh-v2';
+let spawnConfigModelSource = 'inherited';
+let spawnConfigRole = false;
+let spawnProtocolVersion = 'v2';
+let spawnProtocolOutcome = 'success';
+let terminalScenario = 'completed';
 let activeFilter = 'all';
 let taskSearch = '';
 const collapsedTasks = new Set();
@@ -72,6 +90,153 @@ function matchingAncestorIds(matches) {
     }
   }
   return ancestors;
+}
+
+function spawnConfigMarkup() {
+  const mode = spawnConfigMode;
+  const isFork = mode !== 'fresh-v2';
+  const isV2 = mode !== 'full-fork-v1';
+  const rejected = mode === 'full-fork-v1' && spawnConfigRole;
+  const roleStageRuns = !isFork || (isV2 && spawnConfigRole);
+  const implicitDefaultRole = mode === 'fresh-v2' && !spawnConfigRole;
+  const roleMayOverlay = roleStageRuns && (spawnConfigRole || implicitDefaultRole);
+  const sourceModel = {
+    inherited: 'invoking turn model',
+    configured: 'configured subagent default',
+    explicit: 'explicit spawn request'
+  }[spawnConfigModelSource];
+  const modelResult = roleMayOverlay ? 'role config may replace model' : sourceModel;
+  const developerBase = isV2 ? 'V2 subagent instructions, else parent turn' : 'parent turn instructions';
+  const developerResult = rejected ? 'not created' : spawnConfigRole
+    ? (isFork ? `role instructions; ${developerBase} restored only if unset` : 'role instructions overlay inherited instructions')
+    : implicitDefaultRole
+      ? `${developerBase}; configured default role may overlay`
+      : developerBase;
+  const roleStageTitle = rejected ? 'reject before role application' :
+    implicitDefaultRole ? 'resolve implicit default role' :
+    spawnConfigRole ? 'explicit role overlay applied' :
+    mode === 'full-fork-v1' ? 'role stage skipped; inherit fork role' :
+    'role stage skipped';
+  const roleStageDetail = rejected ? 'V1 full-history fork rejects an agent_type/role override.' :
+    implicitDefaultRole ? 'Fresh V2 resolves `default`; a configured role file may add overrides.' :
+    spawnConfigRole ? 'A named role may override model, reasoning, instructions and related config.' :
+    mode === 'full-fork-v1' ? 'V1 full-history fork inherits the parent agent type and skips role application.' :
+    'Full-history V2 applies a role only when one was explicitly named.';
+  const scenarioTitle = rejected ? 'REJECTED · V1 full-history fork cannot override role' :
+    mode === 'full-fork-v2' ? 'V2 full-history fork' :
+    mode === 'full-fork-v1' ? 'V1 full-history fork' : 'Fresh child thread';
+  return `<section class="spawn-config-trace" aria-labelledby="spawn-config-title" data-config-mode="${mode}">
+    <div class="spawn-config-heading"><div><span class="spawn-config-eyebrow">CHILD CONFIG · PRECEDENCE TRACE</span><h5 id="spawn-config-title">Child configuration is rebuilt from the live parent turn</h5></div><span>public main · 7ae8319</span></div>
+    <p class="spawn-config-intro">选择 spawn 分支和输入来源，沿源码顺序查看继承、覆盖与拒绝边界。此图展示静态规则，不读取当前 Codex 会话的 resolved config。</p>
+    <div class="spawn-config-controls">
+      <div role="group" aria-label="Spawn configuration path"><button type="button" data-spawn-config-mode="fresh-v2" aria-pressed="${mode === 'fresh-v2'}">Fresh V2</button><button type="button" data-spawn-config-mode="full-fork-v2" aria-pressed="${mode === 'full-fork-v2'}">Full-history V2</button><button type="button" data-spawn-config-mode="full-fork-v1" aria-pressed="${mode === 'full-fork-v1'}">Full-history V1</button></div>
+      <div role="group" aria-label="Model source"><button type="button" data-spawn-model-source="inherited" aria-pressed="${spawnConfigModelSource === 'inherited'}">Inherit</button><button type="button" data-spawn-model-source="configured" aria-pressed="${spawnConfigModelSource === 'configured'}">Configured default</button><button type="button" data-spawn-model-source="explicit" aria-pressed="${spawnConfigModelSource === 'explicit'}">Explicit request</button></div>
+      <label><input type="checkbox" data-spawn-role ${spawnConfigRole ? 'checked' : ''}><span>Request an explicit role</span></label>
+    </div>
+    <div class="spawn-config-path" data-rejected="${rejected}" aria-live="polite">
+      <article><span>01 · SNAPSHOT</span><strong>Clone parent config</strong><small>Base for child; avoid stale values by refreshing live-turn state.</small></article><i aria-hidden="true">→</i>
+      <article><span>02 · LIVE TURN</span><strong>model · provider · reasoning</strong><small>Also refreshes approval policy, reviewer, cwd and permission-profile snapshot.</small></article><i aria-hidden="true">→</i>
+      <article class="spawn-config-selected"><span>03 · MODEL PRECEDENCE</span><strong>${sourceModel}</strong><small>Explicit request wins over configured subagent default; model and reasoning are validated.</small></article><i aria-hidden="true">→</i>
+      <article class="${roleMayOverlay ? 'spawn-config-role' : ''}"><span>04 · ROLE LAYER</span><strong>${roleStageTitle}</strong><small>${roleStageDetail}</small></article><i aria-hidden="true">→</i>
+      <article class="spawn-config-final"><span>05 · FINAL CHILD CONFIG</span><strong>${rejected ? 'not created' : modelResult}</strong><small>Developer instructions: ${developerResult}. Service tier is applied; runtime authority is re-applied.</small></article>
+    </div>
+    <div class="spawn-config-invariants"><span><b>CONTEXT LIMITS</b> feature may clear inherited context-window/auto-compact overrides</span><span><b>TOKEN BUDGET</b> restored from configured preference snapshot</span><span><b>BASE INSTRUCTIONS</b> newly spawned child receives text + provenance; resume reload keeps them sourced from rollout metadata</span></div>
+    <p class="spawn-config-boundary">The diagram does not imply a child receives the parent’s identity or all live session state. Fresh V2 resolves the default role when no role is named; whether that changes config depends on the active role declaration and file. This is a static rule trace, not a resolved session config.</p>
+    <p class="spawn-config-sources"><a href="https://github.com/openai/codex/blob/7ae831991792744434027c431dfbc7e81dd5c12c/codex-rs/core/src/agent/child_config.rs#L51-L100" target="_blank" rel="noreferrer">spawn precedence</a> · <a href="https://github.com/openai/codex/blob/7ae831991792744434027c431dfbc7e81dd5c12c/codex-rs/core/src/agent/child_config.rs#L103-L200" target="_blank" rel="noreferrer">snapshot and runtime refresh</a> · <a href="https://github.com/openai/codex/blob/7ae831991792744434027c431dfbc7e81dd5c12c/codex-rs/core/src/agent/child_config.rs#L204-L324" target="_blank" rel="noreferrer">model validation and role stage</a> · <a href="https://github.com/openai/codex/blob/7ae831991792744434027c431dfbc7e81dd5c12c/codex-rs/core/src/agent/role.rs#L51-L67" target="_blank" rel="noreferrer">default role resolution</a> · <a href="https://github.com/openai/codex/blob/7ae831991792744434027c431dfbc7e81dd5c12c/codex-rs/core/src/agent/role.rs#L69-L160" target="_blank" rel="noreferrer">role config overlay</a></p>
+  </section>`;
+}
+function selectSpawnConfigOption(kind, value) {
+  if (kind === 'mode') spawnConfigMode = ['full-fork-v2','full-fork-v1'].includes(value) ? value : 'fresh-v2';
+  if (kind === 'model') spawnConfigModelSource = ['configured','explicit'].includes(value) ? value : 'inherited';
+  if (kind === 'role') spawnConfigRole = Boolean(value);
+  const panel = $('.spawn-config-trace');
+  if (panel) panel.outerHTML = spawnConfigMarkup();
+}
+function spawnProtocolMarkup() {
+  const v2 = spawnProtocolVersion === 'v2';
+  const failed = spawnProtocolOutcome === 'prepare-failure';
+  const stages = v2
+    ? [
+      ['01 · INVOCATION', 'Parse V2 arguments', 'Required: task_name + message. fork_turns defaults to all; `fork_context` is rejected.'],
+      ['02 · PREPARE', failed ? 'Config preparation fails' : 'Prepare child config', failed ? 'Returns a tool error before a child thread is created.' : 'Resolve model/role, construct task source, and choose fork history.'],
+      ['03 · THREAD SPAWN', failed ? 'not reached' : 'thread_spawn(...)', failed ? 'No child thread or Started activity from this handler.' : 'Create the child thread and admit its initial TriggerTurn message.'],
+      ['04 · ACTIVITY', failed ? 'no Started activity' : 'emit Started activity', failed ? 'The activity is emitted only after successful thread creation.' : 'Includes the child thread id and canonical task path.'],
+      ['05 · CALL ANALYTICS', failed ? 'track Failed call' : 'track completed call', 'The outer V2 executor records the call after the handler returns.']
+    ]
+    : [
+      ['01 · INVOCATION', 'Parse V1 arguments', 'Accepts message or structured items; `fork_context` is a boolean.'],
+      ['02 · TURN ITEM', 'Emit InProgress call item', 'This happens before child config preparation.'],
+      ['03 · PREPARE', failed ? 'Config preparation fails' : 'Prepare child config', failed ? 'Returns early with a tool error; this handler does not emit its completion item.' : 'Resolve model/role and refresh live parent-turn policy.'],
+      ['04 · AGENT CONTROL', failed ? 'not reached' : 'agent_control.spawn(...)', failed ? 'No child thread is requested.' : 'Create child thread and send initial user input.'],
+      ['05 · TURN ITEM', failed ? 'remains InProgress here' : 'Emit completed call item', failed ? 'The earlier InProgress item was already emitted; this path returns before the completion emission.' : 'Adds receiver identity and resulting agent status.']
+    ];
+  const mode = failed ? 'prepare-failure' : 'success';
+  return `<section class="spawn-protocol-trace" aria-labelledby="spawn-protocol-title" data-version="${spawnProtocolVersion}" data-outcome="${mode}">
+    <div class="spawn-protocol-heading"><div><span class="spawn-protocol-eyebrow">SPAWN CALL · EVENT ORDER TRACE</span><h5 id="spawn-protocol-title">When does a spawn become visible?</h5></div><span>public main · 7ae8319</span></div>
+    <p class="spawn-protocol-intro">比较两代 handler 的输入契约、创建顺序与失败时留下的记录。这里追踪源码中的事件顺序，不代表 UI 一定已渲染或用户一定看见。</p>
+    <div class="spawn-protocol-controls">
+      <div role="group" aria-label="Select spawn protocol version"><button type="button" data-spawn-protocol-version="v1" aria-pressed="${!v2}">V1 · multi_agent_v1</button><button type="button" data-spawn-protocol-version="v2" aria-pressed="${v2}">V2 · task tree</button></div>
+      <div role="group" aria-label="Select spawn result"><button type="button" data-spawn-protocol-outcome="success" aria-pressed="${!failed}">Preparation succeeds</button><button type="button" data-spawn-protocol-outcome="prepare-failure" aria-pressed="${failed}">Preparation fails</button></div>
+    </div>
+    <div class="spawn-protocol-input"><span>TOOL INPUT SHAPE</span><strong>${v2 ? 'task_name + message required' : 'message or structured items'}</strong><small>${v2 ? 'fork_turns: none / all / positive count; omitted defaults to all' : 'agent_type, model, reasoning_effort and fork_context are optional'}</small></div>
+    <div class="spawn-protocol-flow" aria-live="polite">${stages.map(([label,title,detail],index) => `<article class="spawn-protocol-step ${failed && ((v2 && index === 1) || (!v2 && index === 2)) ? 'failed' : ''} ${failed && index > (v2 ? 1 : 2) ? 'not-reached' : ''}"><span>${label}</span><strong>${title}</strong><small>${detail}</small></article>${index < stages.length-1 ? '<i aria-hidden="true">→</i>' : ''}`).join('')}</div>
+    <p class="spawn-protocol-boundary">V1 config-preparation failure occurs after an InProgress turn item was emitted and returns before this handler emits its completion item. V2 config-preparation failure is recorded by the outer executor as a failed tool call; the Started activity follows successful thread creation. Static source ordering only: no live Desktop event stream or rendered React state was captured.</p>
+    <p class="spawn-protocol-sources"><a href="https://github.com/openai/codex/blob/7ae831991792744434027c431dfbc7e81dd5c12c/codex-rs/core/src/tools/handlers/multi_agents/spawn.rs#L53-L190" target="_blank" rel="noreferrer">V1 handler and turn items</a> · <a href="https://github.com/openai/codex/blob/7ae831991792744434027c431dfbc7e81dd5c12c/codex-rs/core/src/tools/handlers/multi_agents_v2/spawn.rs#L43-L240" target="_blank" rel="noreferrer">V2 handler and analytics</a> · <a href="https://github.com/openai/codex/blob/7ae831991792744434027c431dfbc7e81dd5c12c/codex-rs/core/src/tools/handlers/multi_agents_spec.rs#L65-L145" target="_blank" rel="noreferrer">tool schemas</a> · <a href="https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#spawn-call-records-have-different-failure-ordering-in-v1-and-v2-2026-10-16" target="_blank" rel="noreferrer">evidence ledger</a></p>
+  </section>`;
+}
+function selectSpawnProtocol(key, value) {
+  if (key === 'version') spawnProtocolVersion = value === 'v1' ? 'v1' : 'v2';
+  if (key === 'outcome') spawnProtocolOutcome = value === 'prepare-failure' ? 'prepare-failure' : 'success';
+  const panel = $('.spawn-protocol-trace');
+  if (panel) panel.outerHTML = spawnProtocolMarkup();
+}
+function terminalLifecycleMarkup() {
+  const scenarios = {
+    completed: {
+      title: 'TurnComplete · no error', status: 'Completed(last_agent_message)', final: 'yes',
+      activity: 'Completed activity may be emitted', result: 'Formatted child result queued to structural parent',
+      note: 'Completed activity targets the initiating thread when parent-turn metadata and initiator resolution are available. Result delivery is a separate queue-only message with trigger_turn=false.'
+    },
+    errored: {
+      title: 'TurnComplete(error) / terminal error', status: 'Errored(error)', final: 'yes',
+      activity: 'No Completed activity', result: 'Error result + next-action guidance queued',
+      note: 'The completion activity is gated on Completed status. Error status is terminal, so the formatted result can still be queued for the structural parent.'
+    },
+    interrupted: {
+      title: 'TurnAborted · Interrupted or BudgetLimited', status: 'Interrupted', final: 'no',
+      activity: 'No terminal Completed activity', result: 'No terminal result message',
+      note: 'Interrupted is excluded by is_final. A successful explicit interrupt_agent call can separately emit an Interrupted activity; that activity is not proof the child produced a result.'
+    },
+    guardian: {
+      title: 'TurnAborted · Guardian TooManyDenials', status: 'Child remains Interrupted', final: 'parent route treats outcome as Errored',
+      activity: 'No Completed activity', result: 'Guardian safety-stop message queued',
+      note: 'Special case: the child status is not rewritten, but the parent receives a Guardian-specific result with recovery guidance.'
+    }
+  };
+  const s = scenarios[terminalScenario] ?? scenarios.completed;
+  const ids = Object.keys(scenarios);
+  const labels = {completed:'Completed', errored:'Errored', interrupted:'Interrupted', guardian:'Guardian stop'};
+  const selectedIndex = ids.indexOf(terminalScenario);
+  const stages = [
+    ['01 · CHILD EVENT', s.title, 'Session emits terminal turn event'],
+    ['02 · STATUS', s.status, `is_final = ${s.final}`],
+    ['03 · ACTIVITY STREAM', s.activity, 'Typed activity is separate from the result payload'],
+    ['04 · PARENT INBOX', s.result, 'Queue acceptance does not prove parent-model consumption']
+  ];
+  return `<section class="terminal-lifecycle" aria-labelledby="terminal-lifecycle-title" data-scenario="${terminalScenario}">
+    <div class="terminal-lifecycle-heading"><div><span class="terminal-lifecycle-eyebrow">V2 · TERMINAL TURN ROUTING</span><h5 id="terminal-lifecycle-title">A child ending can produce different parent signals</h5></div><span>public main · 111362a</span></div>
+    <p class="terminal-lifecycle-intro">切换终态分支，查看 child status、activity stream 和 parent inbox 的分流。状态事件、UI 活动卡片和发给父线程的结果消息不是同一件事。</p>
+    <div class="terminal-lifecycle-controls" role="group" aria-label="Choose a V2 child terminal outcome">${ids.map(id => `<button type="button" data-terminal-scenario="${id}" aria-pressed="${terminalScenario === id}">${labels[id]}</button>`).join('')}</div>
+    <div class="terminal-lifecycle-map" aria-live="polite">${stages.map(([eyebrow,title,detail], i) => `<article class="terminal-lifecycle-node node-${i+1}"><span>${eyebrow}</span><strong>${title}</strong><small>${detail}</small></article>${i < stages.length - 1 ? '<i aria-hidden="true">→</i>' : ''}`).join('')}</div>
+    <div class="terminal-lifecycle-note"><b>PATH DETAIL</b><span>${s.note}</span></div>
+    <p class="terminal-lifecycle-boundary">This is a static source trace, not a captured live Desktop event stream. A successful send means the parent accepted queued input; it does not prove its model has read or acted on it.</p>
+    <p class="terminal-lifecycle-sources"><a href="https://github.com/openai/codex/blob/111362a6a0a92d08885b1ae62d3760714907ad94/codex-rs/core/src/agent/status.rs#L6-L30" target="_blank" rel="noreferrer">status mapping and finality</a> · <a href="https://github.com/openai/codex/blob/111362a6a0a92d08885b1ae62d3760714907ad94/codex-rs/core/src/session/mod.rs#L2504-L2572" target="_blank" rel="noreferrer">V2 terminal callback</a> · <a href="https://github.com/openai/codex/blob/111362a6a0a92d08885b1ae62d3760714907ad94/codex-rs/core/src/agent/control/completion.rs#L27-L154" target="_blank" rel="noreferrer">parent activity and result routing</a> · <a href="https://github.com/openai/codex/blob/111362a6a0a92d08885b1ae62d3760714907ad94/codex-rs/core/src/tools/handlers/multi_agents_v2/interrupt_agent.rs#L48-L76" target="_blank" rel="noreferrer">explicit interrupt activity</a></p>
+  </section>`;
+}
+function selectTerminalScenario(value) {
+  terminalScenario = ['errored','interrupted','guardian'].includes(value) ? value : 'completed';
+  const panel = $('.terminal-lifecycle');
+  if (panel) panel.outerHTML = terminalLifecycleMarkup();
 }
 function renderConcurrencyTimeline(task, parent, children) {
   const participants = [...new Map([parent, task, ...children].filter(Boolean).map(item => [item.id, item])).values()];
@@ -168,17 +333,247 @@ function renderInteractionSequence(task, parent, children, interactionItems) {
       const targetY = 20 + laneIndex.get(item.targetId) * laneHeight;
       const middleY = (y + targetY) / 2;
       const path = `M ${x} ${y} Q ${x + 12} ${middleY} ${x} ${targetY}`;
-      return `<g class="sequence-plot-event ${kind}"><title>${escapeHtml(title)}</title><path class="sequence-handoff-line" d="${path}" marker-end="url(#sequence-arrow)"/><circle class="sequence-plot-mark" cx="${x}" cy="${y}" r="8"/><text class="sequence-plot-number" x="${x}" y="${y + 2.5}">${number.slice(-2)}</text><circle class="sequence-plot-target" cx="${x}" cy="${targetY}" r="3"/></g>`;
+      return `<g class="sequence-plot-event ${kind}" data-sequence-index="${index + 1}" role="button" tabindex="0" aria-label="${escapeHtml(title)} · Select event"><title>${escapeHtml(title)}</title><path class="sequence-handoff-line" d="${path}" marker-end="url(#sequence-arrow)"/><circle class="sequence-plot-mark" cx="${x}" cy="${y}" r="8"/><text class="sequence-plot-number" x="${x}" y="${y + 2.5}">${number.slice(-2)}</text><circle class="sequence-plot-target" cx="${x}" cy="${targetY}" r="3"/></g>`;
     }
-    return `<g class="sequence-plot-event ${kind}"><title>${escapeHtml(title)}</title><line class="sequence-event-tick" x1="${x}" x2="${x}" y1="${y - 10}" y2="${y + 10}"/><circle class="sequence-plot-mark" cx="${x}" cy="${y}" r="8"/><text class="sequence-plot-number" x="${x}" y="${y + 2.5}">${number.slice(-2)}</text></g>`;
+    return `<g class="sequence-plot-event ${kind}" data-sequence-index="${index + 1}" role="button" tabindex="0" aria-label="${escapeHtml(title)} · Select event"><title>${escapeHtml(title)}</title><line class="sequence-event-tick" x1="${x}" x2="${x}" y1="${y - 10}" y2="${y + 10}"/><circle class="sequence-plot-mark" cx="${x}" cy="${y}" r="8"/><text class="sequence-plot-number" x="${x}" y="${y + 2.5}">${number.slice(-2)}</text></g>`;
   }).join('');
   const rows = visible.map((item, index) => {
     const target = item.targetId ? taskById(item.targetId) : null;
     const excerpt = item.detail ? escapeHtml(item.detail.length > 180 ? `${item.detail.slice(0,177)}…` : item.detail) : '';
     const sequenceNumber = ordered.length - visible.length + index + 1;
-    return `<li class="sequence-event ${escapeHtml(item.kind)}"><time datetime="${escapeHtml(item.at)}">${escapeHtml(when(item.at))}</time><span class="sequence-mark" aria-hidden="true"></span><div class="sequence-copy"><div class="sequence-meta"><strong>${escapeHtml(item.label)}</strong><span>${escapeHtml(actorName(item.actorId))}${target ? ` → ${escapeHtml(actorName(target.id))}` : ''}</span></div>${excerpt ? `<p>${excerpt}</p>` : ''}</div><span class="sequence-index">${String(sequenceNumber).padStart(2,'0')}</span></li>`;
+    const route = `${actorName(item.actorId)}${target ? ` → ${actorName(target.id)}` : ''}`;
+    return `<li><div class="sequence-event ${escapeHtml(item.kind)}" data-sequence-index="${index + 1}" role="button" tabindex="0" aria-label="${sequenceNumber} · ${escapeHtml(item.label)} · ${escapeHtml(route)} · Select event"><time datetime="${escapeHtml(item.at)}">${escapeHtml(when(item.at))}</time><span class="sequence-mark" aria-hidden="true"></span><div class="sequence-copy"><div class="sequence-meta"><strong>${escapeHtml(item.label)}</strong><span>${escapeHtml(route)}</span></div>${excerpt ? `<p>${excerpt}</p>` : ''}</div><span class="sequence-index">${String(sequenceNumber).padStart(2,'0')}</span></div></li>`;
   }).join('');
-  return `<section class="interaction-sequence" aria-label="Chronological parent and child interaction sequence"><div class="sequence-heading"><div><span class="sequence-eyebrow">EVENT ORDER</span><h5>Lifecycle and handoffs</h5></div><span>${ordered.length} recorded</span></div><div class="sequence-plot-scroll"><svg class="sequence-plot" viewBox="0 0 ${chartWidth} ${chartHeight}" role="img" aria-label="Swimlane diagram of the latest ${visible.length} events across ${laneTasks.length} agents"><defs><marker id="sequence-arrow" markerWidth="5" markerHeight="5" refX="3" refY="2.5" orient="auto"><path d="M0,0 L5,2.5 L0,5"/></marker></defs>${laneMarkup}${eventMarkup}</svg></div><div class="sequence-legend"><span><i class="legend-lifecycle"></i> lifecycle</span><span><i class="legend-message"></i> message handoff</span><span><i class="legend-result"></i> child result</span></div><ol class="sequence-list">${rows}</ol><p>Times combine Lab task/mailbox records with captured CLI events. Swimlane spacing shows event order, not elapsed-time scale. “Supplied” means the coordinator included the inbox item in a task-tool call; model interpretation is not observable here.${ordered.length > visible.length ? ` Showing the latest ${visible.length} of ${ordered.length} recorded events.` : ''}</p></section>`;
+  return `<section class="interaction-sequence" data-sequence-step="${visible.length}" aria-label="Chronological parent and child interaction sequence"><div class="sequence-heading"><div><span class="sequence-eyebrow">EVENT ORDER</span><h5>Lifecycle and handoffs</h5></div><span>${ordered.length} recorded</span></div><div class="sequence-plot-scroll"><svg class="sequence-plot" viewBox="0 0 ${chartWidth} ${chartHeight}" role="group" aria-label="Swimlane diagram. Activate a numbered event to select it."><defs><marker id="sequence-arrow" markerWidth="5" markerHeight="5" refX="3" refY="2.5" orient="auto"><path d="M0,0 L5,2.5 L0,5"/></marker></defs>${laneMarkup}${eventMarkup}</svg></div><div class="sequence-legend"><span><i class="legend-lifecycle"></i> lifecycle</span><span><i class="legend-message"></i> message handoff</span><span><i class="legend-result"></i> child result</span></div><p class="sequence-interaction-hint">Select a numbered marker or event row to jump to that step.</p><div class="sequence-scrubber"><button type="button" data-sequence-move="-1" aria-label="Previous event">←</button><label><span>TRACE STEP</span><input type="range" min="1" max="${visible.length}" value="${visible.length}" aria-label="Select event in chronological sequence"></label><button type="button" data-sequence-move="1" aria-label="Next event">→</button><output class="sequence-step-readout" aria-live="polite">${visible.length} / ${visible.length} · ${escapeHtml(visible.at(-1).label)}</output></div><ol class="sequence-list">${rows}</ol><p>Times combine Lab task/mailbox records with captured CLI events. Swimlane spacing shows event order, not elapsed-time scale. “Supplied” means the coordinator included the inbox item in a task-tool call; model interpretation is not observable here.${ordered.length > visible.length ? ` Showing the latest ${visible.length} of ${ordered.length} recorded events.` : ''}</p></section>`;
+}
+function updateSequenceStep(container, value) {
+  if (!container) return;
+  const range = container.querySelector('input[type="range"]');
+  const max = Number(range?.max) || 1;
+  const step = Math.max(1, Math.min(max, Number(value) || 1));
+  container.dataset.sequenceStep = String(step);
+  if (range) range.value = String(step);
+  container.querySelectorAll('[data-sequence-index]').forEach(item => {
+    const index = Number(item.dataset.sequenceIndex);
+    item.classList.toggle('is-current', index === step);
+    item.classList.toggle('is-future', index > step);
+    if (item.classList.contains('sequence-event')) {
+      if (index === step) item.setAttribute('aria-current', 'step');
+      else item.removeAttribute('aria-current');
+    }
+  });
+  const current = container.querySelector(`.sequence-event[data-sequence-index="${step}"] strong`);
+  const output = container.querySelector('.sequence-step-readout');
+  const label = current?.textContent ?? 'event';
+  if (output) output.textContent = `${step} / ${max} · ${label}`;
+  if (range) range.setAttribute('aria-valuetext', `${step} of ${max}: ${label}`);
+}
+function renderDesktopGate() {
+  return `<section class="desktop-gate" aria-label="Static Codex Desktop subagent interaction gate"><div class="desktop-gate-heading"><div><span class="desktop-gate-eyebrow">DESKTOP BUNDLE · STATIC TRACE</span><h5>Why a child row can open an interactive thread</h5></div><span>26.1007.71326</span></div><p class="desktop-gate-intro">Select the parent-thread evidence. The local selector folds these items into a <code>canInteract</code> hint before the Subagents panel opens a child.</p><div class="desktop-gate-cases" role="group" aria-label="Select parent-thread evidence scenario"><button type="button" data-desktop-case="same-turn" aria-pressed="true">spawnAgent in this turn</button><button type="button" data-desktop-case="activity-only" aria-pressed="false">Activity only</button><button type="button" data-desktop-case="prior-turn" aria-pressed="false">Spawn was in prior turn</button></div><div class="desktop-gate-flow" data-case="same-turn" aria-live="polite"><article class="desktop-gate-node"><small>PARENT TURN EVIDENCE</small><strong data-gate-evidence>collabAgentToolCall · spawnAgent</strong><span data-gate-scope>matching child reference in this parent turn</span></article><i aria-hidden="true">→</i><article class="desktop-gate-node gate-selector"><small>LOCAL ROW SELECTOR</small><strong>Dat → kat</strong><span>fold evidence into child row</span></article><i aria-hidden="true">→</i><article class="desktop-gate-node gate-outcome"><small data-gate-flag>canInteract = true</small><strong data-gate-outcome>interactive thread route</strong><span data-gate-effect>composer may be available; resume hook can be eligible</span></article></div><p class="desktop-gate-boundary" data-gate-boundary>UI routing hint only. It does not establish server authorization, a live child process, or that a resume actually occurs.</p><p class="desktop-gate-source">Inspected asset SHA-256: <code>c002f1b37cb1…ca528f</code> · <a href="https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md" target="_blank" rel="noreferrer">research ledger and evidence notes</a></p></section>`;
+}
+function fullFidelityMarkup() {
+  const scenarios = {
+    background: { surfaces: '0 active surfaces', status: 'BLOCKED', detail: 'The child ID may be known, but the connection has no registered full-fidelity surface for this child.', windows: 'No child delta is forwarded to Desktop windows by this gate.', count: '0' },
+    selected: { surfaces: '1 active surface', status: 'OPEN', detail: 'The child ID is registered and at least one surface is registered for that same child.', windows: 'Allowed notifications are broadcast to all live windows; registration is not a per-window delivery filter.', count: '1' },
+    shared: { surfaces: '2 → 1 → 0 surfaces', status: 'OPEN → OPEN → BLOCKED', detail: 'Removing one surface leaves the child eligible while another remains. Removing the last surface closes the gate.', windows: 'The gate is keyed by child ID and stays open while its surface set is non-empty.', count: '2 → 1 → 0' }
+  };
+  const scenario = scenarios[fullFidelityScenario] ?? scenarios.background;
+  const events = ['item/agentMessage/delta','item/plan/delta','item/reasoning/summaryTextDelta','item/reasoning/textDelta','item/commandExecution/outputDelta'];
+  return `<section class="fidelity-map" aria-labelledby="fidelity-title">
+    <div class="fidelity-heading"><div><span class="fidelity-eyebrow">DESKTOP BUNDLE · STATIC FORWARDING TRACE</span><h5 id="fidelity-title">When do child deltas reach the renderer?</h5></div><span>26.1007.71326</span></div>
+    <p class="fidelity-intro">Two independent facts must hold on the Electron connection: the child thread ID is known, and at least one full-fidelity surface is registered for that child.</p>
+    <div class="fidelity-controls" role="group" aria-label="Choose a child full-fidelity surface scenario">
+      <button type="button" data-fidelity-case="background" aria-pressed="${fullFidelityScenario === 'background'}">Background child</button>
+      <button type="button" data-fidelity-case="selected" aria-pressed="${fullFidelityScenario === 'selected'}">One surface</button>
+      <button type="button" data-fidelity-case="shared" aria-pressed="${fullFidelityScenario === 'shared'}">Two surfaces</button>
+    </div>
+    <div class="fidelity-flow" data-case="${fullFidelityScenario}" aria-live="polite">
+      <article class="fidelity-node"><span>CONNECTION CHILD SET</span><strong>child ID registered</strong><small>Observed insertion path: qualifying <code>thread/started</code></small></article><i aria-hidden="true">+</i>
+      <article class="fidelity-node"><span>PER-CHILD SURFACE SET</span><strong>${scenario.surfaces}</strong><small>${scenario.detail}</small></article><i aria-hidden="true">→</i>
+      <article class="fidelity-node fidelity-gate"><span>FIVE DELTA FILTER</span><strong>${scenario.status}</strong><small>Forwarding eligibility for this child</small></article>
+    </div>
+    <div class="fidelity-events"><span>FILTERED EVENT FAMILIES</span>${events.map(name => `<code>${name}</code>`).join('')}</div>
+    <p class="fidelity-outcome"><b>${scenario.count} SURFACE SCENARIO</b>${scenario.windows}</p>
+    <p class="fidelity-boundary">This is a client-side forwarding gate. Earlier server event handling may already have occurred. A forwarded delta can still be ignored unless the renderer has the conversation and a matching item/type loaded. Static bundle evidence only; it does not establish a live event or visible transcript update.</p>
+    <p class="fidelity-sources"><a href="https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#follow-up-parent-activity-discovery-and-full-fidelity-forwarding-use-separate-client-gates" target="_blank" rel="noreferrer">child registration and Desktop gate</a> · <a href="https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#renderer-handling-after-full-fidelity-ipc-broadcast" target="_blank" rel="noreferrer">renderer delta merge behavior</a></p>
+  </section>`;
+}
+function selectFullFidelityScenario(scenarioName) {
+  const container = $('.fidelity-map');
+  if (!container) return;
+  fullFidelityScenario = ['background','selected','shared'].includes(scenarioName) ? scenarioName : 'background';
+  container.outerHTML = fullFidelityMarkup();
+}
+function rendererDeltaMarkup() {
+  const scenarios = {
+    'conversation-missing': { conversation:'NOT IN THIS RENDERER', item:'NOT LOOKED UP', result:'DROP GROUP', tone:'dropped', detail:'Flush cannot resolve the conversation (or it has no canonical history/turns), so this renderer skips the queued delta group.' },
+    'item-missing': { conversation:'FOUND · HISTORY PRESENT', item:'NO MATCHING ITEM ID + TYPE', result:'NO ITEM PATCH', tone:'filtered', detail:'The conversation passes the first lookup, but the delta still needs a matching turn/item/type. Command output with no matching commandExecution item is dropped.' },
+    'item-matched': { conversation:'FOUND · HISTORY PRESENT', item:'TURN + ITEM ID/TYPE MATCH', result:'STORE UPDATED', tone:'applied', detail:'The matching local item is patched. This proves a store update path, not a React commit or visible paint.' }
+  };
+  const scenario = scenarios[rendererDeltaScenario] ?? scenarios['conversation-missing'];
+  return `<section class="renderer-delta" aria-labelledby="renderer-delta-title">
+    <div class="renderer-delta-heading"><div><span class="renderer-delta-eyebrow">RENDERER BUNDLE · STATIC MERGE TRACE</span><h5 id="renderer-delta-title">A broadcast can still disappear before the transcript updates</h5></div><span>26.1007.30912</span></div>
+    <p class="renderer-delta-intro">This is the receiving renderer's second gate, after the Desktop connection has allowed and broadcast a delta. Choose what its local conversation store contains.</p>
+    <div class="renderer-delta-controls" role="group" aria-label="Choose renderer delta merge scenario">
+      <button type="button" data-renderer-delta="conversation-missing" aria-pressed="${rendererDeltaScenario === 'conversation-missing'}">Conversation missing</button>
+      <button type="button" data-renderer-delta="item-missing" aria-pressed="${rendererDeltaScenario === 'item-missing'}">Item missing</button>
+      <button type="button" data-renderer-delta="item-matched" aria-pressed="${rendererDeltaScenario === 'item-matched'}">Item matches</button>
+    </div>
+    <div class="renderer-delta-flow" data-case="${scenario.tone}" aria-live="polite">
+      <article class="renderer-delta-node"><span>IPC BROADCAST</span><strong>delta arrives</strong><small>Every live window listener receives the allowed notification</small></article><i aria-hidden="true">→</i>
+      <article class="renderer-delta-node"><span>CONVERSATION LOOKUP</span><strong>${scenario.conversation}</strong><small>Grouped by conversation ID; history/turn presence is checked</small></article><i aria-hidden="true">→</i>
+      <article class="renderer-delta-node"><span>ITEM MERGE</span><strong>${scenario.item}</strong><small>Text/output deltas target existing local turn items</small></article><i aria-hidden="true">→</i>
+      <article class="renderer-delta-node renderer-delta-result"><span>LOCAL OUTCOME</span><strong>${scenario.result}</strong><small>${scenario.detail}</small></article>
+    </div>
+    <p class="renderer-delta-boundary">Per-window broadcast is not per-window readiness. Missing conversation/history skips the group; missing item/type prevents a patch. Even “STORE UPDATED” is not proof of a React commit or visible paint. Static bundle analysis only.</p>
+    <p class="renderer-delta-source"><a href="https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#renderer-handling-after-full-fidelity-ipc-broadcast" target="_blank" rel="noreferrer">hashed renderer trace, queue flush and item merge evidence</a></p>
+  </section>`;
+}
+function selectRendererDeltaScenario(scenarioName) {
+  const container = $('.renderer-delta');
+  if (!container) return;
+  rendererDeltaScenario = ['conversation-missing','item-missing','item-matched'].includes(scenarioName) ? scenarioName : 'conversation-missing';
+  container.outerHTML = rendererDeltaMarkup();
+}
+function completionPayloadMarkup() {
+  const selected = completionPayloadScenario;
+  return `<section class="completion-payload" aria-labelledby="completion-payload-title">
+    <div class="completion-payload-heading"><div><span class="completion-payload-eyebrow">CHILD OUTPUT · THREE CONSUMERS</span><h5 id="completion-payload-title">One child, three different ways to read its output</h5></div><span>static source trace · Desktop build 26.1007.71326 + V2 snapshot 740e5af</span></div>
+    <p class="completion-payload-intro">Select a consumer to highlight its path. The parent receives a completion message, Work requests a compact final-response preview, and the local Codex panel hydrates a child transcript.</p>
+    <div class="completion-payload-controls" role="group" aria-label="Select child output consumer">
+      <button type="button" data-completion-payload="parent-input" aria-pressed="${selected === 'parent-input'}">Parent input</button>
+      <button type="button" data-completion-payload="work-panel" aria-pressed="${selected === 'work-panel'}">Work preview</button>
+      <button type="button" data-completion-payload="local-transcript" aria-pressed="${selected === 'local-transcript'}">Local transcript</button>
+    </div>
+    <div class="completion-payload-routes" data-route="${selected}" aria-live="polite">
+      <article class="completion-payload-route ${selected === 'parent-input' ? 'selected' : ''}">
+        <span class="completion-payload-route-label">RUNTIME · PARENT THREAD</span>
+        <ol><li><b>01</b><span><strong>Child turn finishes</strong><small>Assistant text is collected into a nonblank completion body; this source path does not filter by <code>final_answer</code> phase.</small></span></li>
+          <li><b>02</b><span><strong>Completion route</strong><small>Rendered text is sent as inter-agent communication to the structural parent, separately from the lifecycle activity.</small></span></li>
+          <li><b>03</b><span><strong>Typed history item</strong><small>The parent records a typed <code>AgentMessage</code>; scheduling metadata such as <code>trigger_turn</code> stays separate.</small></span></li>
+          <li><b>04</b><span><strong>Sampling boundary</strong><small>If retained by history projection and request policy, the item can enter a later model request.</small></span></li></ol>
+        <div class="completion-payload-result"><b>PROVEN UP TO</b><span>Serialized parent request path</span></div>
+      </article>
+      <article class="completion-payload-route ${selected === 'work-panel' ? 'selected' : ''}">
+        <span class="completion-payload-route-label">WORK UI · COMPLETED CHILD DETAIL</span>
+        <ol><li><b>01</b><span><strong>Select completed child</strong><small>The query is keyed by parent conversation, child thread and activation IDs.</small></span></li>
+          <li><b>02</b><span><strong>Fetch one turn</strong><small>The client requests the child’s latest turn data.</small></span></li>
+          <li><b>03</b><span><strong>Choose display text</strong><small>Scan items backwards: prefer the newest nonempty <code>agentMessage</code> with <code>phase=final_answer</code>; otherwise use the newest nonempty agent message.</small></span></li>
+          <li><b>04</b><span><strong>Render or retry</strong><small>If neither fetched text nor snapshot status text is available, the panel can show loading/unavailable.</small></span></li></ol>
+        <div class="completion-payload-result"><b>PROVEN UP TO</b><span>Client query and presentation rules</span></div>
+      </article>
+      <article class="completion-payload-route ${selected === 'local-transcript' ? 'selected' : ''}">
+        <span class="completion-payload-route-label">CODEX UI · LOCAL CHILD TRANSCRIPT</span>
+        <ol><li><b>01</b><span><strong>Open the selected child</strong><small>The local panel passes its child thread identity to the transcript owner; it does not use Work’s final-response query.</small></span></li>
+          <li><b>02</b><span><strong>Load turns and items</strong><small>The local history path can page turns, then hydrate the selected turn’s full items using item pages of 30 until no cursor remains.</small></span></li>
+          <li><b>03</b><span><strong>Project transcript blocks</strong><small>Typed subagent activity and collaboration items can become dedicated blocks, subject to the history option, projection budget and item rules such as skipping <code>wait</code>.</small></span></li>
+          <li><b>04</b><span><strong>Render transcript</strong><small>This path represents a projected child conversation, not a single extracted final-answer string.</small></span></li></ol>
+        <div class="turn-index-callout" aria-label="Turn-scoped item pagination in public Codex main">
+          <span>STORAGE TRACE · RELATED CHANGE 922510f</span>
+          <div><b>turn_id filter</b><i>→</i><b>turn-page index</b><i>→</i><b>cursor + limit</b></div>
+          <p>The thread-store now forces <code>idx_thread_items_by_turn_page</code> for turn-scoped item pages. Its source comment says a thread-wide index can scan earlier turns when the requested turn’s last page is underfilled.</p>
+          <div class="source-refresh" aria-label="Upstream source freshness">
+            <span class="source-refresh-node related">922510f <b>transcript index</b></span><i aria-hidden="true">→</i><span class="source-refresh-node latest">7ae8319 <b>latest main</b></span>
+            <p>Intervening commits include a TUI fix that suppresses matching streamed/completed assistant messages around interleaved commands (<code>c313eb7</code>) and bounded SQLite BUSY retries used by message-board writes (<code>7ae8319</code>). These are separate paths; neither changes the turn-index claim above.</p>
+            <a href="https://github.com/openai/codex/compare/922510f4d7570b42838e015787ed53abfa8761a1...7ae831991792744434027c431dfbc7e81dd5c12c" target="_blank" rel="noreferrer">View the pinned path comparison</a>
+          </div>
+        </div>
+        <div class="completion-payload-result"><b>PROVEN UP TO</b><span>Static transcript component path</span></div>
+      </article>
+    </div>
+    <p class="completion-payload-boundary">These consumers expose different slices of the child: a queued typed completion, one selected Work response, or a paginated local transcript with filtered item projection. Static source does not prove a live request, response, model consumption, React commit or visible paint.</p>
+    <p class="completion-payload-source"><a href="https://github.com/openai/codex/blob/740e5af33c71225640e0c1c1555c514c2c93ab74/codex-rs/core/src/agent/control/completion.rs" target="_blank" rel="noreferrer">V2 completion routing</a> · <a href="https://github.com/openai/codex/blob/740e5af33c71225640e0c1c1555c514c2c93ab74/codex-rs/core/src/context/inter_agent_completion_message.rs" target="_blank" rel="noreferrer">completion body</a> · <a href="https://github.com/openai/codex/blob/922510f4d7570b42838e015787ed53abfa8761a1/codex-rs/thread-store/src/local/thread_history/segment_paging.rs#L292-L323" target="_blank" rel="noreferrer">turn-scoped index</a> · <a href="https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#installed-desktop-local-and-work-subagent-panels-use-distinct-child-result-paths" target="_blank" rel="noreferrer">local and Work panel paths</a> · <a href="https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#selected-child-full-hydration-pages-all-items" target="_blank" rel="noreferrer">selected-turn item pagination</a> · <a href="https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#selected-child-full-items-pass-through-a-filtered-renderer-projection" target="_blank" rel="noreferrer">renderer projection limits</a></p>
+  </section>`;
+}
+function selectCompletionPayload(scenario) {
+  const container = $('.completion-payload');
+  if (!container) return;
+  completionPayloadScenario = ['work-panel','local-transcript'].includes(scenario) ? scenario : 'parent-input';
+  container.outerHTML = completionPayloadMarkup();
+}
+function topologyMarkup() {
+  const scenarios = {
+    'panel-open': {
+      label: 'PANEL MOUNT · READ + DISCOVER',
+      stages: [
+        ['PARENT THREAD', 'Parent key is available', 'The shared selector subscribes to the keyed descendant snapshot.'],
+        ['PANEL MOUNTS', 'Selector subscription starts', 'The getter reads current state; mounting its derived store also runs onMount.']
+      ],
+      branches: [
+        ['SYNC · RENDER', 'Known snapshot', 'Render descendants already in local state; isLoading and isComplete describe current discovery.'],
+        ['ASYNC · onMount', 'Reconciled discovery', 'When parent key and host connection are available, start discoverSubagentDescendantSnapshot(parent, {reconcile:true}).']
+      ],
+      outcome: 'The mounted subscription has two effects: render the known snapshot immediately and, when its gate is satisfied, initiate discovery. Later thread and parent-item events can schedule refreshes.'
+    },
+    'spawn-event': {
+      label: 'EVENT PATH · DISCOVER FOR SPAWN',
+      stages: [
+        ['PARENT ITEM', 'spawnAgent / started', 'A typed item event identifies a new child reference.'],
+        ['EVENT HANDLER', 'discoverForSpawn', 'A unique known child can be hydrated with its subtree.'],
+        ['FALLBACK', 'Discover full subtree', 'Ambiguous or unmatched identity falls back to parent descendant discovery.']
+      ],
+      outcome: 'Discovery is event-driven here. The UI snapshot subscription and the discovery trigger are separate paths.'
+    },
+    'partial-discovery': {
+      label: 'DISCOVERY · COVERAGE CHECKS',
+      stages: [
+        ['CANDIDATE IDS', 'thread/list or history', 'Fallback history scans spawn IDs from item or turn pages.'],
+        ['IDENTITY CHECK', 'ID + parent must match', 'Candidate thread reads run with at most two children in flight.'],
+        ['RESULT', 'Complete or partial', 'Read failures, cursor anomalies, or identity mismatch keep isComplete false.']
+      ],
+      outcome: 'A partial descendant set can still contain useful rows. Keep the unknown portion visible as unknown instead of presenting it as an empty tree.'
+    }
+  };
+  const scenario = scenarios[topologyScenario] ?? scenarios['panel-open'];
+  return `<section class="topology-map" data-topology-map="${topologyScenario}" aria-labelledby="topology-map-title">
+    <div class="topology-heading"><div><span class="topology-eyebrow">DESKTOP UI · STATIC TOPOLOGY TRACE</span><h5 id="topology-map-title">Does opening the panel discover every child?</h5></div><span class="topology-version">installed build · 26.1007.30912</span></div>
+    <p class="topology-intro">Mounting the panel subscription can both render a snapshot and start discovery. Typed item events and later store notifications provide additional refresh paths.</p>
+    <div class="topology-controls" role="group" aria-label="Choose a Desktop topology path">
+      <button type="button" data-topology-case="panel-open" aria-pressed="${topologyScenario === 'panel-open'}">Open panel</button>
+      <button type="button" data-topology-case="spawn-event" aria-pressed="${topologyScenario === 'spawn-event'}">Spawn event</button>
+      <button type="button" data-topology-case="partial-discovery" aria-pressed="${topologyScenario === 'partial-discovery'}">Partial discovery</button>
+    </div>
+    <div class="topology-flow" data-case="${topologyScenario}" aria-live="polite">
+      ${scenario.stages.map(([label,title,detail],index) => `<article class="topology-node" data-stage="${index}"><span>${label}</span><strong>${title}</strong><small>${detail}</small></article>${index < scenario.stages.length-1 ? '<i aria-hidden="true">→</i>' : ''}`).join('')}
+    </div>
+    ${scenario.branches ? `<div class="topology-branches" aria-label="Two effects of mounting the panel subscription">${scenario.branches.map(([label,title,detail]) => `<article class="topology-node"><span>${label}</span><strong>${title}</strong><small>${detail}</small></article>`).join('')}</div>` : ''}
+    <p class="topology-outcome" aria-live="polite"><b>${scenario.label}</b><span>${scenario.outcome}</span></p>
+    <p class="topology-boundary">Static inspection of the installed app-shared bundle only. No live panel opening, discovery request, or missing-child failure was observed. Incomplete discovery is not proof that a child does not exist.</p>
+    <p class="topology-sources"><a href="https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#subagenttopology-static-path" target="_blank" rel="noreferrer">topology evidence ledger</a> · <a href="https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#activity-item-path-into-desktop-state" target="_blank" rel="noreferrer">typed item event path</a></p>
+  </section>`;
+}
+function selectTopologyScenario(scenarioName) {
+  const container = $('.topology-map');
+  if (!container) return;
+  topologyScenario = ['panel-open','spawn-event','partial-discovery'].includes(scenarioName) ? scenarioName : 'panel-open';
+  container.outerHTML = topologyMarkup();
+}
+function historyProjectionMarkup(complete = false) {
+  const subagentLabel = complete ? 'PASSED THIS PREDICATE' : 'EXCLUDED FROM THIS PROJECTION';
+  const searchLabel = complete ? 'SEARCH ITEMS AVAILABLE' : 'NO SEARCH ITEMS PROJECTED';
+  return `<section class="history-gate" data-history-complete="${complete}" aria-labelledby="history-gate-title">
+    <div class="history-gate-heading"><div><span class="history-gate-eyebrow">DESKTOP BUNDLE · STATIC DATA FLOW</span><h5 id="history-gate-title">What does transcript history completeness gate?</h5></div><span>26.1007.71326</span></div>
+    <p class="history-gate-intro">The installed bundle derives history completeness from conversation snapshots and updates, stores it per thread, then reads it through a selector. The controls below switch only the downstream example value; they do not replay a live RPC update.</p>
+    <div class="history-value-flow" role="list" aria-label="Static source path for transcript history completeness">
+      <div class="history-value-step" role="listitem"><small>CONVERSATION INPUT</small><strong>reset metadata<br>or history delta</strong></div><span class="history-value-arrow" aria-hidden="true">→</span>
+      <div class="history-value-step" role="listitem"><small>COMPLETENESS RULE</small><strong><code>bz(state)</code></strong><span>pagination + history shape</span></div><span class="history-value-arrow" aria-hidden="true">→</span>
+      <div class="history-value-step" role="listitem"><small>TRANSCRIPT STORE</small><strong><code>historyComplete</code></strong><span>updated for this thread</span></div><span class="history-value-arrow" aria-hidden="true">→</span>
+      <div class="history-value-step selected-value" role="listitem"><small>SELECTED EXAMPLE VALUE</small><strong><code>historyComplete = ${complete}</code></strong><span>downstream-only switch</span></div>
+    </div>
+    <div class="history-gate-controls" role="group" aria-label="Set the downstream example value"><button type="button" data-history-gate="incomplete" aria-pressed="${!complete}">Show incomplete</button><button type="button" data-history-gate="complete" aria-pressed="${complete}">Show complete</button></div>
+    <div class="history-gate-branches">
+      <div class="history-gate-lane gated-lane"><div class="history-lane-source"><small>INPUT · PER-THREAD SELECTOR</small><strong>historyComplete = ${complete}</strong></div><span class="history-lane-link" aria-hidden="true">↓ gates</span><article class="history-gate-branch search-branch"><span>CONSUMER 01 · CONTENT SEARCH</span><strong>${searchLabel}</strong><p>The complete-history search helper returns no projected search items until history is complete.</p><small>This helper does not build the visible transcript rows.</small></article></div>
+      <div class="history-gate-lane gated-lane"><div class="history-lane-source"><small>INPUT · SAME PER-THREAD SELECTOR</small><strong>historyComplete = ${complete}</strong></div><span class="history-lane-link" aria-hidden="true">↓ passed as option</span><article class="history-gate-branch subagent-branch"><span>CONSUMER 02 · TURN ITEM PROJECTION</span><strong>${subagentLabel}</strong><p><code>isBackgroundSubagentsEnabled</code> receives this same value. When false, <code>subAgentActivity</code> and <code>collabAgentToolCall</code> items other than <code>wait</code> fail this predicate.</p><small>When true, these cases pass this predicate only; other filters and projection budgets still apply.</small></article></div>
+      <div class="history-gate-lane independent-lane"><div class="history-lane-source independent-source"><small>INDEPENDENT INPUT · ROW DATA</small><strong><code>visibleTurnEntries</code></strong></div><span class="history-lane-link" aria-hidden="true">↓ supplies rows</span><article class="history-gate-branch visible-branch"><span>PARALLEL PATH · VIRTUALIZED LIST</span><strong>Transcript row entries</strong><p>The row list is built from this separate source; <code>historyComplete</code> is not its row-list input.</p><small>This call path does not prove a React commit or visible paint.</small></article></div>
+    </div>
+    <p class="history-gate-boundary">Static bundle trace. Incomplete history gates search projection and these subagent item types, while visible rows have a separate source path. Why history completeness is reused under the subagent option name remains unresolved; live selected-child rendering is not captured.</p>
+    <p class="history-gate-sources"><a href="https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#history-completeness-value-gates-two-different-projections" target="_blank" rel="noreferrer">history completeness evidence ledger</a> · <a href="https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#selected-child-renderer-flag-is-wired-to-transcript-history-completeness" target="_blank" rel="noreferrer">selector and store trace</a></p>
+  </section>`;
+}
+function selectHistoryGate(value) {
+  const container = $('.history-gate');
+  if (!container) return;
+  container.outerHTML = historyProjectionMarkup(value === 'complete');
 }
 function taskTree(parentId = null, depth = 0, visible = visibleTaskIds(), matches = matchingTaskIds(), matchingAncestors = matchingAncestorIds(matches)) {
   return state.tasks.filter(task => task.parentId === parentId && visible.has(task.id)).map(task => {
@@ -248,8 +643,24 @@ function renderInspector() {
       <div class="detail-config-chips" aria-label="Agent configuration"><span class="config-model" title="Model: ${escapeHtml(task.model || 'Codex default')}">${escapeHtml(task.model || 'Codex default')}</span><span class="config-effort" title="Reasoning effort: ${escapeHtml(task.reasoningEffort || 'Codex default')}">${escapeHtml(task.reasoningEffort || 'Codex default')}</span><span class="config-timeout" title="Task runtime limit">${task.timeoutSeconds ? `limit ${durationLabel(task.timeoutSeconds * 1000)}` : 'no runtime limit'}</span><span class="session-chip ${sessionState.className}" title="${escapeHtml(sessionState.detail)}"><i aria-hidden="true"></i>${escapeHtml(sessionState.label)}</span></div>
       <p class="detail-prompt">${escapeHtml(task.prompt)}</p>
       <div class="detail-actions">${isSample ? '' : `${canMessage ? `<button class="secondary" type="button" data-message="${escapeHtml(task.id)}">↗ <span>Send message</span></button>` : ''}${canContinue ? `<button class="primary" type="button" data-followup="${escapeHtml(task.id)}">↻ Continue agent</button>` : ''}${canSpawnChild ? `<button class="primary" type="button" data-child="${escapeHtml(task.id)}"><span>＋</span> Add child</button>` : '<span class="depth-limit">Maximum depth reached</span>'}${canMessage ? `<button class="icon-control stop" type="button" data-cancel="${escapeHtml(task.id)}" aria-label="Stop this task" title="Stop task">■</button>` : ''}`}</div>
-      <nav class="inspector-nav" aria-label="Jump to task details"><button type="button" data-inspector-target="context">Context</button><button type="button" data-inspector-target="links">Task links</button><button type="button" data-inspector-target="agent-mailbox">Mailbox</button><button type="button" data-inspector-target="output">Output</button><button type="button" data-inspector-target="activity">Activity</button></nav>
     </header>
+    <nav class="inspector-nav" aria-label="Jump to task details">
+      <div class="inspector-current"><span>${escapeHtml(task.parentId ? 'CHILD AGENT' : 'ROOT AGENT')} · ${escapeHtml(task.status.replaceAll('_',' ').toUpperCase())}</span><strong title="${escapeHtml(task.prompt)}">${escapeHtml(task.prompt)}</strong></div>
+      <div class="inspector-nav-links"><button type="button" data-inspector-target="context">Context</button><button type="button" data-inspector-target="links">Task links</button><button type="button" data-inspector-target="agent-mailbox">Mailbox</button><button type="button" data-inspector-target="output">Output</button><button type="button" data-inspector-target="activity">Activity</button></div>
+    </nav>
+    <section class="mechanism-overview" aria-labelledby="mechanism-overview-title">
+      <div class="mechanism-overview-heading"><div><span>MECHANISM MAP · SOURCE SYNTHESIS</span><h4 id="mechanism-overview-title">How a child agent fits into the parent thread</h4></div><a href="https://github.com/openai/codex/compare/7ae831991792744434027c431dfbc7e81dd5c12c...1ef30bcbe784f1006548adc1542985be32b05109" target="_blank" rel="noreferrer">main checked · 1ef30bc</a></div>
+      <div class="mechanism-overview-flow" aria-label="Source-backed subagent lifecycle overview">
+        <button type="button" data-inspector-target="context"><span>01 · PREPARE</span><strong>Context + policy</strong><small>Resolve the child snapshot, model, role and runtime authority.</small><b>Inspect input</b></button>
+        <i aria-hidden="true">→</i>
+        <button type="button" data-inspector-target="links"><span>02 · SPAWN</span><strong>New child thread</strong><small>V1 and V2 use different call records and creation paths.</small><b>Inspect ancestry</b></button>
+        <i aria-hidden="true">→</i>
+        <button type="button" data-inspector-target="agent-mailbox"><span>03 · COORDINATE</span><strong>Turns + messages</strong><small>Queueing, waking, waiting and child execution have separate rules.</small><b>Inspect mailbox</b></button>
+        <i aria-hidden="true">→</i>
+        <button type="button" data-inspector-target="activity"><span>04 · RETURN</span><strong>Status + result</strong><small>Terminal status, activity and parent result are distinct signals.</small><b>Inspect activity</b></button>
+      </div>
+      <p>Static synthesis of pinned public source and the local prototype. The current-main comparison found no subagent lifecycle or message-routing change in the inspected paths; it does not establish behavior of a live Desktop session.</p>
+    </section>
     <section class="detail-section metadata-grid" aria-label="Agent metadata">
       <div class="meta-cell"><span>CREATED</span><strong>${escapeHtml(when(task.createdAt))}</strong></div><div class="meta-cell"><span>STARTED</span><strong>${escapeHtml(when(task.startedAt))}</strong></div><div class="meta-cell"><span>ELAPSED</span><strong data-duration-for="${escapeHtml(task.id)}">${task.startedAt ? durationLabel(elapsedMs(task)) : '—'}</strong></div><div class="meta-cell"><span>LAST ACTIVITY</span><strong>${escapeHtml(when(task.lastActivityAt ?? task.events?.at(-1)?.at))}</strong></div><div class="meta-cell"><span>RUNTIME LIMIT</span><strong>${task.timeoutSeconds ? durationLabel(task.timeoutSeconds * 1000) : 'None'}</strong></div><div class="meta-cell"><span>PROCESS</span><strong>${task.pid ? `PID ${escapeHtml(task.pid)}` : task.exitCode !== null ? `Exit ${escapeHtml(task.exitCode)}` : '—'}</strong></div>
     </section>
@@ -258,13 +669,16 @@ function renderInspector() {
       <div class="context-flow"><div class="context-step prompt-step"><span class="context-mark">01</span><span><strong>Task prompt</strong><small>Instructions submitted for this agent</small></span><b>INCLUDED</b></div>${parent ? `<div class="context-step ${task.contextIncluded ? 'snapshot-included' : 'snapshot-omitted'}"><span class="context-mark">02</span><span><strong>Parent context snapshot</strong><small>${task.contextIncluded ? 'Parent prompt and latest output captured once at task creation' : 'No parent prompt or output snapshot was included'}</small></span><b>${task.contextIncluded ? 'INCLUDED' : 'OMITTED'}</b></div>` : '<div class="context-step root-step"><span class="context-mark">02</span><span><strong>No parent context</strong><small>This root agent starts from its submitted prompt</small></span><b>ROOT</b></div>'}</div>
       <p class="context-note">A parent snapshot is fixed when the child starts. Later parent output and inbox messages are not inserted into it automatically.</p>
     </section>
+    ${spawnConfigMarkup()}
+    ${spawnProtocolMarkup()}
+    ${terminalLifecycleMarkup()}
     ${isSample ? '<div class="sample-note">Illustrative data only. No Codex process was started.</div>' : ''}${task.timeoutReason ? `<section class="error-panel timeout-panel"><span class="error-icon">⌛</span><div><strong>Task timed out</strong><p>${escapeHtml(task.timeoutReason)}. The task is marked timed out after its process exits.</p></div></section>` : ''}${task.error ? `<section class="error-panel"><span class="error-icon">!</span><div><strong>Agent error</strong><p>${escapeHtml(task.error)}</p></div></section>` : ''}
-    <section id="links" class="detail-section"><div class="section-title"><h4>Task links</h4><span>${children.length} child${children.length === 1 ? '' : 'ren'}</span></div>${activeChildren.length && ['completed','failed','cancelled','timed_out'].includes(task.status) ? `<div class="lifecycle-note"><span>↗</span><p>This task has ended. ${activeChildren.length} direct child agent${activeChildren.length === 1 ? '' : 's'} ${activeChildren.length === 1 ? 'is' : 'are'} still active and will continue independently.</p></div>` : ''}<div class="task-relation-map" role="group" aria-label="Task parent and child relationships">${parent ? `<button class="relation-node parent-node" type="button" data-jump="${escapeHtml(parent.id)}"><span class="relation-role">PARENT · ${escapeHtml(parent.status.replaceAll('_',' ').toUpperCase())}</span><strong>${escapeHtml(parent.prompt)}</strong></button><div class="relation-edge"><span aria-hidden="true">↓</span><small>spawned by</small></div>` : ''}<div class="relation-node current-node" aria-current="true"><span class="relation-role">${parent ? 'SELECTED CHILD' : 'ROOT TASK'} · ${escapeHtml(task.status.replaceAll('_',' ').toUpperCase())}</span><strong>${escapeHtml(task.prompt)}</strong></div>${children.length ? `<div class="relation-branch"><div class="relation-edge"><span aria-hidden="true">↓</span><small>spawns ${children.length} child${children.length === 1 ? '' : 'ren'}</small></div><div class="relation-children">${children.map(child => `<button class="relation-node child-node" type="button" data-jump="${escapeHtml(child.id)}"><span class="relation-role">CHILD · ${escapeHtml(child.status.replaceAll('_',' ').toUpperCase())}</span><strong>${escapeHtml(child.prompt)}</strong><span class="relation-open" aria-hidden="true">↗</span></button>`).join('')}</div></div>` : '<div class="relation-empty">No child agents yet</div>'}</div><p class="relation-note">This map shows task ancestry. Messages and child results appear in the mailbox.</p>${renderConcurrencyTimeline(task, parent, children)}${renderInteractionSequence(task, parent, children, interactionItems)}<div class="interaction-trace"><div class="section-title"><h4>Direct interaction trace</h4><span>${interactionItems.length} item${interactionItems.length === 1 ? '' : 's'}</span></div>${interactionItems.length ? `<div class="interaction-list">${interactionItems.map(({ recipient, message }) => { const sender = taskById(message.from); const isResult = message.kind === 'task_result'; const isReturned = message.deliveryState === 'read'; return `<article class="interaction-item ${isResult ? 'result' : ''} ${isReturned ? 'returned' : 'pending'}"><div class="interaction-meta"><span class="interaction-kind">${isResult ? 'CHILD RESULT' : 'MESSAGE'}</span><span class="interaction-state ${isReturned ? 'returned' : 'pending'}">${isReturned ? 'SUPPLIED TO TASK TOOL' : 'PENDING IN INBOX'}</span><time>${escapeHtml(when(message.at))}</time></div><div class="interaction-pipeline" role="img" aria-label="${escapeHtml(relationRole(sender?.id))} sends to coordinator inbox, then ${isReturned ? 'the coordinator supplies it to' : 'it waits for'} the ${escapeHtml(relationRole(recipient.id))} task tool"><span class="pipeline-stage sent"><small>FROM · ${relationRole(sender?.id)}</small><strong>${escapeHtml(sender?.prompt ?? message.from)}</strong><b>SENT</b></span><i class="pipeline-link complete" aria-hidden="true">→</i><span class="pipeline-stage queued"><small>COORDINATOR INBOX</small><strong>${escapeHtml(relationRole(recipient.id))} mailbox</strong><b>QUEUED</b></span><i class="pipeline-link ${isReturned ? 'complete' : ''}" aria-hidden="true">→</i><span class="pipeline-stage ${isReturned ? 'supplied' : 'waiting'}"><small>TASK TOOL · ${relationRole(recipient.id)}</small><strong>${escapeHtml(recipient.prompt)}</strong><b>${isReturned ? 'SUPPLIED' : 'WAITING'}</b></span></div><p>${escapeHtml(message.text)}</p></article>`; }).join('')}</div><p class="interaction-proof">“Supplied” means the coordinator included the message in that task tool call. It does not prove the model interpreted it.</p>` : '<div class="interaction-empty">No direct parent/child messages or results in the available snapshot.</div>'}</div></section>
+    <section id="links" class="detail-section"><div class="section-title"><h4>Task links</h4><span>${children.length} child${children.length === 1 ? '' : 'ren'}</span></div>${activeChildren.length && ['completed','failed','cancelled','timed_out'].includes(task.status) ? `<div class="lifecycle-note"><span>↗</span><p>This task has ended. ${activeChildren.length} direct child agent${activeChildren.length === 1 ? '' : 's'} ${activeChildren.length === 1 ? 'is' : 'are'} still active and will continue independently.</p></div>` : ''}<div class="task-relation-map" role="group" aria-label="Task parent and child relationships">${parent ? `<button class="relation-node parent-node" type="button" data-jump="${escapeHtml(parent.id)}"><span class="relation-role">PARENT · ${escapeHtml(parent.status.replaceAll('_',' ').toUpperCase())}</span><strong>${escapeHtml(parent.prompt)}</strong></button><div class="relation-edge"><span aria-hidden="true">↓</span><small>spawned by</small></div>` : ''}<div class="relation-node current-node" aria-current="true"><span class="relation-role">${parent ? 'SELECTED CHILD' : 'ROOT TASK'} · ${escapeHtml(task.status.replaceAll('_',' ').toUpperCase())}</span><strong>${escapeHtml(task.prompt)}</strong></div>${children.length ? `<div class="relation-branch"><div class="relation-edge"><span aria-hidden="true">↓</span><small>spawns ${children.length} child${children.length === 1 ? '' : 'ren'}</small></div><div class="relation-children">${children.map(child => `<button class="relation-node child-node" type="button" data-jump="${escapeHtml(child.id)}"><span class="relation-role">CHILD · ${escapeHtml(child.status.replaceAll('_',' ').toUpperCase())}</span><strong>${escapeHtml(child.prompt)}</strong><span class="relation-open" aria-hidden="true">↗</span></button>`).join('')}</div></div>` : '<div class="relation-empty">No child agents yet</div>'}</div><p class="relation-note">This map shows task ancestry. Messages and child results appear in the mailbox.</p>${renderConcurrencyTimeline(task, parent, children)}${renderInteractionSequence(task, parent, children, interactionItems)}${renderDesktopGate()}${fullFidelityMarkup()}${rendererDeltaMarkup()}${completionPayloadMarkup()}${historyProjectionMarkup()}<div class="interaction-trace"><div class="section-title"><h4>Direct interaction trace</h4><span>${interactionItems.length} item${interactionItems.length === 1 ? '' : 's'}</span></div>${interactionItems.length ? `<div class="interaction-list">${interactionItems.map(({ recipient, message }) => { const sender = taskById(message.from); const isResult = message.kind === 'task_result'; const isReturned = message.deliveryState === 'read'; return `<article class="interaction-item ${isResult ? 'result' : ''} ${isReturned ? 'returned' : 'pending'}"><div class="interaction-meta"><span class="interaction-kind">${isResult ? 'CHILD RESULT' : 'MESSAGE'}</span><span class="interaction-state ${isReturned ? 'returned' : 'pending'}">${isReturned ? 'SUPPLIED TO TASK TOOL' : 'PENDING IN INBOX'}</span><time>${escapeHtml(when(message.at))}</time></div><div class="interaction-pipeline" role="img" aria-label="${escapeHtml(relationRole(sender?.id))} sends to coordinator inbox, then ${isReturned ? 'the coordinator supplies it to' : 'it waits for'} the ${escapeHtml(relationRole(recipient.id))} task tool"><span class="pipeline-stage sent"><small>FROM · ${relationRole(sender?.id)}</small><strong>${escapeHtml(sender?.prompt ?? message.from)}</strong><b>SENT</b></span><i class="pipeline-link complete" aria-hidden="true">→</i><span class="pipeline-stage queued"><small>COORDINATOR INBOX</small><strong>${escapeHtml(relationRole(recipient.id))} mailbox</strong><b>QUEUED</b></span><i class="pipeline-link ${isReturned ? 'complete' : ''}" aria-hidden="true">→</i><span class="pipeline-stage ${isReturned ? 'supplied' : 'waiting'}"><small>TASK TOOL · ${relationRole(recipient.id)}</small><strong>${escapeHtml(recipient.prompt)}</strong><b>${isReturned ? 'SUPPLIED' : 'WAITING'}</b></span></div><p>${escapeHtml(message.text)}</p></article>`; }).join('')}</div><p class="interaction-proof">“Supplied” means the coordinator included the message in that task tool call. It does not prove the model interpreted it.</p>` : '<div class="interaction-empty">No direct parent/child messages or results in the available snapshot.</div>'}</div></section>
     <section id="agent-mailbox" class="detail-section mailbox-section"><div class="section-title"><h4><span class="section-icon">↳</span> Mailbox</h4><span class="mail-count">${Number(task.pendingMessageCount) || 0} pending · ${Number(task.pendingTaskResultCount) || 0} child results</span></div><p class="mailbox-proof">Returned means the coordinator supplied this message to the task tool; it does not prove the model interpreted it.</p><details class="delivery-model" ${deliveryModelOpen ? 'open' : ''}><summary><span>How Codex V2 chooses whether to wake a child</span><small>source model · 0.162.0-alpha.17.2</small></summary><div class="delivery-mode-grid"><article class="delivery-mode queue-only"><div class="delivery-mode-title"><span class="mode-icon" aria-hidden="true">Ⅱ</span><div><h5>send_message</h5><span>QueueOnly</span></div><b>QUEUE</b></div><div class="mode-flow"><span>Caller</span><i aria-hidden="true">→</i><span>Child mailbox</span><i aria-hidden="true">→</i><span class="mode-outcome">Waits for an eligible turn</span></div><p>Delivery does not start an ordinary idle child. If the child is unloaded, mail waits in runtime memory until a session loads.</p></article><article class="delivery-mode trigger-turn"><div class="delivery-mode-title"><span class="mode-icon" aria-hidden="true">▶</span><div><h5>followup_task</h5><span>TriggerTurn</span></div><b>WAKE</b></div><div class="mode-flow"><span>Caller</span><i aria-hidden="true">→</i><span>Load child + mailbox</span><i aria-hidden="true">→</i><span class="mode-outcome">Start a turn if idle</span></div><p>Targets an existing V2 child and asks the scheduler to start work when it is idle. It does not spawn a replacement child; triggering the root is rejected.</p></article></div><p class="delivery-model-proof">Accepted delivery and an “Interacted” activity do not prove the child model has read the message. <a href="https://github.com/openai/codex/blob/740e5af33c71225640e0c1c1555c514c2c93ab74/codex-rs/core/src/tools/handlers/multi_agents_v2/message_tool.rs" target="_blank" rel="noreferrer">Message handler</a> · <a href="https://github.com/openai/codex/blob/740e5af33c71225640e0c1c1555c514c2c93ab74/codex-rs/core/src/agent/control/delivery.rs" target="_blank" rel="noreferrer">Delivery policy</a></p></details>${inboxItems.length ? `<div class="inbox-list">${inboxItems.map(message => `<article class="inbox-item ${message.deliveryState === 'read' ? 'read' : 'pending'}"><div class="inbox-meta"><span class="mail-kind ${message.kind === 'task_result' ? 'result' : ''}">${message.kind === 'task_result' ? 'CHILD RESULT' : 'MESSAGE'}</span><span class="delivery-state ${message.deliveryState === 'read' ? 'read' : 'pending'}">${message.deliveryState === 'read' ? 'RETURNED' : 'PENDING'}</span><span>from ${escapeHtml(message.from)}</span><time>${escapeHtml(when(message.deliveryState === 'read' ? message.readAt : message.at))}</time></div><p>${escapeHtml(message.text)}</p></article>`).join('')}</div>` : `<div class="mailbox-empty"><span>✉</span><div><strong>Inbox is clear</strong><small>Messages and child results will show up here.</small></div></div>`}${canMessage ? `<button class="inbox-compose" type="button" data-message="${escapeHtml(task.id)}">＋ Send this agent a message</button>` : ''}</section>
     <section id="output" class="detail-section output-section"><div class="section-title"><h4>Latest output</h4><span>${task.output ? `${String(task.output).length.toLocaleString()} chars` : 'Awaiting output'}</span></div>${task.output ? `<pre class="output-text">${escapeHtml(task.output)}</pre>` : `<div class="output-empty"><span class="output-spinner ${task.status === 'running' ? 'active' : ''}">${task.status === 'running' ? '◌' : '·'}</span><span>${task.status === 'running' ? 'Agent is working. Output will stream in here.' : task.status === 'queued' ? 'Output will appear when this agent starts.' : 'This agent did not produce captured text output.'}</span></div>`}</section>
     <section id="activity" class="detail-section activity-section"><div class="section-title"><h4>Recent activity</h4><span>${(task.events ?? []).length} events</span></div>${events.length ? `<div class="activity-list">${events.map(event => `<div class="activity-item"><time>${escapeHtml(when(event.at))}</time><span class="activity-dot ${escapeHtml(event.kind)}"></span><span class="activity-copy"><strong>${escapeHtml(event.kind.replaceAll('_',' '))}</strong><small>${escapeHtml(String(event.detail ?? '').replace(/\s+/g,' ').slice(0,220))}</small></span></div>`).join('')}</div>` : '<div class="subtle-empty">No activity recorded yet.</div>'}</section>`;
   const deliveryModel = $('#agent-mailbox .delivery-model');
-  if (deliveryModel) deliveryModel.insertAdjacentHTML('beforeend', mailboxTimingMarkup());
+  if (deliveryModel) deliveryModel.insertAdjacentHTML('beforeend', `${mailboxTimingMarkup()}${waitScopeMarkup()}${residencyMarkup()}${interruptCloseMarkup()}${admissionMarkup()}${topologyMarkup()}${boardWriteMarkup()}${toolExposureMarkup()}`);
 }
 function mailboxTimingMarkup() {
   const beforeFinal = mailboxScenario === 'before-final';
@@ -301,18 +715,336 @@ function selectMailboxScenario(scenario) {
     ? '“可进入”描述的是输入队列路径，不保证模型一定读取、理解或回应这条消息。'
     : '终态答复后到达的消息不会悄悄延长已经显示的答复。后续同轮工作也可能重新打开 CurrentTurn。';
 }
+function boardWriteMarkup() {
+  const selected = boardWriteScenario;
+  const scenarios = {
+    'busy-clears': {
+      attempt: 'BUSY → wait 100 ms → BUSY → wait 200 ms → admitted',
+      outcome: 'Transaction commits; notification fanout starts once',
+      note: 'The retry helper retries only SQLite BUSY-family writer admission. Each attempt uses the configured SQLite busy timeout; the 100 ms and 200 ms delays are additional backoff, not a total-time guarantee.'
+    },
+    'recipient-inactive': {
+      attempt: 'Writer admitted → post committed',
+      outcome: 'Notice skipped for inactive recipient; post remains stored',
+      note: 'The notice uses trigger_turn=false. A missing or inactive runtime does not get started; the committed post remains available through board tools.'
+    },
+    'writer-busy': {
+      attempt: 'BUSY → wait 100 ms → BUSY → wait 200 ms → BUSY',
+      outcome: 'Admission fails; no post commit and no notification fanout',
+      note: 'There is one initial attempt and at most two retries. Time spent inside SQLite busy_timeout is separate, so this diagram does not claim a fixed end-to-end duration.'
+    }
+  };
+  const scenario = scenarios[selected] ?? scenarios['busy-clears'];
+  return `<section class="board-write-trace" data-board-case="${selected}" aria-labelledby="board-write-title">
+    <div class="board-write-heading"><div><span class="board-write-eyebrow">V2 AGENT MESSAGE BOARD · SQLITE + NOTICE FANOUT</span><h5 id="board-write-title">先提交帖子，再尽力通知订阅者</h5></div><span>public main · 7ae8319</span></div>
+    <p class="board-write-intro">这条路径是 agent message board 的 channel/thread 帖子。它与 mailbox 的 send_message 队列是不同机制。</p>
+    <div class="board-write-controls" role="group" aria-label="选择消息板写入场景">
+      <button type="button" data-board-write-case="busy-clears" aria-pressed="${selected === 'busy-clears'}">短暂写锁冲突</button>
+      <button type="button" data-board-write-case="recipient-inactive" aria-pressed="${selected === 'recipient-inactive'}">接收者未活动</button>
+      <button type="button" data-board-write-case="writer-busy" aria-pressed="${selected === 'writer-busy'}">重试耗尽</button>
+    </div>
+    <div class="board-write-sequence" data-outcome="${selected}" aria-live="polite">
+      <article class="board-write-step"><span>01 · REQUEST</span><strong>校验并解析</strong><p>校验帖子/request ID/通知人数；解析作者和显式接收者；提交前后都按 request ID 检查幂等结果。</p></article>
+      <i aria-hidden="true">→</i>
+      <article class="board-write-step write-admission"><span>02 · SQLITE WRITER ADMISSION</span><strong>BEGIN IMMEDIATE</strong><p data-board-attempt>${scenario.attempt}</p><small>仅在事务开始前重试 BUSY 家族错误；事务一旦开始，不重放帖子操作。</small></article>
+      <i aria-hidden="true">→</i>
+      <article class="board-write-step write-commit"><span>03 · ATOMIC POST</span><strong data-board-commit>${selected === 'writer-busy' ? '未提交' : '帖子 + 默认订阅提交'}</strong><p>帖子和作者参与订阅在同一事务内写入；成功后才开始通知。</p></article>
+      <i aria-hidden="true">→</i>
+      <article class="board-write-step write-notice"><span>04 · BEST-EFFORT NOTICE</span><strong data-board-outcome>${scenario.outcome}</strong><p>提交后最多并发通知 16 个接收者；通知错误被记录，不回滚已提交帖子。</p></article>
+    </div>
+    <p class="board-write-note" data-board-note>${scenario.note}</p>
+    <p class="board-write-boundary">边界：post 成功表示帖子持久化，不表示每个接收者都收到通知或采取行动。源码里的通知使用 <code>trigger_turn=false</code>；“Accepted”也不等同于模型已读。</p>
+    <p class="board-write-sources"><a href="https://github.com/openai/codex/blob/7ae831991792744434027c431dfbc7e81dd5c12c/codex-rs/state/src/sqlite/busy_retry.rs" target="_blank" rel="noreferrer">SQLite retry helper</a> · <a href="https://github.com/openai/codex/blob/7ae831991792744434027c431dfbc7e81dd5c12c/codex-rs/ext/agent-message-board/src/local.rs" target="_blank" rel="noreferrer">local post transaction</a> · <a href="https://github.com/openai/codex/blob/7ae831991792744434027c431dfbc7e81dd5c12c/codex-rs/core/src/agent_message_board.rs" target="_blank" rel="noreferrer">notification delivery</a></p>
+  </section>`;
+}
+function selectBoardWriteScenario(scenario) {
+  boardWriteScenario = ['recipient-inactive', 'writer-busy'].includes(scenario) ? scenario : 'busy-clears';
+  const panel = $('.board-write-trace');
+  if (!panel) return;
+  const selected = boardWriteScenario;
+  const details = {
+    'busy-clears': ['BUSY → wait 100 ms → BUSY → wait 200 ms → admitted', 'Transaction commits; notification fanout starts once', 'The retry helper retries only SQLite BUSY-family writer admission. Each attempt uses the configured SQLite busy timeout; the 100 ms and 200 ms delays are additional backoff, not a total-time guarantee.'],
+    'recipient-inactive': ['Writer admitted → post committed', 'Notice skipped for inactive recipient; post remains stored', 'The notice uses trigger_turn=false. A missing or inactive runtime does not get started; the committed post remains available through board tools.'],
+    'writer-busy': ['BUSY → wait 100 ms → BUSY → wait 200 ms → BUSY', 'Admission fails; no post commit and no notification fanout', 'There is one initial attempt and at most two retries. Time spent inside SQLite busy_timeout is separate, so this diagram does not claim a fixed end-to-end duration.']
+  }[selected];
+  panel.dataset.boardCase = selected;
+  panel.querySelectorAll('[data-board-write-case]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.boardWriteCase === selected)));
+  panel.querySelector('[data-board-attempt]').textContent = details[0];
+  panel.querySelector('[data-board-outcome]').textContent = details[1];
+  panel.querySelector('[data-board-note]').textContent = details[2];
+  panel.querySelector('[data-board-commit]').textContent = selected === 'writer-busy' ? '未提交' : '帖子 + 默认订阅提交';
+  panel.querySelector('.write-commit').classList.toggle('blocked', selected === 'writer-busy');
+  panel.querySelector('.write-notice').classList.toggle('blocked', selected === 'writer-busy');
+}
+function toolExposureMarkup() {
+  const cases = {
+    root: { title: 'Root V2 turn', source: 'Root has no agent path', model: 'metadata: None', allowed: true, picker: null, reason: 'The V2 gate allows the root independently of model multi-agent metadata.' },
+    'child-v2': { title: 'Child V2-capable model', source: 'Non-root child', model: 'metadata: Some(V2)', allowed: true, picker: true, reason: 'A non-root V2 turn receives collaboration tools only when its selected model explicitly declares V2 support.' },
+    'child-unknown': { title: 'Child without V2 metadata', source: 'Non-root child', model: 'metadata: None', allowed: false, picker: true, reason: 'The session can still be V2, but this child model fails the stricter tool-plan gate because None is not Some(V2).' },
+    'child-v1': { title: 'Child marked V1', source: 'Non-root child', model: 'metadata: Some(V1)', allowed: false, picker: true, reason: 'V1 metadata also fails the non-root V2 collaboration-tool gate.' }
+  };
+  const item = cases[toolExposureScenario] ?? cases['child-unknown'];
+  const tools = item.allowed ? ['spawn_agent', ...(toolExposureDisableMessages ? [] : ['send_message', 'followup_task']), ...(toolExposureWaitEnabled ? ['wait_agent'] : []), 'interrupt_agent', 'list_agents'] : [];
+  const exposure = 'DirectModelOnly';
+  return `<section class="tool-exposure-trace" aria-labelledby="tool-exposure-title" data-exposure-allowed="${item.allowed}">
+    <div class="tool-exposure-heading"><div><span class="tool-exposure-eyebrow">V2 TOOL PLAN · MODEL CAPABILITY GATE</span><h5 id="tool-exposure-title">V2 会话不代表每个 child 都能继续派生 agent</h5></div><span>source · 740e5af</span></div>
+    <p class="tool-exposure-intro">选择 turn 类型与模型 metadata，查看 add_collaboration_tools 是否注册 V2 工具。这个门控看的是当前 turn 的模型能力，不只是线程上记录的 V2 版本。</p>
+    <div class="tool-exposure-cases" role="group" aria-label="选择 V2 工具暴露场景">
+      <button type="button" data-tool-exposure-case="root" aria-pressed="${toolExposureScenario === 'root'}">Root · metadata 无关</button>
+      <button type="button" data-tool-exposure-case="child-v2" aria-pressed="${toolExposureScenario === 'child-v2'}">Child · Some(V2)</button>
+      <button type="button" data-tool-exposure-case="child-unknown" aria-pressed="${toolExposureScenario === 'child-unknown'}">Child · None</button>
+      <button type="button" data-tool-exposure-case="child-v1" aria-pressed="${toolExposureScenario === 'child-v1'}">Child · Some(V1)</button>
+    </div>
+    <div class="tool-exposure-model">
+      <article><span>THREAD SOURCE</span><strong>${item.source}</strong><small>multi_agent_version = V2</small></article><i aria-hidden="true">+</i>
+      <article><span>MODEL INFO</span><strong>${item.model}</strong><small>model_info.multi_agent_version</small></article><i aria-hidden="true">→</i>
+      <article class="tool-exposure-gate"><span>COLLAB TOOLS GATE</span><strong>${item.allowed ? 'PASS · register tools' : 'BLOCK · register none'}</strong><small>${item.allowed ? 'root || Some(V2)' : 'non-root requires Some(V2)'}</small></article>
+    </div>
+    <div class="tool-exposure-options" aria-label="Independent V2 tool configuration">
+      <label><input type="checkbox" data-tool-disable-messages ${toolExposureDisableMessages ? 'checked' : ''}><span><b>disable_direct_message</b><small>removes send_message + followup_task</small></span></label>
+      <label><input type="checkbox" data-tool-wait-enabled ${toolExposureWaitEnabled ? 'checked' : ''}><span><b>wait_agent_enabled</b><small>independently controls wait_agent</small></span></label>
+    </div>
+    <div class="tool-exposure-result"><div><span>MODEL TOOL LIST</span><div>${tools.length ? tools.map(name => `<code>${name}</code>`).join('') : '<b class="tool-exposure-empty">No V2 collaboration tools registered for this turn</b>'}</div></div><div><span>DEFAULT EXPOSURE</span><strong>${item.allowed ? exposure : 'not registered'}</strong><small>non_code_mode_only = true → DirectModelOnly</small></div></div>
+    <p class="tool-exposure-explanation" aria-live="polite">${item.reason}</p>
+    <div class="tool-exposure-picker" data-picker-eligible="${item.picker}"><div><span>SPAWN MODEL PICKER</span><strong>${item.picker === null ? 'not applicable to a root turn' : item.picker ? 'ELIGIBLE · not explicitly Disabled' : 'HIDDEN · explicitly Disabled'}</strong></div><i aria-hidden="true">≠</i><div><span>CHILD COLLAB TOOLS</span><strong>${item.allowed ? 'available if other gates pass' : 'not registered for this child turn'}</strong></div></div>
+    <p class="tool-exposure-boundary">Picker eligibility and child tool-plan eligibility are different checks. The model picker excludes only models explicitly marked Disabled; a non-root V2 turn requires exactly Some(V2) to register recursive collaboration tools.</p>
+    <p class="tool-exposure-sources"><a href="https://github.com/openai/codex/blob/740e5af33c71225640e0c1c1555c514c2c93ab74/codex-rs/core/src/tools/spec_plan.rs#L719-L731" target="_blank" rel="noreferrer">collab_tools_enabled</a> · <a href="https://github.com/openai/codex/blob/740e5af33c71225640e0c1c1555c514c2c93ab74/codex-rs/core/src/tools/spec_plan.rs#L1373-L1465" target="_blank" rel="noreferrer">tool registration</a> · <a href="https://github.com/openai/codex/blob/740e5af33c71225640e0c1c1555c514c2c93ab74/codex-rs/core/src/agent/child_config.rs#L22-L28" target="_blank" rel="noreferrer">picker model filter</a> · <a href="https://github.com/openai/codex/blob/740e5af33c71225640e0c1c1555c514c2c93ab74/codex-rs/core/src/config/mod.rs#L1366-L1387" target="_blank" rel="noreferrer">V2 defaults</a> · <a href="https://github.com/openai/codex/blob/740e5af33c71225640e0c1c1555c514c2c93ab74/codex-rs/tools/src/tool_executor.rs#L49-L98" target="_blank" rel="noreferrer">tool exposure surfaces</a></p>
+  </section>`;
+}
+function selectToolExposureCase(scenario) {
+  toolExposureScenario = ['root', 'child-v2', 'child-unknown', 'child-v1'].includes(scenario) ? scenario : 'child-unknown';
+  const panel = $('.tool-exposure-trace');
+  if (panel) panel.outerHTML = toolExposureMarkup();
+}
+function updateToolExposureOption(key, enabled) {
+  if (key === 'messages') toolExposureDisableMessages = enabled;
+  if (key === 'wait') toolExposureWaitEnabled = enabled;
+  const panel = $('.tool-exposure-trace');
+  if (panel) panel.outerHTML = toolExposureMarkup();
+}
+function waitScopeMarkup() {
+  const scenarios = {
+    'nested-relay': {
+      root: { state:'wake', event:'Root mailbox receives child summary', result:'wait_agent wakes on mailbox activity' },
+      child: { state:'relay', event:'Child receives grandchild result', result:'Child wait wakes; child reads and relays a summary' },
+      grandchild: { state:'sent', event:'Grandchild completes', result:'Final result is addressed to its structural parent' },
+      routes: ['Grandchild → direct parent: final result', 'Child → root: explicit summary message'],
+      outcome: 'Root wakes only after the child sends a message to the root mailbox. The wait returns activity status; read_messages retrieves the body.',
+      label: 'CONTROLLED NESTED RUN · BOTH WAITS COMPLETED'
+    },
+    'cross-ancestor': {
+      root: { state:'timeout', event:'Root sees Completed activity', result:'Root mailbox has no grandchild result; wait times out' },
+      child: { state:'inbox', event:'Structural parent receives result', result:'Grandchild result follows the spawn-time parent edge' },
+      grandchild: { state:'sent', event:'Follow-up turn completes', result:'Completed activity is emitted to initiating thread' },
+      routes: ['Grandchild → initiating thread: lifecycle activity', 'Grandchild → structural parent: final result'],
+      outcome: 'The root-visible Completed item is not mailbox activity. In the controlled pending-wait probe it arrived during the wait, but did not wake it.',
+      label: 'CONTROLLED CLI PROBE · ROOT WAIT TIMED OUT'
+    },
+    'direct-mail': {
+      root: { state:'wake', event:'Root mailbox receives explicit message', result:'wait_agent wakes before Completed activity' },
+      child: { state:'idle', event:'Intermediate child', result:'No automatic relay is required for this route' },
+      grandchild: { state:'sent', event:'Grandchild sends to /root', result:'Explicit message targets the root inbox' },
+      routes: ['Grandchild → root: explicit mailbox message', 'Root wait wakes on its own InputQueue activity'],
+      outcome: 'The control run returned from root wait before the later Completed activity arrived. This demonstrates mailbox wake behavior for this tested run.',
+      label: 'CONTROLLED MAILBOX CONTROL · ROOT WAIT WOKE'
+    }
+  };
+  const scenario = scenarios[waitScopeScenario] ?? scenarios['nested-relay'];
+  return `<section class="wait-scope" data-wait-scope="${waitScopeScenario}" aria-labelledby="wait-scope-title">
+    <div class="wait-scope-heading"><div><span class="wait-scope-eyebrow">WAIT_AGENT · ROUTING SCOPE</span><h5 id="wait-scope-title">Who can wake this wait?</h5></div><span class="wait-scope-version">CLI 0.162.1 · source 3ee47c1</span></div>
+    <p class="wait-scope-intro">A wait subscribes to the caller’s own input queue. Follow the addressed route; lifecycle activity and mailbox messages are separate signals.</p>
+    <div class="wait-scope-controls" role="group" aria-label="Choose a nested completion scenario">
+      <button type="button" data-wait-scope-case="nested-relay" aria-pressed="${waitScopeScenario === 'nested-relay'}">Nested result + relay</button>
+      <button type="button" data-wait-scope-case="cross-ancestor" aria-pressed="${waitScopeScenario === 'cross-ancestor'}">Root follows up grandchild</button>
+      <button type="button" data-wait-scope-case="direct-mail" aria-pressed="${waitScopeScenario === 'direct-mail'}">Grandchild messages root</button>
+    </div>
+    <div class="wait-scope-lanes" data-case="${waitScopeScenario}" aria-live="polite">
+      ${[['root','ROOT',scenario.root],['child','CHILD · STRUCTURAL PARENT',scenario.child],['grandchild','GRANDCHILD',scenario.grandchild]].map(([id,label,node]) => `<article class="wait-scope-lane ${id}" data-state="${node.state}"><span class="wait-scope-lane-label">${label}</span><strong>${node.event}</strong><small>${node.result}</small></article>`).join('')}
+    </div>
+    <div class="wait-scope-routes" aria-label="Message routing"><span class="wait-scope-route-label">ROUTES IN THIS SCENARIO</span>${scenario.routes.map((route,index) => `<div class="wait-scope-route"><i aria-hidden="true">${index ? '↗' : '↙'}</i><span>${route}</span></div>`).join('')}</div>
+    <p class="wait-scope-outcome" aria-live="polite"><b>${scenario.label}</b><span>${scenario.outcome}</span></p>
+    <p class="wait-scope-boundary">Observed in four controlled standalone CLI 0.162.1 runs; not a guarantee for all versions/providers and not a Desktop runtime trace. Source snapshot <code>3ee47c1</code> describes the public implementation.</p>
+    <p class="wait-scope-sources"><a href="https://github.com/openai/codex/blob/3ee47c10513f1bb57d869ea650aba28638e3d11c/codex-rs/core/src/tools/handlers/multi_agents_v2/wait.rs" target="_blank" rel="noreferrer">wait handler</a> · <a href="https://github.com/openai/codex/blob/3ee47c10513f1bb57d869ea650aba28638e3d11c/codex-rs/core/src/agent/control/completion.rs" target="_blank" rel="noreferrer">completion routing</a> · <a href="https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#controlled-v2-follow-up-while-root-wait-is-pending-future-completed-activity-did-not-wake-it" target="_blank" rel="noreferrer">controlled probe ledger</a></p>
+  </section>`;
+}
+function selectWaitScopeScenario(scenarioName) {
+  const container = $('.wait-scope');
+  if (!container) return;
+  waitScopeScenario = ['nested-relay','cross-ancestor','direct-mail'].includes(scenarioName) ? scenarioName : 'nested-relay';
+  container.outerHTML = waitScopeMarkup();
+}
+function residencyMarkup() {
+  const scenarios = {
+    'completed-followup': {
+      child: ['resident', 'Completed · idle', 'No active turn or TriggerTurn mail'],
+      capacity: ['pressure', 'Capacity fills', 'A later spawn may evict an older eligible runtime'],
+      identity: ['kept', 'Runtime unloaded', 'Registry identity and stored thread history remain separate from residency'],
+      delivery: ['reload', 'followup_task', 'Attempts to reload the existing V2 thread before starting work'],
+      routes: ['Capacity pressure → eligible completed child: unload runtime', 'followup_task → existing child identity: conditional reload → TriggerTurn'],
+      outcome: 'The child can disappear from the loaded-runtime list and still be recoverable for follow-up. Reload depends on registry metadata, readable V2 history, parent/environment checks, and a free residency slot.',
+      label: 'SOURCE PATH · CONDITIONAL RELOAD'
+    },
+    'queue-only': {
+      child: ['unloaded', 'Child is unloaded', 'The child identity is not a loaded session'],
+      capacity: ['idle', 'QueueOnly message', 'send_message does not need to reload a locally evicted child'],
+      identity: ['mailbox', 'Runtime mailbox', 'Communication can wait in process memory, keyed by child thread'],
+      delivery: ['deferred', 'Later session load', 'Queued communication is read when a session loads and drains its mailbox'],
+      routes: ['send_message → runtime mailbox: queued without starting an ordinary idle child', 'Later child session → mailbox input: message can enter a future turn'],
+      outcome: 'The inspected path retains queued mail in runtime memory. It does not establish persistence across process restart or guarantee that a future model request consumes it.',
+      label: 'SOURCE PATH · IN-MEMORY QUEUE'
+    },
+    'interrupted-eviction': {
+      child: ['interrupted', 'Interrupted · idle', 'Interrupted is an unloadable status when other guards allow it'],
+      capacity: ['pressure', 'Residency eviction', 'Capacity reservation may select an eligible interrupted child'],
+      identity: ['uncertain', 'Reload boundary', 'The inspected source test expects ThreadNotFound after this eviction'],
+      delivery: ['blocked', 'Follow-up may fail', 'Do not assume every unloaded child can be reconstructed'],
+      routes: ['Interrupted resident → capacity eviction: runtime removed', 'followup_task → attempted reload: source test expects ThreadNotFound'],
+      outcome: 'The source has a specific test showing an interrupted V2 child lost after residency eviction. Treat recoverability as status- and path-dependent, not as a universal property of unloaded children.',
+      label: 'SOURCE TEST · RESTORE NOT GUARANTEED'
+    }
+  };
+  const scenario = scenarios[residencyScenario] ?? scenarios['completed-followup'];
+  return `<section class="residency-map" data-residency-map="${residencyScenario}" aria-labelledby="residency-map-title">
+    <div class="residency-heading"><div><span class="residency-eyebrow">V2 · RUNTIME RESIDENCY</span><h5 id="residency-map-title">When a child leaves memory, what remains?</h5></div><span class="residency-version">source snapshot · e89b7c4</span></div>
+    <p class="residency-intro">Runtime residency, thread identity, stored history and mailbox contents have different lifetimes. Choose a path to follow their boundaries.</p>
+    <div class="residency-controls" role="group" aria-label="Choose a child residency scenario">
+      <button type="button" data-residency-case="completed-followup" aria-pressed="${residencyScenario === 'completed-followup'}">Completed → follow up</button>
+      <button type="button" data-residency-case="queue-only" aria-pressed="${residencyScenario === 'queue-only'}">Queue while unloaded</button>
+      <button type="button" data-residency-case="interrupted-eviction" aria-pressed="${residencyScenario === 'interrupted-eviction'}">Interrupted → eviction</button>
+    </div>
+    <div class="residency-flow" data-case="${residencyScenario}" aria-live="polite">
+      ${[['CHILD SESSION',scenario.child],['CAPACITY / DELIVERY',scenario.capacity],['IDENTITY / MAILBOX',scenario.identity],['NEXT ACTION',scenario.delivery]].map(([label,node],index) => `<article class="residency-node" data-tone="${node[0]}"><span class="residency-node-label">${label}</span><strong>${node[1]}</strong><small>${node[2]}</small></article>${index < 3 ? '<i aria-hidden="true">→</i>' : ''}`).join('')}
+    </div>
+    <div class="residency-routes" aria-label="State transitions"><span class="residency-route-label">PATH IN THIS SCENARIO</span>${scenario.routes.map((route,index) => `<div class="residency-route"><i aria-hidden="true">${index ? '↗' : '→'}</i><span>${route}</span></div>`).join('')}</div>
+    <div class="residency-visibility"><b>LIST_AGENTS</b><span>Loaded-runtime view: an unloaded child can be absent even while its identity/history remains registered.</span></div>
+    <p class="residency-outcome" aria-live="polite"><b>${scenario.label}</b><span>${scenario.outcome}</span></p>
+    <p class="residency-boundary">Static public-source trace, pinned to <code>e89b7c4</code>; cited tests were inspected, not run. This is not a live Desktop eviction/reload trace. Mailbox retention described here is process-local unless another source proves otherwise.</p>
+    <p class="residency-sources"><a href="https://github.com/openai/codex/blob/e89b7c442c0433ad5167e72a5a25bb6d0712766a/codex-rs/core/src/agent/control/residency.rs" target="_blank" rel="noreferrer">residency and eviction</a> · <a href="https://github.com/openai/codex/blob/e89b7c442c0433ad5167e72a5a25bb6d0712766a/codex-rs/core/src/agent/control/spawn.rs" target="_blank" rel="noreferrer">reload existing child</a> · <a href="https://github.com/openai/codex/blob/e89b7c442c0433ad5167e72a5a25bb6d0712766a/codex-rs/core/src/agent/control/mailbox.rs" target="_blank" rel="noreferrer">runtime mailbox</a> · <a href="https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#current-main-v2-residency-and-follow-up-reload-recheck-2026-10-15" target="_blank" rel="noreferrer">evidence ledger</a></p>
+  </section>`;
+}
+function selectResidencyScenario(scenarioName) {
+  const container = $('.residency-map');
+  if (!container) return;
+  residencyScenario = ['completed-followup','queue-only','interrupted-eviction'].includes(scenarioName) ? scenarioName : 'completed-followup';
+  container.outerHTML = residencyMarkup();
+}
+function interruptCloseMarkup() {
+  const scenarios = {
+    'interrupt-resident': {
+      label: 'INTERRUPT A LOADED CHILD',
+      activity: 'Interrupted · previous status snapshot',
+      runtime: 'Interrupt requested for the current child turn; no explicit session shutdown in this handler',
+      registry: 'Identity remains registered',
+      edge: 'OPEN · unchanged',
+      descendants: 'No recursive descendant shutdown in this handler',
+      detail: 'The activity records the interrupt operation and prior status. It does not close the graph edge or remove the agent identity.',
+      tone: 'interrupt'
+    },
+    'interrupt-unloaded': {
+      label: 'INTERRUPT AN UNLOADED CHILD',
+      activity: 'Interrupted · previous status = NotFound',
+      runtime: 'Remains unloaded; this path does not reload it',
+      registry: 'Known identity remains registered',
+      edge: 'OPEN · unchanged',
+      descendants: 'No recursive descendant shutdown in this handler',
+      detail: 'The tool can return success and emit Interrupted activity when no runtime is present. The event alone does not prove a turn was running or changed status.',
+      tone: 'unloaded'
+    },
+    close: {
+      label: 'EXPLICITLY CLOSE THE CHILD',
+      activity: 'Close operation',
+      runtime: 'Target and currently live descendants are shut down',
+      registry: 'Runtime, registry and mailbox state removed by shutdown',
+      edge: 'CLOSED · explicitly persisted first',
+      descendants: 'Recursive shutdown of currently live descendants',
+      detail: 'Closure changes the persisted spawn edge before shutdown. Ordinary shutdown by itself does not perform that graph update.',
+      tone: 'close'
+    }
+  };
+  const scenario = scenarios[interruptCloseScenario] ?? scenarios['interrupt-resident'];
+  return `<section class="interrupt-close-map" aria-labelledby="interrupt-close-title">
+    <div class="interrupt-close-heading"><div><span class="interrupt-close-eyebrow">V2 · CONTROL OPERATION TRACE</span><h5 id="interrupt-close-title">Does “Interrupted” mean the child was closed?</h5></div><span>source snapshot · 740e5af</span></div>
+    <p class="interrupt-close-intro">Follow the effects across five separate state surfaces. Select the operation to see which fields it changes.</p>
+    <div class="interrupt-close-controls" role="group" aria-label="Choose interrupt or close operation">
+      <button type="button" data-interrupt-close-case="interrupt-resident" aria-pressed="${interruptCloseScenario === 'interrupt-resident'}">Interrupt loaded</button>
+      <button type="button" data-interrupt-close-case="interrupt-unloaded" aria-pressed="${interruptCloseScenario === 'interrupt-unloaded'}">Interrupt unloaded</button>
+      <button type="button" data-interrupt-close-case="close" aria-pressed="${interruptCloseScenario === 'close'}">Close recursively</button>
+    </div>
+    <div class="interrupt-close-grid" data-case="${scenario.tone}" aria-live="polite">
+      ${[['ACTIVITY',scenario.activity],['RUNTIME',scenario.runtime],['REGISTRY',scenario.registry],['PERSISTED EDGE',scenario.edge],['LIVE DESCENDANTS',scenario.descendants]].map(([label,value]) => `<article class="interrupt-close-cell"><span>${label}</span><strong>${value}</strong></article>`).join('')}
+    </div>
+    <p class="interrupt-close-outcome"><b>${scenario.label}</b><span>${scenario.detail}</span></p>
+    <p class="interrupt-close-boundary">Static public-source analysis; the cited unloaded-child test was inspected, not run. This is not a live interruption or shutdown observation. A later follow-up has its own reload checks.</p>
+    <p class="interrupt-close-source"><a href="https://github.com/openai/codex/blob/740e5af33c71225640e0c1c1555c514c2c93ab74/codex-rs/core/src/tools/handlers/multi_agents_v2/interrupt_agent.rs" target="_blank" rel="noreferrer">interrupt handler</a> · <a href="https://github.com/openai/codex/blob/740e5af33c71225640e0c1c1555c514c2c93ab74/codex-rs/core/src/agent/control/legacy.rs" target="_blank" rel="noreferrer">explicit close and recursive shutdown</a> · <a href="https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#v2-interruption-is-not-closure" target="_blank" rel="noreferrer">evidence ledger</a></p>
+  </section>`;
+}
+function selectInterruptCloseScenario(scenarioName) {
+  const container = $('.interrupt-close-map');
+  if (!container) return;
+  interruptCloseScenario = ['interrupt-resident','interrupt-unloaded','close'].includes(scenarioName) ? scenarioName : 'interrupt-resident';
+  container.outerHTML = interruptCloseMarkup();
+}
+function admissionMarkup() {
+  const overlapped = admissionScenario === 'overlap';
+  const stages = overlapped
+    ? [
+      ['SHARED COUNTER', 'active = 0 / limit 1', 'Both child sessions see the same execution limiter.'],
+      ['CHILD A · CHECK', 'passes at 0', 'Advisory check; this step reserves no permit.'],
+      ['CHILD B · CHECK', 'also passes at 0', 'A different thread has separate turn state and can check before A starts.'],
+      ['TASK STARTS', 'guards raise count to 2', 'Each task later acquires its guard; the increment does not re-check the limit.']
+    ]
+    : [
+      ['SHARED COUNTER', 'active = 0 / limit 1', 'One child turn is admitted at a time in this example.'],
+      ['CHILD A · CHECK', 'passes at 0', 'The advisory check runs before task start.'],
+      ['CHILD A · GUARD', 'active becomes 1', 'Task start tracks the active turn with a guard.'],
+      ['CHILD B · CHECK', 'rejected at 1', 'A later check sees the updated count.']
+    ];
+  const outcome = overlapped
+    ? 'The source contracts permit this check-then-start interleaving; they do not prove that a real run exceeded the configured limit. No concurrent runtime reproduction was performed.'
+    : 'When checks happen after prior task-start guards update the counter, the later child is rejected at the limit.';
+  return `<section class="admission-map" data-admission-map="${admissionScenario}" aria-labelledby="admission-map-title">
+    <div class="admission-heading"><div><span class="admission-eyebrow">V2 · EXECUTION CAPACITY</span><h5 id="admission-map-title">Does the capacity check reserve a slot?</h5></div><span class="admission-version">source snapshot · e89b7c4</span></div>
+    <p class="admission-intro">The API checks capacity before work is accepted, then counts execution when a task starts. Compare sequential checks with overlapping child sessions.</p>
+    <div class="admission-controls" role="group" aria-label="Choose an execution admission ordering">
+      <button type="button" data-admission-case="sequential" aria-pressed="${!overlapped}">Sequential checks</button>
+      <button type="button" data-admission-case="overlap" aria-pressed="${overlapped}">Two checks overlap</button>
+    </div>
+    <div class="admission-flow" data-case="${admissionScenario}" aria-live="polite">
+      ${stages.map(([label,title,detail],index) => `<article class="admission-node" data-stage="${index}"><span>${label}</span><strong>${title}</strong><small>${detail}</small></article>${index < stages.length-1 ? '<i aria-hidden="true">→</i>' : ''}`).join('')}
+    </div>
+    <p class="admission-counter"><b>${overlapped ? 'POSSIBLE INTERLEAVING' : 'ORDERED EXAMPLE'}</b><span>${overlapped ? 'A check is not a reservation; the later guard count can exceed the configured limit in this source-level scenario.' : 'The next check observes the guard acquired by the earlier started task.'}</span></p>
+    <p class="admission-outcome" aria-live="polite">${outcome}</p>
+    <p class="admission-boundary">Source-level concurrency inference only. The checked-in test covers sequential admission; no stress test, real over-cap event, or Desktop observation is claimed.</p>
+    <p class="admission-sources"><a href="https://github.com/openai/codex/blob/e89b7c442c0433ad5167e72a5a25bb6d0712766a/codex-rs/core/src/agent/api.rs#L111-L125" target="_blank" rel="noreferrer">advisory API contract</a> · <a href="https://github.com/openai/codex/blob/e89b7c442c0433ad5167e72a5a25bb6d0712766a/codex-rs/core/src/codex_thread.rs#L474-L490" target="_blank" rel="noreferrer">turn start check</a> · <a href="https://github.com/openai/codex/blob/e89b7c442c0433ad5167e72a5a25bb6d0712766a/codex-rs/core/src/tasks/mod.rs#L347-L359" target="_blank" rel="noreferrer">guard acquisition</a> · <a href="https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#current-main-v2-execution-admission-is-explicitly-advisory-2026-10-15" target="_blank" rel="noreferrer">evidence ledger</a></p>
+  </section>`;
+}
+function selectAdmissionScenario(scenarioName) {
+  const container = $('.admission-map');
+  if (!container) return;
+  admissionScenario = ['sequential','overlap'].includes(scenarioName) ? scenarioName : 'sequential';
+  container.outerHTML = admissionMarkup();
+}
 document.addEventListener('toggle', event => {
   if (event.target.matches('.delivery-model')) deliveryModelOpen = event.target.open;
 }, true);
+document.addEventListener('input', event => {
+  if (event.target.matches('.sequence-scrubber input[type="range"]')) updateSequenceStep(event.target.closest('.interaction-sequence'), event.target.value);
+});
+document.addEventListener('keydown', event => {
+  const sequenceEvent = event.target.closest?.('.sequence-plot-event, .sequence-event');
+  if (!sequenceEvent || !['Enter',' '].includes(event.key)) return;
+  event.preventDefault();
+  updateSequenceStep(sequenceEvent.closest('.interaction-sequence'), sequenceEvent.dataset.sequenceIndex);
+});
 function scrollInspectorTo(targetId) {
   const target = document.getElementById(targetId);
   const inspector = $('#inspector');
   if (!target || !inspector) return;
   const behavior = matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
   if (matchMedia('(min-width: 681px)').matches) {
-    const headerHeight = $('#agent-detail .detail-head')?.getBoundingClientRect().height ?? 0;
-    const top = target.getBoundingClientRect().top - inspector.getBoundingClientRect().top + inspector.scrollTop - headerHeight;
-    inspector.scrollTo({ top: Math.max(0, top - 8), behavior });
+    const pinnedHeight = $('.inspector-nav')?.getBoundingClientRect().height ?? 0;
+    const top = target.getBoundingClientRect().top - inspector.getBoundingClientRect().top + inspector.scrollTop - pinnedHeight;
+    inspector.scrollTo({ top: Math.max(0, top - 24), behavior });
   } else {
     target.scrollIntoView({ behavior, block: 'start' });
   }
@@ -328,7 +1060,7 @@ function updateInspectorNav() {
     ? inspector.scrollTop + inspector.clientHeight >= inspector.scrollHeight - 2
     : window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 2;
   const anchor = desktop
-    ? inspector.getBoundingClientRect().top + Math.max($('#agent-detail .detail-head')?.getBoundingClientRect().height ?? 0, inspector.clientHeight * 0.55) + 16
+    ? inspector.getBoundingClientRect().top + ($('.inspector-nav')?.getBoundingClientRect().height ?? 0) + 16
     : Math.min(window.innerHeight * 0.42, window.innerHeight - 80);
   let current = sections[0];
   if (atEnd) current = sections.at(-1);
@@ -581,8 +1313,79 @@ $('#tree').addEventListener('keydown', event => {
   }
 });
 document.addEventListener('click', async event => {
+  const sequenceEvent = event.target.closest('[data-sequence-index]');
+  if (sequenceEvent) {
+    updateSequenceStep(sequenceEvent.closest('.interaction-sequence'), sequenceEvent.dataset.sequenceIndex);
+    return;
+  }
+  const sequenceMove = event.target.closest('[data-sequence-move]');
+  if (sequenceMove) {
+    const container = sequenceMove.closest('.interaction-sequence');
+    const range = container?.querySelector('input[type="range"]');
+    if (range) updateSequenceStep(container, Number(range.value) + Number(sequenceMove.dataset.sequenceMove));
+    return;
+  }
+  const desktopCase = event.target.closest('[data-desktop-case]');
+  if (desktopCase) {
+    const gate = desktopCase.closest('.desktop-gate');
+    const scenarios = {
+      'same-turn': { evidence:'collabAgentToolCall · spawnAgent', scope:'matching child reference in this parent turn', value:'true', outcome:'interactive thread route', effect:'composer may be available; resume hook can be eligible', tone:'interactive', boundary:'UI routing hint only. It does not establish server authorization, a live child process, or that a resume actually occurs.' },
+      'activity-only': { evidence:'subAgentActivity', scope:'no matching spawn reference in the indexed parent turn', value:'false', outcome:'read-only child row', effect:'composer hidden; resume hook gated off', tone:'read-only', boundary:'The UI keeps the activity visible but does not infer interaction authority from activity alone.' },
+      'prior-turn': { evidence:'collabAgentToolCall · spawnAgent', scope:'spawn is on an earlier parentTurnKey; current activity belongs to another turn', value:'false', outcome:'read-only child row', effect:'cross-turn activity does not carry the earlier interactive hint', tone:'read-only', boundary:'The carry-forward check is parentTurnKey-sensitive. This describes the inspected row projection, not server-side authorization.' }
+    };
+    const scenario = scenarios[desktopCase.dataset.desktopCase];
+    if (!gate || !scenario) return;
+    gate.querySelector('.desktop-gate-flow').dataset.case = desktopCase.dataset.desktopCase;
+    gate.querySelectorAll('[data-desktop-case]').forEach(button => button.setAttribute('aria-pressed', String(button === desktopCase)));
+    gate.querySelector('[data-gate-evidence]').textContent = scenario.evidence;
+    gate.querySelector('[data-gate-scope]').textContent = scenario.scope;
+    gate.querySelector('[data-gate-flag]').textContent = `canInteract = ${scenario.value}`;
+    gate.querySelector('[data-gate-outcome]').textContent = scenario.outcome;
+    gate.querySelector('[data-gate-effect]').textContent = scenario.effect;
+    gate.querySelector('[data-gate-boundary]').textContent = scenario.boundary;
+    return;
+  }
   const timingScenario = event.target.closest('[data-mailbox-scenario]');
   if (timingScenario) { selectMailboxScenario(timingScenario.dataset.mailboxScenario); return; }
+  const boardWriteCase = event.target.closest('[data-board-write-case]');
+  if (boardWriteCase) { selectBoardWriteScenario(boardWriteCase.dataset.boardWriteCase); return; }
+  const toolExposureCase = event.target.closest('[data-tool-exposure-case]');
+  if (toolExposureCase) { selectToolExposureCase(toolExposureCase.dataset.toolExposureCase); return; }
+  const toolExposureOption = event.target.closest('[data-tool-disable-messages], [data-tool-wait-enabled]');
+  if (toolExposureOption) {
+    updateToolExposureOption(toolExposureOption.hasAttribute('data-tool-disable-messages') ? 'messages' : 'wait', toolExposureOption.checked);
+    return;
+  }
+  const waitScopeCase = event.target.closest('[data-wait-scope-case]');
+  if (waitScopeCase) { selectWaitScopeScenario(waitScopeCase.dataset.waitScopeCase); return; }
+  const residencyCase = event.target.closest('[data-residency-case]');
+  if (residencyCase) { selectResidencyScenario(residencyCase.dataset.residencyCase); return; }
+  const interruptCloseCase = event.target.closest('[data-interrupt-close-case]');
+  if (interruptCloseCase) { selectInterruptCloseScenario(interruptCloseCase.dataset.interruptCloseCase); return; }
+  const admissionCase = event.target.closest('[data-admission-case]');
+  if (admissionCase) { selectAdmissionScenario(admissionCase.dataset.admissionCase); return; }
+  const fidelityCase = event.target.closest('[data-fidelity-case]');
+  if (fidelityCase) { selectFullFidelityScenario(fidelityCase.dataset.fidelityCase); return; }
+  const rendererDeltaCase = event.target.closest('[data-renderer-delta]');
+  if (rendererDeltaCase) { selectRendererDeltaScenario(rendererDeltaCase.dataset.rendererDelta); return; }
+  const completionPayloadCase = event.target.closest('[data-completion-payload]');
+  if (completionPayloadCase) { selectCompletionPayload(completionPayloadCase.dataset.completionPayload); return; }
+  const spawnProtocolVersionButton = event.target.closest('[data-spawn-protocol-version]');
+  if (spawnProtocolVersionButton) { selectSpawnProtocol('version', spawnProtocolVersionButton.dataset.spawnProtocolVersion); return; }
+  const spawnProtocolOutcomeButton = event.target.closest('[data-spawn-protocol-outcome]');
+  if (spawnProtocolOutcomeButton) { selectSpawnProtocol('outcome', spawnProtocolOutcomeButton.dataset.spawnProtocolOutcome); return; }
+  const terminalScenarioButton = event.target.closest('[data-terminal-scenario]');
+  if (terminalScenarioButton) { selectTerminalScenario(terminalScenarioButton.dataset.terminalScenario); return; }
+  const spawnConfigModeButton = event.target.closest('[data-spawn-config-mode]');
+  if (spawnConfigModeButton) { selectSpawnConfigOption('mode', spawnConfigModeButton.dataset.spawnConfigMode); return; }
+  const spawnModelSourceButton = event.target.closest('[data-spawn-model-source]');
+  if (spawnModelSourceButton) { selectSpawnConfigOption('model', spawnModelSourceButton.dataset.spawnModelSource); return; }
+  const spawnRoleToggle = event.target.closest('[data-spawn-role]');
+  if (spawnRoleToggle) { selectSpawnConfigOption('role', spawnRoleToggle.checked); return; }
+  const topologyCase = event.target.closest('[data-topology-case]');
+  if (topologyCase) { selectTopologyScenario(topologyCase.dataset.topologyCase); return; }
+  const historyGate = event.target.closest('[data-history-gate]');
+  if (historyGate) { selectHistoryGate(historyGate.dataset.historyGate); return; }
   const cancelButton = event.target.closest('[data-cancel]');
   const inboxButton = event.target.closest('[data-open-inbox]');
   const childButton = event.target.closest('[data-child]');
