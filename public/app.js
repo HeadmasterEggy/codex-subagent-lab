@@ -3,6 +3,7 @@ const headers = { 'content-type': 'application/json', 'x-lab-token': token };
 const $ = selector => document.querySelector(selector);
 let state = { tasks: [] };
 let selectedTaskId = null;
+let renderedSelectedTaskId = null;
 let pendingFocusTaskId = null;
 let selectedParent = null;
 let selectedMessageTask = null;
@@ -132,6 +133,8 @@ function render(next) {
   pendingFocusTaskId = null;
   const focusTarget = explicitFocusTaskId ? `[data-select="${CSS.escape(explicitFocusTaskId)}"]` : focused.select ? `[data-select="${CSS.escape(focused.select)}"]` : focused.toggleChildren ? `[data-toggle-children="${CSS.escape(focused.toggleChildren)}"]` : focused.child ? `[data-child="${CSS.escape(focused.child)}"]` : focused.message ? `[data-message="${CSS.escape(focused.message)}"]` : focused.cancel ? `[data-cancel="${CSS.escape(focused.cancel)}"]` : focused.jump ? `[data-jump="${CSS.escape(focused.jump)}"]` : focused.openInbox ? `[data-open-inbox="${CSS.escape(focused.openInbox)}"]` : focusedId ? `#${CSS.escape(focusedId)}` : null;
   const treeScroll = $('#tree').scrollTop;
+  const inspectorScroll = $('#inspector').scrollTop;
+  const previousSelectedTaskId = renderedSelectedTaskId;
   const pageScroll = window.scrollY;
   state = next;
   const tasks = Array.isArray(next.tasks) ? next.tasks : [];
@@ -174,6 +177,8 @@ function render(next) {
   $('#tree').innerHTML = taskTree(null, 0, visible, matches);
   $('#tree').scrollTop = treeScroll;
   renderInspector();
+  renderedSelectedTaskId = selectedTaskId;
+  $('#inspector').scrollTop = previousSelectedTaskId === selectedTaskId ? inspectorScroll : 0;
   if (focusTarget) document.querySelector(focusTarget)?.focus({ preventScroll:true });
   window.scrollTo({ top:pageScroll, behavior:'instant' });
 }

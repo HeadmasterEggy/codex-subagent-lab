@@ -27,3 +27,11 @@ dialog{max-width:none;max-height:calc(100dvh - 24px);overflow:auto;padding:0;bor
 @media(max-width:900px){.overview{grid-template-columns:repeat(4,minmax(0,1fr))}.compose-settings{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:680px){.compose-settings{grid-template-columns:repeat(2,minmax(0,1fr))}.metadata-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:420px){.compose-settings{grid-template-columns:minmax(0,1fr)}.overview{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* Keep the selected agent controls available while reviewing long transcripts. */
+@media(min-width:681px){
+  .inspector{position:sticky;top:12px;max-height:calc(100dvh - 24px);overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable;scroll-behavior:smooth}
+  .detail-head{position:sticky;top:0;z-index:2;background:linear-gradient(145deg,#141619f7,#101113f7);backdrop-filter:blur(14px)}
+  .detail-section[id="agent-mailbox"]{scroll-margin-top:12px}
+}
+@media(max-width:680px){.inspector{position:static;max-height:none;overflow:visible;scrollbar-gutter:auto}.detail-head{position:static;backdrop-filter:none}}
