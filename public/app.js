@@ -55,6 +55,7 @@ let spawnConfigModelSource = 'inherited';
 let spawnConfigRole = false;
 let spawnProtocolVersion = 'v2';
 let spawnProtocolOutcome = 'success';
+let nativeSpawnFocus = 0;
 let terminalScenario = 'completed';
 let activeFilter = 'all';
 let taskSearch = '';
@@ -277,6 +278,60 @@ function spawnProtocolMarkup() {
     <p class="spawn-protocol-boundary">V1 config-preparation failure occurs after an InProgress turn item was emitted and returns before this handler emits its completion item. V2 config-preparation failure is recorded by the outer executor as a failed tool call; the Started activity follows successful thread creation. Static source ordering only: no live Desktop event stream or rendered React state was captured.</p>
     <p class="spawn-protocol-sources"><a href="https://github.com/openai/codex/blob/7ae831991792744434027c431dfbc7e81dd5c12c/codex-rs/core/src/tools/handlers/multi_agents/spawn.rs#L53-L190" target="_blank" rel="noreferrer">V1 handler and turn items</a> · <a href="https://github.com/openai/codex/blob/7ae831991792744434027c431dfbc7e81dd5c12c/codex-rs/core/src/tools/handlers/multi_agents_v2/spawn.rs#L43-L240" target="_blank" rel="noreferrer">V2 handler and analytics</a> · <a href="https://github.com/openai/codex/blob/7ae831991792744434027c431dfbc7e81dd5c12c/codex-rs/core/src/tools/handlers/multi_agents_spec.rs#L65-L145" target="_blank" rel="noreferrer">tool schemas</a> · <a href="https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#spawn-call-records-have-different-failure-ordering-in-v1-and-v2-2026-10-16" target="_blank" rel="noreferrer">evidence ledger</a></p>
     ${nativeCliTraceMarkup()}
+  </section>`;
+}
+
+function nativeSpawnTraceMarkup() {
+  const sourceRoot = 'https://github.com/openai/codex/blob/4ebc485ca321243727539187169425fcf972f2c4/codex-rs/core/src';
+  const steps = [
+    {
+      label: 'Tool handler',
+      tag: 'SOURCE + BINARY SYMBOL',
+      title: 'V2 handler receives spawn_agent',
+      text: 'The version-matched source enters Handler::handle, then awaits handle_spawn_agent. The installed Mach-O has the matching V2 handler symbol at 0x1057de9a0. A symbol locates code; it does not prove this Desktop path ran.',
+      file: 'tools/handlers/multi_agents_v2/spawn.rs',
+      href: `${sourceRoot}/tools/handlers/multi_agents_v2/spawn.rs`
+    },
+    {
+      label: 'Prepare request',
+      tag: 'PINNED SOURCE',
+      title: 'Resolve config, identity, and initial input',
+      text: 'The shared thread_spawn::spawn path validates the initial message, prepares the child config and role, creates its task path and spawn source, then builds the AgentControl request.',
+      file: 'thread_spawn.rs',
+      href: `${sourceRoot}/thread_spawn.rs`
+    },
+    {
+      label: 'Create child',
+      tag: 'SOURCE + UNRESOLVED INDIRECT EDGE',
+      title: 'AgentControl accepts the child turn',
+      text: 'The pinned source calls AgentControl::spawn with MessageDeliveryMode::TriggerTurn. The installed binary exports LocalAgentControl::spawn at 0x105623b3c, but this disassembly has not resolved the handler’s indirect dispatch to that address.',
+      file: 'agent/control/spawn.rs',
+      href: `${sourceRoot}/agent/control/spawn.rs`
+    },
+    {
+      label: 'Return activity',
+      tag: 'PINNED SOURCE',
+      title: 'Emit Started after acceptance',
+      text: 'After spawn returns, the handler emits SubAgentActivityKind::Started and formats the task name result. The receipt marks accepted creation; it is not child completion.',
+      file: 'tools/handlers/multi_agents_v2/spawn.rs',
+      href: `${sourceRoot}/tools/handlers/multi_agents_v2/spawn.rs`
+    },
+    {
+      label: 'Telemetry call',
+      tag: 'DIRECT MACHINE-CODE CALL',
+      title: 'The handler records the collaboration tool call',
+      text: 'LLDB resolves the direct BL at 0x1057df0b4 to AnalyticsEventsClient::track_collab_tool_call. This independently matches the pinned handler’s analytics call; it does not recover the rest of the native call graph.',
+      file: 'installed Mach-O · 0x1057df0b4',
+      href: 'https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#follow-up-exact-tag-source-comparison-and-one-resolved-v2-handler-call-2026-10-17'
+    }
+  ];
+  nativeSpawnFocus = Math.max(0, Math.min(steps.length - 1, Number(nativeSpawnFocus) || 0));
+  const step = steps[nativeSpawnFocus];
+  return `<section class="native-spawn-trace" aria-labelledby="native-spawn-trace-title">
+    <div class="native-spawn-heading"><div><span>INSTALLED ARM64 · V2 SPAWN CROSS-CHECK</span><h5 id="native-spawn-trace-title">Follow the request across source and binary evidence</h5></div><small>Codex 0.163.0-alpha.10.2 · tag 4ebc485</small></div>
+    <div class="native-spawn-rail" role="group" aria-label="V2 spawn evidence checkpoints">${steps.map((item, index) => `<button type="button" data-native-spawn-step="${index}" aria-pressed="${index === nativeSpawnFocus}"><span>0${index + 1}</span><b>${item.label}</b></button>`).join('')}</div>
+    <article class="native-spawn-detail" aria-live="polite"><div><span>${step.tag}</span><a href="${step.href}" target="_blank" rel="noreferrer">${step.file} ↗</a></div><h6>${step.title}</h6><p>${step.text}</p></article>
+    <p class="native-spawn-boundary"><b>Evidence boundary</b> Same-version source improves comparison confidence, but there is no signed build provenance. The desktop app was not launched and no spawn transition was induced.</p>
   </section>`;
 }
 function nativeCliTraceMarkup() {
@@ -1274,6 +1329,7 @@ function renderInspector() {
         <i aria-hidden="true">→</i>
         <button type="button" data-inspector-target="activity"><span>04 · RETURN</span><strong>Status + result</strong><small>Terminal status, activity and parent result are distinct signals.</small><b>Inspect activity</b></button>
       </div>
+      ${nativeSpawnTraceMarkup()}
       <div class="parallel-lifecycle" aria-label="Parent and child lifecycle after spawn">
         <div class="parallel-lifecycle-heading"><span>AFTER SPAWN · PARALLEL THREADS</span><small>Spawn receipt does not wait for child completion</small></div>
         <div class="parallel-lifecycle-scroll">
@@ -2197,6 +2253,13 @@ $('#tree').addEventListener('keydown', event => {
   }
 });
 document.addEventListener('click', async event => {
+  const nativeSpawnButton = event.target.closest('[data-native-spawn-step]');
+  if (nativeSpawnButton) {
+    nativeSpawnFocus = Math.max(0, Math.min(4, Number(nativeSpawnButton.dataset.nativeSpawnStep) || 0));
+    nativeSpawnButton.closest('.native-spawn-trace').outerHTML = nativeSpawnTraceMarkup();
+    document.querySelector(`[data-native-spawn-step="${nativeSpawnFocus}"]`)?.focus();
+    return;
+  }
   const desktopHydrationButton = event.target.closest('[data-desktop-hydration]');
   if (desktopHydrationButton) {
     desktopHydrationState = ['summary', 'archived', 'complete', 'more', 'stalled'].includes(desktopHydrationButton.dataset.desktopHydration) ? desktopHydrationButton.dataset.desktopHydration : 'summary';
