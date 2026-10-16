@@ -772,6 +772,19 @@ function shutdownPathCompareMarkup() {
     <p class="shutdown-path-boundary">These are independently evidenced paths with different owners and snapshots. No source or live trace here proves they converge or are interchangeable.</p>
   </div>`;
 }
+function desktopExitFlushMarkup() {
+  return `<div class="desktop-exit-flush" aria-label="Installed Desktop app exit flush and disposal trace">
+    <div class="desktop-exit-flush-heading"><span>INSTALLED DESKTOP · MAIN PROCESS · 26.1007.71326</span><strong id="desktop-exit-flush-title">App exit has a bounded flush barrier</strong></div>
+    <ol class="desktop-exit-flush-flow">
+      <li><i>01</i><span><b>Electron emits <code>will-quit</code></b><small>Main bundle registers the application-exit handler.</small></span></li>
+      <li><i>02</i><span><b>Flush attempts settle</b><small>The normal path uses <code>Promise.allSettled</code>; fast exit skips one flush.</small></span></li>
+      <li><i>03</i><span><b>Dispose context and flush</b><small><code>flushAndDisposeContext</code> disposes the host context and awaits <code>x.flush()</code>.</small></span></li>
+      <li><i>04</i><span><b>Continue on settle or 5 s timeout</b><small>The bounded wait lets exit proceed after completion, rejection, or timeout.</small></span></li>
+    </ol>
+    <p class="desktop-exit-flush-boundary"><b>Separate from descendant cleanup.</b> This asset shows no tree-wait call or link to the renderer's user-Stop background cascade. Literal API-name searches are limited to this bundle; dynamic IPC/RPC, native-host, and external app-server paths remain unknown.</p>
+    <p class="desktop-exit-flush-source"><a href="https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#installed-desktop-app-exit-flush-is-bounded-and-separate-from-tree-cleanup-2026-10-16" target="_blank" rel="noreferrer">Exit-path evidence ledger ↗</a> · main bundle SHA-256 <code>87d52265…ea6d32d51</code> · character offsets <code>3,365,131</code>, <code>3,377,743</code>, <code>3,387,801</code></p>
+  </div>`;
+}
 function topologyMarkup() {
   const scenarios = {
     'panel-open': {
@@ -1044,11 +1057,20 @@ function renderInspector() {
       <div class="inspector-current"><span>${escapeHtml(task.parentId ? 'CHILD AGENT' : 'ROOT AGENT')} · ${escapeHtml(task.status.replaceAll('_',' ').toUpperCase())}</span><strong title="${escapeHtml(task.prompt)}">${escapeHtml(task.prompt)}</strong></div>
       <div class="inspector-nav-links"><button type="button" data-inspector-target="context">Context</button><button type="button" data-inspector-target="links">Task links</button><button type="button" data-inspector-target="agent-mailbox">Mailbox</button><button type="button" data-inspector-target="output">Output</button><button type="button" data-inspector-target="activity">Activity</button></div>
     </nav>
+    <section class="evidence-map" aria-labelledby="evidence-map-title">
+      <div class="evidence-map-heading"><div><span>HOW TO READ THESE TRACES</span><h4 id="evidence-map-title">Four evidence lenses</h4></div><small>Each lens answers a different question</small></div>
+      <div class="evidence-lenses" role="group" aria-label="Evidence sources and their limits">
+        <button type="button" class="evidence-lens cli-lens" data-inspector-target="native-cli-trace-title"><span class="evidence-index">01</span><span class="evidence-lens-copy"><strong>Captured CLI run</strong><small>Shows serialized events and reported status for that run.</small><b>Does not expose hidden model context.</b></span><i aria-hidden="true">↗</i></button>
+        <button type="button" class="evidence-lens source-lens" data-inspector-target="suspension-map-title"><span class="evidence-index">02</span><span class="evidence-lens-copy"><strong>Public source</strong><small>Shows implemented contracts and control flow at a pinned revision.</small><b>Does not prove a live path was taken.</b></span><i aria-hidden="true">↗</i></button>
+        <button type="button" class="evidence-lens desktop-lens" data-inspector-target="desktop-subagents-title"><span class="evidence-index">03</span><span class="evidence-lens-copy"><strong>Installed Desktop bundle</strong><small>Shows packaged UI and host code paths inspected locally.</small><b>Static inspection is not a runtime capture.</b></span><i aria-hidden="true">↗</i></button>
+        <article class="evidence-lens demo-lens"><span class="evidence-index">04</span><span class="evidence-lens-copy"><strong>Lab sample data</strong><small>Demonstrates task trees, timelines, inboxes, and result routes.</small><b>${isSample ? 'This selected task is illustrative.' : 'Sample records are labeled in the Inspector.'}</b></span><i aria-hidden="true">◇</i></article>
+      </div>
+    </section>
     <details class="source-map-index">
-        <summary><span class="source-map-index-mark" aria-hidden="true">⌕</span><span class="source-map-index-title">Source map index</span><span class="source-map-index-count" data-map-count>23 / 23 MAPS</span><span class="source-map-index-hint">Search by mechanism or question</span></summary>
+        <summary><span class="source-map-index-mark" aria-hidden="true">⌕</span><span class="source-map-index-title">Source map index</span><span class="source-map-index-count" data-map-count>24 / 24 MAPS</span><span class="source-map-index-hint">Search by mechanism or question</span></summary>
       <div class="source-map-groups">
         <section class="source-map-group" aria-label="Orchestration and lifecycle maps"><h5>ORCHESTRATION · LIFECYCLE</h5><div>
-          <button type="button" data-inspector-target="spawn-config-title">Child config</button><button type="button" data-inspector-target="spawn-protocol-title">Spawn ordering</button><button type="button" data-inspector-target="capacity-race-title">Capacity race</button><button type="button" data-inspector-target="admission-map-title">Execution admission</button><button type="button" data-inspector-target="residency-map-title">Runtime residency</button><button type="button" data-inspector-target="suspension-map-title">Root suspension</button><button type="button" data-inspector-target="interrupt-close-title">Stop and close</button><button type="button" data-inspector-target="terminal-lifecycle-title">Terminal signals</button><button type="button" data-inspector-target="wait-scope-title">Wait scope</button>
+          <button type="button" data-inspector-target="spawn-config-title">Child config</button><button type="button" data-inspector-target="spawn-protocol-title">Spawn ordering</button><button type="button" data-inspector-target="capacity-race-title">Capacity race</button><button type="button" data-inspector-target="admission-map-title">Execution admission</button><button type="button" data-inspector-target="residency-map-title">Runtime residency</button><button type="button" data-inspector-target="suspension-map-title">Root suspension</button><button type="button" data-inspector-target="interrupt-close-title">Stop and close</button><button type="button" data-inspector-target="desktop-exit-flush-title">Desktop exit flush</button><button type="button" data-inspector-target="terminal-lifecycle-title">Terminal signals</button><button type="button" data-inspector-target="wait-scope-title">Wait scope</button>
         </div></section>
         <section class="source-map-group" aria-label="Message and result maps"><h5>MESSAGES · RESULTS</h5><div>
           <button type="button" data-inspector-target="delivery-flow-title">Delivery flow</button><button type="button" data-inspector-target="mailbox-timing-title">Mailbox timing</button><button type="button" data-inspector-target="board-write-title">Message board</button><button type="button" data-inspector-target="tool-exposure-title">Tool exposure</button><button type="button" data-inspector-target="request-wire-title">Request payload</button><button type="button" data-inspector-target="completion-route-title">Result routing</button><button type="button" data-inspector-target="completion-payload-title">Output consumers</button><button type="button" data-inspector-target="parent-result-state-title">Parent wake boundary</button><button type="button" data-inspector-target="native-cli-trace-title">CLI observation</button>
@@ -1058,7 +1080,7 @@ function renderInspector() {
         </div></section>
       </div>
       <label class="source-map-search"><span aria-hidden="true">⌕</span><input type="search" data-map-search aria-label="Search source maps" placeholder="Try: shutdown, message, Desktop…" autocomplete="off"><kbd>ESC</kbd></label>
-      <p class="source-map-search-status" data-map-search-status aria-live="polite">Showing all 23 source-linked diagrams.</p>
+      <p class="source-map-search-status" data-map-search-status aria-live="polite">Showing all 24 source-linked diagrams.</p>
     </details>
     <section class="mechanism-overview" aria-labelledby="mechanism-overview-title">
       <div class="mechanism-overview-heading"><div><span>MECHANISM MAP · SOURCE SYNTHESIS</span><h4 id="mechanism-overview-title">How a child agent fits into the parent thread</h4></div><a href="https://github.com/openai/codex/blob/a45b8ccb016fb74f63a6bc29e701568e387cbe38/codex-rs/core/src/session/turn_suspension.rs" target="_blank" rel="noreferrer">root handoff check · a45b8cc</a></div>
@@ -1144,6 +1166,7 @@ function renderInspector() {
           <p class="host-handoff-footnote"><b>Separate mechanism:</b> app-server's <code>shutdown_drain_waiter</code> synchronizes listener replacement after <code>ShutdownComplete</code>; it is not the tree-wait handle. <a href="https://github.com/openai/codex/blob/a45b8ccb016fb74f63a6bc29e701568e387cbe38/codex-rs/app-server/src/request_processors/thread_lifecycle.rs#L389-L396" target="_blank" rel="noreferrer">Listener event path ↗</a> · <a href="https://github.com/openai/codex/blob/a45b8ccb016fb74f63a6bc29e701568e387cbe38/codex-rs/app-server/src/thread_state.rs#L109-L111" target="_blank" rel="noreferrer">Waiter ownership ↗</a></p>
         </div>
         ${shutdownPathCompareMarkup()}
+${desktopExitFlushMarkup()}
         ${stopCleanupMarkup()}
       </section>
     </section>

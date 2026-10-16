@@ -2,6 +2,8 @@
 
 A local prototype for exploring a parent/child agent workflow with a small browser UI. It starts one independent local `codex exec` process per task, displays the task tree and JSONL activity, and supports cancellation, delegation, and inbox messages.
 
+The Inspector starts with a four-lens evidence map: captured CLI runs, pinned public source, static inspection of the installed Desktop bundle, and Lab sample data. Each lens states what it can establish and links into a relevant trace; sample hierarchy data is explicitly described as illustrative. This keeps runtime observations, source-level behavior, and interface examples visually distinct while browsing the mechanism maps.
+
 ## Run
 
 Requires Node.js and the Codex CLI already installed and authenticated. From a terminal:
@@ -91,3 +93,5 @@ The Desktop UI trace now includes a switchable module map for the installed `26.
 The Stop / Interrupt / Close inspector now includes a “Cancel after spawn accepted” case. Its four selectable lifecycle steps separate a pending spawn, the acceptance receipt, later caller cancellation with the child still active, and an optional explicit `close_agent` request. The trace pins the `AgentControl::spawn` boundary and recursive close path to public Codex `main` `16e578d`; it is static source analysis, not a live cancellation capture. Details are in the [evidence ledger](https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#accepted-spawn-and-explicit-subtree-close).
 
 The root-suspension trace compares the older live-descendant refusal with the current public-main shutdown sequence. Its selectable handoff stages separate root `ShutdownComplete`, the exported tree-wait result, and the caller's persistence handoff obligations. The latest source at `a45b8cc` explicitly assigns tree-cleanup waiting and persistence-writer fencing to the host. An exact search still finds no production caller in the checked `codex-rs` tree; the packaged Desktop path remains unknown. The trace is static analysis rather than a live shutdown capture.
+
+The Desktop shutdown view now also traces the installed main bundle's `will-quit` flush/dispose barrier: `Promise.allSettled`, context disposal, and a five-second bounded wait. It labels this as an app-exit flush path, separate from descendant cleanup, and calls out that dynamic IPC/RPC, native-host, and external app-server paths were not resolved. Asset SHA-256 and decoded-text offsets link to the evidence ledger. The source-map index contains 24 diagrams.
