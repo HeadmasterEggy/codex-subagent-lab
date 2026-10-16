@@ -1276,19 +1276,19 @@ function renderInspector() {
         <a href="https://github.com/openai/codex/blob/6ae8b8aa7c608730d4315d59c5c081897ae02780/codex-rs/core/src/session/turn_suspension.rs" target="_blank" rel="noreferrer">Open the pinned root-suspension source ↗</a>
       </div>
       <section class="capacity-race-map" aria-labelledby="capacity-race-title">
-        <div class="capacity-race-heading"><span>CAPACITY · CHECK VS ADMISSION · STATIC SOURCE</span><h5 id="capacity-race-title">A shared limit is checked before it is incremented</h5></div>
+        <div class="capacity-race-heading"><span>CAPACITY · CHECK VS ADMISSION · PUBLIC MAIN 6AE8B8A</span><h5 id="capacity-race-title">A shared limit is checked before it is incremented</h5></div>
         <div class="capacity-race-controls" role="group" aria-label="Choose a capacity timeline">
           <button type="button" data-capacity-scenario="interleaved" aria-pressed="true">Possible interleaving</button>
           <button type="button" data-capacity-scenario="atomic">Atomic permit · illustrative</button>
         </div>
-        <p class="capacity-race-caption" data-capacity-caption aria-live="polite">Observed source structure · separate check and increment operations</p>
+        <p class="capacity-race-caption" data-capacity-caption aria-live="polite">Source contract · advisory check and later turn-start guard</p>
         <div class="capacity-race-view" data-capacity-view="interleaved">
           <div class="capacity-race-flow" aria-label="Possible cross-session capacity check interleaving">
             <article><span>01 · SHARED COUNTER</span><strong><code>active = max − 1</code></strong><small>Child sessions share the agent-tree execution limiter.</small></article>
             <i aria-hidden="true">→</i>
-            <article class="capacity-check"><span>02 · SEPARATE SESSION LOCKS</span><strong>A checks · B checks</strong><small>Each reads the same available slot before either task acquires its execution guard.</small></article>
+            <article class="capacity-check"><span>02 · ADVISORY CHECK</span><strong>A checks · B checks</strong><small>Each may see the same available slot; the check does not reserve capacity.</small></article>
             <i aria-hidden="true">→</i>
-            <article class="capacity-increment"><span>03 · LATER ADMISSION</span><strong>＋1 · ＋1</strong><small>Independent guard increments can take the count above the configured limit.</small></article>
+            <article class="capacity-increment"><span>03 · LATER TURN START</span><strong>＋1 · ＋1</strong><small>Separate child-session guards can increment the shared counter after both checks pass.</small></article>
           </div>
         </div>
         <div class="capacity-race-view" data-capacity-view="atomic" hidden>
@@ -1300,8 +1300,8 @@ function renderInspector() {
             <article class="capacity-check"><span>03 · B SEES FULL</span><strong>wait · reject · retry</strong><small>B cannot pass the same permit after A reserves it.</small></article>
           </div>
         </div>
-        <p class="capacity-race-boundary"><b>BOUNDARY</b> Source permits this interleaving; no runtime over-capacity event was reproduced. It describes a race possibility, not an observed limit violation.</p>
-        <p class="capacity-race-proof"><a href="https://github.com/openai/codex/blob/aff92080f2b8d5f63a63b4ada7b92054287f237c/codex-rs/core/src/agent/control/execution.rs" target="_blank" rel="noreferrer">Shared execution limiter</a> · <a href="https://github.com/openai/codex/blob/aff92080f2b8d5f63a63b4ada7b92054287f237c/codex-rs/core/src/agent/control/api.rs" target="_blank" rel="noreferrer">Admission contract</a> · <a href="https://github.com/openai/codex/blob/aff92080f2b8d5f63a63b4ada7b92054287f237c/codex-rs/core/src/codex_thread.rs" target="_blank" rel="noreferrer">Per-runtime tool lock</a></p>
+        <p class="capacity-race-boundary"><b>BOUNDARY</b> These separate operations permit a source-level interleaving; no runtime over-capacity event was reproduced. This is a race possibility, not an observed limit violation.</p>
+        <p class="capacity-race-proof"><a href="https://github.com/openai/codex/blob/6ae8b8aa7c608730d4315d59c5c081897ae02780/codex-rs/core/src/agent/control/execution.rs" target="_blank" rel="noreferrer">Shared execution limiter</a> · <a href="https://github.com/openai/codex/blob/6ae8b8aa7c608730d4315d59c5c081897ae02780/codex-rs/core/src/agent/api.rs" target="_blank" rel="noreferrer">Advisory admission contract</a> · <a href="https://github.com/openai/codex/blob/6ae8b8aa7c608730d4315d59c5c081897ae02780/codex-rs/core/src/tools/parallel.rs" target="_blank" rel="noreferrer">Per-runtime tool lock</a></p>
       </section>
       <section class="suspension-map" aria-labelledby="suspension-map-title">
         <div class="suspension-map-heading"><span>SHUTDOWN TRACE · STATIC SOURCE</span><h5 id="suspension-map-title">Root handoff and descendant cleanup are separate milestones</h5></div>
@@ -1801,8 +1801,8 @@ function admissionMarkup() {
     ? 'The write lock serializes handler dispatch only within one ToolCallRuntime. It is not the shared execution permit, and the source does not establish a hard global limit from this lock.'
     : 'When checks happen after prior task-start guards update the counter, the later child is rejected at the limit.';
   return `<section class="admission-map" data-admission-map="${admissionScenario}" aria-labelledby="admission-map-title">
-    <div class="admission-heading"><div><span class="admission-eyebrow">V2 · EXECUTION CAPACITY</span><h5 id="admission-map-title">Which lock actually limits child turns?</h5></div><span class="admission-version">source snapshot · 1ef30bc</span></div>
-    <p class="admission-intro">A per-runtime tool-dispatch lock and the shared agent-tree execution counter have different scopes. Compare ordered admission, one runtime, and separate child sessions.</p>
+    <div class="admission-heading"><div><span class="admission-eyebrow">V2 · EXECUTION CAPACITY</span><h5 id="admission-map-title">Which lock actually limits child turns?</h5></div><span class="admission-version">public main · 6ae8b8a</span></div>
+    <p class="admission-intro">The current source calls the check advisory: it does not reserve a slot. Compare an ordered admission, one runtime's dispatch lock, and separate child sessions sharing the same counter.</p>
     <div class="admission-controls" role="group" aria-label="Choose an execution admission ordering">
       <button type="button" data-admission-case="sequential" aria-pressed="${admissionScenario === 'sequential'}">Sequential checks</button>
       <button type="button" data-admission-case="same-runtime" aria-pressed="${sameRuntime}">Same runtime</button>
@@ -1813,8 +1813,8 @@ function admissionMarkup() {
     </div>
     <p class="admission-counter"><b>${overlapped ? 'POSSIBLE INTERLEAVING' : sameRuntime ? 'LOCK SCOPE' : 'ORDERED EXAMPLE'}</b><span>${overlapped ? 'A check is not a reservation; separate session locks do not serialize access to the shared counter.' : sameRuntime ? 'The dispatch lock is local to this runtime; the execution guard belongs to the shared tree limiter.' : 'The next check observes the guard acquired by the earlier started task.'}</span></p>
     <p class="admission-outcome" aria-live="polite">${outcome}</p>
-    <p class="admission-boundary">Source-level concurrency inference only. The checked-in test covers sequential admission; no stress test, real over-cap event, or Desktop observation is claimed.</p>
-    <p class="admission-sources"><a href="https://github.com/openai/codex/blob/1ef30bcbe784f1006548adc1542985be32b05109/codex-rs/core/src/agent/control/execution.rs#L33-L79" target="_blank" rel="noreferrer">shared capacity check and guard</a> · <a href="https://github.com/openai/codex/blob/1ef30bcbe784f1006548adc1542985be32b05109/codex-rs/core/src/tools/parallel.rs#L45-L65" target="_blank" rel="noreferrer">per-runtime lock</a> · <a href="https://github.com/openai/codex/blob/1ef30bcbe784f1006548adc1542985be32b05109/codex-rs/core/src/tools/parallel.rs#L202-L239" target="_blank" rel="noreferrer">dispatch holds lock through handler</a> · <a href="https://github.com/openai/codex/blob/1ef30bcbe784f1006548adc1542985be32b05109/codex-rs/tools/src/tool_executor.rs#L122-L124" target="_blank" rel="noreferrer">parallel-call default is false</a> · <a href="https://github.com/openai/codex/blob/1ef30bcbe784f1006548adc1542985be32b05109/codex-rs/core/src/tasks/mod.rs#L347-L359" target="_blank" rel="noreferrer">turn-start guard</a> · <a href="https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#current-main-follow-up-per-runtime-tool-lock-does-not-reserve-tree-capacity" target="_blank" rel="noreferrer">evidence ledger</a></p>
+    <p class="admission-boundary">This is a possible source-level interleaving, not a captured race or proof of an over-cap run. The reviewed limiter test covers sequential admission; there is no stress-test or Desktop runtime evidence here.</p>
+    <p class="admission-sources"><a href="https://github.com/openai/codex/blob/6ae8b8aa7c608730d4315d59c5c081897ae02780/codex-rs/core/src/agent/api.rs" target="_blank" rel="noreferrer">advisory check / separate admission contract</a> · <a href="https://github.com/openai/codex/blob/6ae8b8aa7c608730d4315d59c5c081897ae02780/codex-rs/core/src/agent/control/execution.rs" target="_blank" rel="noreferrer">shared capacity check and guard</a> · <a href="https://github.com/openai/codex/blob/6ae8b8aa7c608730d4315d59c5c081897ae02780/codex-rs/core/src/tools/parallel.rs" target="_blank" rel="noreferrer">per-runtime dispatch lock</a> · <a href="https://github.com/openai/codex/blob/6ae8b8aa7c608730d4315d59c5c081897ae02780/codex-rs/tools/src/tool_executor.rs" target="_blank" rel="noreferrer">parallel-call default</a> · <a href="https://github.com/openai/codex/blob/6ae8b8aa7c608730d4315d59c5c081897ae02780/codex-rs/core/src/tasks/mod.rs" target="_blank" rel="noreferrer">turn-start guard</a> · <a href="https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#current-main-follow-up-per-runtime-tool-lock-does-not-reserve-tree-capacity" target="_blank" rel="noreferrer">evidence ledger</a></p>
   </section>`;
 }
 function selectAdmissionScenario(scenarioName) {
