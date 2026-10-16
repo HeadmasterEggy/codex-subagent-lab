@@ -48,6 +48,7 @@ let stopCleanupMode = 'user-stop';
 let stopAllDiscovery = 'success';
 let shutdownPathFocus = 'desktop-stop';
 let shutdownScopeMode = 'shared-runtime';
+let desktopCoverageFocus = 'asar-js';
 let appServerExitMode = 'desktop-sigterm';
 let spawnConfigMode = 'fresh-v2';
 let spawnConfigModelSource = 'inherited';
@@ -814,6 +815,39 @@ function shutdownPathCompareMarkup() {
     <p class="shutdown-path-boundary">These three paths have different owners and evidence snapshots. Their presence in one diagram is a comparison, not proof that they converge or are interchangeable.</p>
   </div>`;
 }
+function desktopCoverageMarkup() {
+  const selected = desktopCoverageFocus;
+  const detail = {
+    'asar-js': {
+      label: 'FULL ASAR · JAVASCRIPT',
+      value: '15,127 files · 414.7 MB decoded',
+      result: 'No tree-shutdown identifier found. The only token hit was thread/suspend in a Racket built-in symbol list.',
+      boundary: 'Complete for .js members and these exact strings; does not cover renamed or dynamically assembled behavior.'
+    },
+    'native-strings': {
+      label: 'PACKAGED ARM64 · PRINTABLE STRINGS',
+      value: 'Codex 0.163.0-alpha.10.2',
+      result: 'spawn_agent, wait_agent, and AgentMessage are present. Exact tree-wait API names are absent; ShutdownComplete occurs without an identified owner.',
+      boundary: 'String presence is not a call graph. This is not complete native disassembly or proof of runtime execution.'
+    },
+    unknown: {
+      label: 'OUTSIDE THIS SCAN',
+      value: 'Native logic · external app-server · dynamic modules',
+      result: 'Equivalent behavior could use different symbols, non-string native logic, or code loaded outside the scanned JavaScript set.',
+      boundary: 'Packaged Desktop tree-wait caller and actual cleanup behavior remain unknown.'
+    }
+  }[selected];
+  return `<section class="desktop-coverage" data-focus="${selected}" aria-labelledby="desktop-coverage-title">
+    <div class="desktop-coverage-heading"><span>INSTALLED DESKTOP · BUILD 20586</span><strong id="desktop-coverage-title">What exactly was searched?</strong></div>
+    <div class="desktop-coverage-controls" role="group" aria-label="Choose static scan layer">
+      <button type="button" data-desktop-coverage="asar-js" aria-pressed="${selected === 'asar-js'}">All ASAR JavaScript</button>
+      <button type="button" data-desktop-coverage="native-strings" aria-pressed="${selected === 'native-strings'}">Codex binary strings</button>
+      <button type="button" data-desktop-coverage="unknown" aria-pressed="${selected === 'unknown'}">Uncovered layers</button>
+    </div>
+    <article class="desktop-coverage-card" aria-live="polite"><span>${detail.label}</span><strong>${detail.value}</strong><p>${detail.result}</p><small>${detail.boundary}</small></article>
+    <p class="desktop-coverage-manifest">ASAR manifest SHA-256 <code>975b3d35…a62</code> · binary UUID <code>924A7A64-F1CB-3C8C-8E34-71F3FFA416CF</code> · <a href="https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#follow-up-complete-installed-asar-javascript-exact-name-census-2026-10-17" target="_blank" rel="noreferrer">full scan ledger ↗</a></p>
+  </section>`;
+}
 function shutdownScopeMarkup() {
   const modes = {
     'shared-runtime': {
@@ -1339,6 +1373,7 @@ function renderInspector() {
           <p class="host-handoff-footnote"><b>Separate mechanism:</b> app-server's <code>shutdown_drain_waiter</code> synchronizes listener replacement after <code>ShutdownComplete</code>; it is not the tree-wait handle. <a href="https://github.com/openai/codex/blob/4eb4a65407d98cebc4c83bf13be440b9fbc78a7c/codex-rs/app-server/src/request_processors/thread_lifecycle.rs#L389-L396" target="_blank" rel="noreferrer">Listener event path ↗</a> · <a href="https://github.com/openai/codex/blob/4eb4a65407d98cebc4c83bf13be440b9fbc78a7c/codex-rs/app-server/src/thread_state.rs#L109-L111" target="_blank" rel="noreferrer">Waiter ownership ↗</a></p>
         </div>
         ${shutdownPathCompareMarkup()}
+        ${desktopCoverageMarkup()}
         ${shutdownScopeMarkup()}
         ${stopAllDispatchMarkup()}
 ${desktopExitFlushMarkup()}
@@ -2278,6 +2313,12 @@ document.addEventListener('click', async event => {
   if (shutdownPathButton) {
     shutdownPathFocus = ['desktop-stop', 'desktop-exit', 'root-suspension'].includes(shutdownPathButton.dataset.shutdownPath) ? shutdownPathButton.dataset.shutdownPath : 'desktop-stop';
     shutdownPathButton.closest('.shutdown-path-compare').outerHTML = shutdownPathCompareMarkup();
+    return;
+  }
+  const desktopCoverageButton = event.target.closest('[data-desktop-coverage]');
+  if (desktopCoverageButton) {
+    desktopCoverageFocus = ['asar-js', 'native-strings', 'unknown'].includes(desktopCoverageButton.dataset.desktopCoverage) ? desktopCoverageButton.dataset.desktopCoverage : 'asar-js';
+    desktopCoverageButton.closest('.desktop-coverage').outerHTML = desktopCoverageMarkup();
     return;
   }
   const shutdownScopeButton = event.target.closest('[data-shutdown-scope]');
