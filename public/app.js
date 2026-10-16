@@ -56,6 +56,7 @@ let spawnConfigRole = false;
 let spawnProtocolVersion = 'v2';
 let spawnProtocolOutcome = 'success';
 let nativeSpawnFocus = 0;
+let standaloneStaticSpawnFocus = 0;
 let terminalScenario = 'completed';
 let activeFilter = 'all';
 let taskSearch = '';
@@ -332,6 +333,25 @@ function nativeSpawnTraceMarkup() {
     <div class="native-spawn-rail" role="group" aria-label="V2 spawn evidence checkpoints">${steps.map((item, index) => `<button type="button" data-native-spawn-step="${index}" aria-pressed="${index === nativeSpawnFocus}"><span>0${index + 1}</span><b>${item.label}</b></button>`).join('')}</div>
     <article class="native-spawn-detail" aria-live="polite"><div><span>${step.tag}</span><a href="${step.href}" target="_blank" rel="noreferrer">${step.file} ↗</a></div><h6>${step.title}</h6><p>${step.text}</p></article>
     <p class="native-spawn-boundary"><b>Evidence boundary</b> Same-version source improves comparison confidence, but there is no signed build provenance. The desktop app was not launched and no spawn transition was induced.</p>
+  </section>`;
+}
+function standaloneStaticSpawnTraceMarkup() {
+  const evidenceUrl = 'https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#follow-up-standalone-cli-01621-v2-handler-machine-code-cross-check-2026-10-17';
+  const sourceRoot = 'https://github.com/openai/codex/blob/rust-v0.162.1/codex-rs/core/src';
+  const steps = [
+    ['BINARY IDENTITY', 'Hash-pinned standalone target', 'The standalone CLI is version 0.162.1, ARM64 Mach-O UUID 73DB38F2-5290-3277-BCCC-287C54E2F0CD, SHA-256 74c6a6d263f40d65f99c27a815275f5b4ed0bcc2baecc396b4cf3255498bdfc0. The V2 handler symbol is at 0x105a6af0c.', 'Binary observation · nm', evidenceUrl],
+    ['SOURCE BUILDER', 'Spawn metadata call resolves', 'The async poll contains a direct call to thread_spawn_source at 0x105a6b91c. Exact-tag source constructs the spawn source and request; this call site is directly resolved in the standalone binary.', 'Direct machine-code call', `${sourceRoot}/tools/handlers/multi_agents_v2/spawn.rs`],
+    ['SPAWN DISPATCH', 'The key call remains indirect', 'The exact-tag handler awaits AgentControl::spawn with TriggerTurn. The binary contains LocalAgentControl::spawn and prepare_thread_spawn symbols, but the handler path uses unresolved indirect calls at 0x105a6bf0c and 0x105a6bf30. Their targets are not established.', 'Source + unresolved indirect edge', `${sourceRoot}/agent/control/spawn.rs`],
+    ['ACCEPTANCE + TELEMETRY', 'Source ordering and one resolved call', 'The matching source emits Started only after spawn returns. The binary also directly calls track_collab_tool_call at 0x105a6cc44. Telemetry does not prove the indirect spawn target or a launched child.', 'Source order + direct call', `${sourceRoot}/tools/handlers/multi_agents_v2/spawn.rs`]
+  ];
+  standaloneStaticSpawnFocus = Math.max(0, Math.min(steps.length - 1, Number(standaloneStaticSpawnFocus) || 0));
+  const [label, title, text, tag, href] = steps[standaloneStaticSpawnFocus];
+  return `<section class="standalone-static-trace" aria-labelledby="standalone-static-title">
+    <div class="standalone-static-heading"><div><span>STANDALONE CLI · STATIC V2 BINARY CROSS-CHECK</span><h5 id="standalone-static-title">A second binary, a separate evidence path</h5></div><small>0.162.1 · tag 092d3ac</small></div>
+    <p class="standalone-static-intro">This hash-pinned CLI disassembly is separate from the Desktop 0.163.0-alpha.10.2 symbol cross-check above and the V1 JSONL runtime capture below.</p>
+    <div class="standalone-static-rail" role="group" aria-label="Standalone CLI static evidence checkpoints">${steps.map((item, index) => `<button type="button" data-standalone-static-step="${index}" aria-pressed="${index === standaloneStaticSpawnFocus}"><span>0${index + 1}</span><b>${item[0]}</b></button>`).join('')}</div>
+    <article class="standalone-static-detail" aria-live="polite"><div><span>${tag}</span><a href="${href}" target="_blank" rel="noreferrer">${standaloneStaticSpawnFocus === 0 ? 'evidence ledger' : standaloneStaticSpawnFocus === 2 ? 'spawn controller source' : 'exact-tag handler source'} ↗</a></div><h6>${title}</h6><p>${text}</p></article>
+    <p class="standalone-static-boundary"><b>Boundary</b> Version-matched source is comparative evidence, not signed build provenance. No child was launched; the separate V1 runtime record does not exercise this V2 handler.</p>
   </section>`;
 }
 function nativeCliTraceMarkup() {
@@ -1330,6 +1350,7 @@ function renderInspector() {
         <button type="button" data-inspector-target="activity"><span>04 · RETURN</span><strong>Status + result</strong><small>Terminal status, activity and parent result are distinct signals.</small><b>Inspect activity</b></button>
       </div>
       ${nativeSpawnTraceMarkup()}
+      ${standaloneStaticSpawnTraceMarkup()}
       <div class="parallel-lifecycle" aria-label="Parent and child lifecycle after spawn">
         <div class="parallel-lifecycle-heading"><span>AFTER SPAWN · PARALLEL THREADS</span><small>Spawn receipt does not wait for child completion</small></div>
         <div class="parallel-lifecycle-scroll">
@@ -2253,6 +2274,13 @@ $('#tree').addEventListener('keydown', event => {
   }
 });
 document.addEventListener('click', async event => {
+  const standaloneStaticButton = event.target.closest('[data-standalone-static-step]');
+  if (standaloneStaticButton) {
+    standaloneStaticSpawnFocus = Math.max(0, Math.min(3, Number(standaloneStaticButton.dataset.standaloneStaticStep) || 0));
+    standaloneStaticButton.closest('.standalone-static-trace').outerHTML = standaloneStaticSpawnTraceMarkup();
+    document.querySelector(`[data-standalone-static-step="${standaloneStaticSpawnFocus}"]`)?.focus();
+    return;
+  }
   const nativeSpawnButton = event.target.closest('[data-native-spawn-step]');
   if (nativeSpawnButton) {
     nativeSpawnFocus = Math.max(0, Math.min(4, Number(nativeSpawnButton.dataset.nativeSpawnStep) || 0));
