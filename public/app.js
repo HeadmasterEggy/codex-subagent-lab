@@ -43,6 +43,13 @@ let desktopPanelPipelineStage = 'membership';
 let desktopCollapseHasInline = true;
 let desktopCollapseAllDone = false;
 let desktopResourceFocus = 'local';
+let desktopBuild20586Surface = 'work';
+let desktopBuild20586Status = 'working';
+let desktopBuild20586Route = 'accepted';
+let desktopBuild20586CanInteract = true;
+let desktopBuild20586WriterConflict = false;
+let desktopBuild20586ShouldResume = true;
+let desktopBuild20586ThreadScope = 'local-eligible';
 let treeHandoffStage = 'root-return';
 let desktopPanelShouldResume = true;
 let desktopPanelWriterConflict = false;
@@ -1189,6 +1196,79 @@ function taskTree(parentId = null, depth = 0, visible = visibleTaskIds(), matche
       </div>${children}</div>`;
   }).join('');
 }
+function desktopBuild20586Markup() {
+  const isWork = desktopBuild20586Surface === 'work';
+  const stages = [
+    { id:'waiting', label:'Waiting', copy:'The child is registered in the parent’s subagent list and appears in the Active section.' },
+    { id:'working', label:'Working', copy:'The child remains Active. The panel can show its status message while work is underway.' },
+    { id:'done', label:'Done', copy:'Selecting a completed child triggers a final-response query keyed by parent conversation, child thread, activation ID, and turn liveness.' },
+    { id:'failed', label:'Failed', copy:'The child appears in the terminal section. The detail path can show an unavailable response state.' },
+  ];
+  const selected = stages.find(stage => stage.id === desktopBuild20586Status) ?? stages[1];
+  const threadScope = ['local-eligible', 'shared', 'local-ineligible'].includes(desktopBuild20586ThreadScope)
+    ? desktopBuild20586ThreadScope
+    : 'local-eligible';
+  const resumeAllowed = desktopBuild20586ShouldResume
+    && desktopBuild20586CanInteract
+    && threadScope !== 'local-ineligible';
+  const scopeLabels = {
+    'local-eligible': 'Eligible local thread',
+    shared: 'Shared thread',
+    'local-ineligible': 'Ineligible local thread',
+  };
+  const routeScenarios = {
+    accepted: {
+      label: 'Valid parent chain',
+      states: ['verified', 'not needed', 'first page ensured', 'applied'],
+      detail: 'The ancestry walk reaches the requested parent on the same host. The child’s first conversation page is ensured, then the panel applies the result if it still requests this child.',
+      outcome: 'Child detail opens',
+    },
+    wrongHost: {
+      label: 'Host mismatch',
+      states: ['rejected', 'skipped', 'skipped', 'list restored'],
+      detail: 'A known ancestor host differs from the selected host, so the lineage check rejects this selection before transcript hydration.',
+      outcome: 'Return to subagent list',
+    },
+    missingAncestor: {
+      label: 'Missing ancestor record',
+      states: ['incomplete link', 'metadata only', 'rechecked', 'applied if current'],
+      detail: 'When the parent snapshot is incomplete and the caller allows repair, the client hydrates a missing ancestor with includeTurns=false, checks the chain again, then ensures the selected child’s first page.',
+      outcome: 'Repair lineage, then open child',
+    },
+    staleSelection: {
+      label: 'Selection changed mid-load',
+      states: ['verified', 'may finish', 'child B selected', 'old result discarded'],
+      detail: 'The old async request can finish, but the opener compares the tab’s requested child ID before applying the result. A child A continuation cannot overwrite a newer child B selection.',
+      outcome: 'Keep the newer selection',
+    },
+  };
+  const route = routeScenarios[desktopBuild20586Route] ?? routeScenarios.accepted;
+  const resumeReason = !desktopBuild20586ShouldResume
+    ? 'Resume was not requested.'
+    : !desktopBuild20586CanInteract
+      ? 'canInteract is false, so no child thread id is passed.'
+      : threadScope === 'local-ineligible'
+        ? 'This local thread does not meet the resume eligibility check.'
+        : 'All resume conditions pass; the child thread id is supplied.';
+  return `<section class="desktop-20586" aria-labelledby="desktop-20586-title">
+    <header class="desktop-20586-head"><div><span>INSTALLED DESKTOP · BUILD 20586</span><h5 id="desktop-20586-title">Two subagent surfaces, two detail routes</h5></div><span class="desktop-20586-tag">STATIC BUNDLE</span></header>
+    <div class="desktop-20586-switch" role="group" aria-label="Choose the installed panel surface"><button type="button" data-20586-surface="work" aria-pressed="${isWork}">ChatGPT Work</button><button type="button" data-20586-surface="local" aria-pressed="${!isWork}">Local conversation</button></div>
+    ${isWork ? `<div class="desktop-20586-flow"><div class="desktop-20586-stages" role="group" aria-label="Explore Work subagent status"><div class="desktop-20586-rail" aria-hidden="true"><i class="${desktopBuild20586Status === 'waiting' ? 'current' : ''}"></i><i class="${desktopBuild20586Status === 'working' ? 'current' : ''}"></i><i class="${desktopBuild20586Status === 'done' ? 'current' : ''}"></i><i class="${desktopBuild20586Status === 'failed' ? 'current failed' : ''}"></i></div>${stages.map(stage => `<button type="button" data-20586-status="${stage.id}" aria-pressed="${desktopBuild20586Status === stage.id}"><span>${stage.label}</span></button>`).join('')}</div><article class="desktop-20586-detail" data-status="${selected.id}"><span class="desktop-20586-kicker">SELECTED CHILD · ${selected.label.toUpperCase()}</span><strong>${selected.copy}</strong>${desktopBuild20586Status === 'done' ? `<div class="desktop-20586-query"><span>FINAL RESPONSE QUERY</span><code>parent + child thread + activation + live-turn state</code><small>Loading → response, fallback status message, or unavailable on error</small></div>` : ''}<small>Active contains Waiting and Working. Done contains completed and failed children.</small></article></div>` : `<div class="desktop-20586-local"><div class="desktop-20586-local-flow"><article><span>01 · DESCENDANT SNAPSHOT</span><b>Parent conversation</b><small>Local thumbnail resolves known descendant threads and shows a child count.</small></article><i aria-hidden="true">→</i><article><span>02 · SUBAGENTS PANEL</span><b>Active · Done</b><small>Active list is capped at four visible items in the inspected projection.</small></article><i aria-hidden="true">→</i><article><span>03 · CHILD DETAIL</span><b>Embedded transcript</b><small>The panel passes interaction only when the selected child's <code>canInteract</code> is exactly true.</small></article></div><section class="desktop-20586-gate" aria-labelledby="desktop-20586-gate-title"><div class="desktop-20586-gate-heading"><div><span class="desktop-20586-kicker">LOCAL CHILD · INDEPENDENT RENDERER GATES</span><b id="desktop-20586-gate-title">Change inputs to trace each UI outcome</b></div><button class="desktop-20586-conflict" type="button" data-20586-conflict aria-pressed="${desktopBuild20586WriterConflict}">Writer conflict · ${desktopBuild20586WriterConflict ? 'on' : 'off'}</button></div><div class="desktop-20586-expression" aria-label="Resume lookup requires shouldResume and canInteract and either an eligible local thread or a shared thread"><span class="${desktopBuild20586ShouldResume ? 'is-true' : 'is-false'}">shouldResume <b>${desktopBuild20586ShouldResume ? 'true' : 'false'}</b></span><i>AND</i><span class="${desktopBuild20586CanInteract ? 'is-true' : 'is-false'}">canInteract <b>${desktopBuild20586CanInteract ? 'true' : 'false'}</b></span><i>AND</i><span class="${threadScope !== 'local-ineligible' ? 'is-true' : 'is-false'}">thread scope <b>${scopeLabels[threadScope]}</b></span><i>→</i><strong class="${resumeAllowed ? 'gate-pass' : 'gate-block'}">${resumeAllowed ? 'thread id supplied' : 'lookup skipped'}</strong></div><div class="desktop-20586-gate-inputs"><fieldset><legend>Resume requested</legend><div class="desktop-20586-switch"><button type="button" data-20586-resume="yes" aria-pressed="${desktopBuild20586ShouldResume}">Yes</button><button type="button" data-20586-resume="no" aria-pressed="${!desktopBuild20586ShouldResume}">No</button></div></fieldset><fieldset><legend>canInteract prop</legend><div class="desktop-20586-switch"><button type="button" data-20586-interact="yes" aria-pressed="${desktopBuild20586CanInteract}">True</button><button type="button" data-20586-interact="no" aria-pressed="${!desktopBuild20586CanInteract}">False</button></div></fieldset><fieldset><legend>Thread scope</legend><div class="desktop-20586-switch"><button type="button" data-20586-scope="local-eligible" aria-pressed="${threadScope === 'local-eligible'}">Eligible local</button><button type="button" data-20586-scope="shared" aria-pressed="${threadScope === 'shared'}">Shared</button><button type="button" data-20586-scope="local-ineligible" aria-pressed="${threadScope === 'local-ineligible'}">Ineligible local</button></div></fieldset></div><div class="desktop-20586-gate-results"><article><span>RESUME LOOKUP</span><b class="${resumeAllowed ? 'gate-pass' : 'gate-block'}">${resumeAllowed ? 'Attempted with child thread id' : 'Not attempted'}</b><small>${resumeReason}</small></article><article><span>TRANSCRIPT</span><b>${!desktopBuild20586CanInteract || desktopBuild20586WriterConflict ? 'Read only' : 'Interactive view'}</b><small>${desktopBuild20586WriterConflict ? 'Writer conflict independently forces read-only.' : 'Read-only when canInteract is false.'}</small></article><article><span>COMPOSER</span><b>${desktopBuild20586CanInteract && !desktopBuild20586WriterConflict ? 'Shown' : 'Hidden'}</b><small>${desktopBuild20586WriterConflict ? 'Hidden by writer conflict.' : 'Shown only when canInteract is true.'}</small></article></div><p class="desktop-20586-note">These controls illustrate inspected client conditions; they do not control a live conversation or prove server authorization.</p>${desktop20586SelectionMarkup(route)}</div>`}
+    <p class="desktop-20586-source">Checked members: <code>chatgpt-subagents-panel-ad8b93c61a12.js</code> · <code>local-conversation-subagents-panel-tab-70cb3c70c0c0.js</code> · <code>verify-descendant-2646968c60d7.js</code> · <code>subagents-8eb0ab1e1e0d.js</code> · <a href="https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#follow-up-local-child-selection-validates-ancestry-and-rejects-stale-panel-updates-build-20586-2026-10-17" target="_blank" rel="noreferrer">evidence ledger ↗</a></p>
+    <p class="desktop-20586-boundary">Module hashes match this build’s ASAR manifest. Static UI logic only: this diagram does not show a live session, network response, or rendered Desktop screenshot.</p>
+  </section>`;
+}
+
+function desktop20586SelectionMarkup(route) {
+  const steps = ['Walk ancestry', 'Repair missing link', 'Load child page', 'Apply panel update'];
+  return `<section class="desktop-20586-selection" aria-labelledby="desktop-20586-selection-title">
+    <div class="desktop-20586-gate-heading"><div><span class="desktop-20586-kicker">ASYNC CHILD SELECTION · LINEAGE + RACE GUARD</span><b id="desktop-20586-selection-title">A valid child route must still be the current selection</b></div><span class="desktop-20586-selection-outcome">${route.outcome}</span></div>
+    <div class="desktop-20586-route-choices" role="group" aria-label="Select a child navigation scenario">${[['accepted','Valid parent chain'],['wrongHost','Wrong host'],['missingAncestor','Missing ancestor'],['staleSelection','Selection changed']].map(([id,label]) => `<button type="button" data-20586-route="${id}" aria-pressed="${desktopBuild20586Route === id}">${label}</button>`).join('')}</div>
+    <div class="desktop-20586-route-rail" role="img" aria-label="${steps.map((step,i)=>`${step}: ${route.states[i]}`).join('; ')}">${steps.map((step,i)=>`<article class="${i === 0 || (desktopBuild20586Route === 'missingAncestor' && i === 1) || i === 3 ? 'route-emphasis' : ''}"><span>0${i+1}</span><b>${step}</b><small>${route.states[i]}</small></article>`).join('')}</div>
+    <p class="desktop-20586-route-detail">${route.detail}</p><p class="desktop-20586-route-footnote">The lineage check walks parent IDs, rejects cycles and known host mismatches, and may hydrate missing ancestors without turns. Async results are applied only while the panel still requests that child.</p>
+  </section>`;
+}
+
 function desktopSubagentsMarkup() {
   const agents = [
     { id:'agent-a', name:'Index transcript', role:'Trace analyst', model:'Codex default', status:'active', showInlineActivity:true },
@@ -1286,6 +1366,7 @@ function desktopSubagentsMarkup() {
       <p class="desktop-import-boundary">Each lane shows direct bundler imports only. Shared names are bundled dependencies; these edges do not prove which route executed, what the server returned, or what the UI rendered.</p>
       <p class="desktop-import-source"><a href="https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#follow-up-current-installed-bundle-import-graph-from-rea-2026-10-16" target="_blank" rel="noreferrer">REA import evidence · Desktop 26.1007.71326</a></p>
     </section>
+    ${desktopBuild20586Markup()}
     <p class="desktop-subagents-boundary">Static extraction from the installed app bundle; example records and controls are illustrative. <code>canInteract</code> describes client routing and composer/resume UI gates, not server authorization or current runtime status. This does not capture a live Desktop session, prove a React commit or visible paint, or represent the Lab’s CLI process tree.</p>
     <p class="desktop-subagents-source-link"><a href="https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#local-desktop-panel-entry-point" target="_blank" rel="noreferrer">Panel entry and child routing</a> · <a href="https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#installed-desktop-26100771326-selected-child-panel-path" target="_blank" rel="noreferrer">canInteract derivation and UI gates</a> · <code>local-conversation-thread-269c4ee9ddf0.js</code> · chars 30,957–40,247 · REA Evidence <code>ev_9a2e1d42897d8f73d61bea38956116d402057de54c34849710d94e1956ca3dde</code></p>
   </section>`;
@@ -1642,11 +1723,11 @@ function agentControlExplorerMarkup() {
 
 function currentMainDeltaMarkup() {
   return `<section class="main-delta" aria-labelledby="main-delta-title">
-    <div class="main-delta-heading"><div><span>UPSTREAM SOURCE · BOUNDED DIFF</span><h4 id="main-delta-title">What changed after the last subagent census?</h4></div><a href="https://github.com/openai/codex/commit/4491caf1ad063f753381500454b599d750e50848" target="_blank" rel="noreferrer">main · 4491caf ↗</a></div>
-    <div class="main-delta-rail" role="img" aria-label="Codex main source revisions b5115cdd, 34420d4, and 4491caf. Noise handshake handling and thread-history materialization changed; inspected subagent paths did not change">
-      <div class="main-delta-commit"><span>LAST CENSUS</span><strong>b5115cdd</strong><small>factory callsite map</small></div><i aria-hidden="true">→</i><div class="main-delta-change-stack"><article class="main-delta-change"><span>34420d4 · EXEC-SERVER</span><strong>Noise handshake</strong><small>disconnect reason + tests</small></article><i aria-hidden="true">→</i><article class="main-delta-change"><span>4491caf · THREAD STORE</span><strong>Thread-history projection</strong><small>line stream bounded rollout suffix</small></article></div><i aria-hidden="true">→</i><div class="main-delta-commit latest"><span>FETCHED MAIN</span><strong>4491caf</strong><small>2026-10-16</small></div>
+    <div class="main-delta-heading"><div><span>UPSTREAM SOURCE · BOUNDED DIFF</span><h4 id="main-delta-title">What changed after the last subagent census?</h4></div><a href="https://github.com/openai/codex/commit/0df4aa67781ae45a3c97befa4db48b734afe46d9" target="_blank" rel="noreferrer">main · 0df4aa6 ↗</a></div>
+    <div class="main-delta-rail" role="img" aria-label="Codex main source revisions b5115cdd, 34420d4, 4491caf, and 0df4aa6. Noise handshake, thread-history projection, and MCP dynamic-tool handling changed; inspected subagent paths did not change">
+      <div class="main-delta-commit"><span>LAST CENSUS</span><strong>b5115cdd</strong><small>factory callsite map</small></div><i aria-hidden="true">→</i><div class="main-delta-change-stack"><article class="main-delta-change"><span>34420d4 · EXEC-SERVER</span><strong>Noise handshake</strong><small>disconnect reason + tests</small></article><i aria-hidden="true">→</i><article class="main-delta-change"><span>4491caf · THREAD STORE</span><strong>Thread-history projection</strong><small>line stream bounded rollout suffix</small></article><i aria-hidden="true">→</i><article class="main-delta-change"><span>0df4aa6 · MCP / CODE MODE</span><strong>Dynamic tool updates</strong><small>tool-list notifications + parallel calls</small></article></div><i aria-hidden="true">→</i><div class="main-delta-commit latest"><span>FETCHED MAIN</span><strong>0df4aa6</strong><small>2026-10-16</small></div>
     </div>
-    <div class="main-delta-scope"><span class="main-delta-check" aria-hidden="true">✓</span><p><b>Inspected paths unchanged through 4491caf</b><span>AgentControl · child spawn · app-server wiring · TUI</span></p><a href="https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#follow-up-upstream-main-recheck-through-4491caf-2026-10-17" target="_blank" rel="noreferrer">Evidence ledger ↗</a></div>
+    <div class="main-delta-scope"><span class="main-delta-check" aria-hidden="true">✓</span><p><b>Inspected paths unchanged through 0df4aa6</b><span>AgentControl · child spawn · app-server wiring · TUI</span></p><a href="https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#follow-up-upstream-main-recheck-through-0df4aa6-2026-10-17" target="_blank" rel="noreferrer">Evidence ledger ↗</a></div>
     <p class="main-delta-boundary">A bounded source diff keeps the earlier census current within these paths; it is not a trace of the packaged Desktop runtime.</p>
   </section>`;
 }
@@ -1655,7 +1736,7 @@ function renderMechanismExplorer() {
   const root = $('#mechanism-explorer');
   if (!root) return;
   const step = mechanismExplorerSteps[mechanismExplorerStep];
-  root.innerHTML = `<div class="mechanism-explorer-steps" role="group" aria-label="Subagent lifecycle steps">${mechanismExplorerSteps.map((item, index) => `<button type="button" data-mechanism-step="${index}" aria-pressed="${index === mechanismExplorerStep}" aria-label="Step ${index + 1}: ${item.label}"><span>0${index + 1}</span>${item.label}</button>`).join('')}</div><article class="mechanism-explorer-detail" aria-live="polite"><div><span>STEP 0${mechanismExplorerStep + 1} · ${step.label.toUpperCase()}</span><a href="${step.href}" target="_blank" rel="noreferrer">${step.source} ↗</a></div><h4>${step.title}</h4><p>${step.text}</p></article>${mechanismExplorerStep === 4 ? shutdownScopeMarkup() : ''}${mechanismExplorerStep === 5 ? desktopHydrationMarkup() : ''}${standaloneStaticSpawnTraceMarkup()}${appServerProjectionMarkup()}${currentMainDeltaMarkup()}<p class="mechanism-explorer-version">Each visualization links to its pinned source snapshot. Static source analysis; no live lifecycle action is implied.</p>`;
+  root.innerHTML = `<div class="mechanism-explorer-steps" role="group" aria-label="Subagent lifecycle steps">${mechanismExplorerSteps.map((item, index) => `<button type="button" data-mechanism-step="${index}" aria-pressed="${index === mechanismExplorerStep}" aria-label="Step ${index + 1}: ${item.label}"><span>0${index + 1}</span>${item.label}</button>`).join('')}</div><article class="mechanism-explorer-detail" aria-live="polite"><div><span>STEP 0${mechanismExplorerStep + 1} · ${step.label.toUpperCase()}</span><a href="${step.href}" target="_blank" rel="noreferrer">${step.source} ↗</a></div><h4>${step.title}</h4><p>${step.text}</p></article>${mechanismExplorerStep === 4 ? shutdownScopeMarkup() : ''}${mechanismExplorerStep === 5 ? `${desktopHydrationMarkup()}${desktopBuild20586Markup()}` : ''}${standaloneStaticSpawnTraceMarkup()}${appServerProjectionMarkup()}${currentMainDeltaMarkup()}<p class="mechanism-explorer-version">Each visualization links to its pinned source snapshot. Static source analysis; no live lifecycle action is implied.</p>`;
 }
 function mailboxTimingMarkup() {
   const beforeFinal = mailboxScenario === 'before-final';
@@ -2628,6 +2709,52 @@ document.addEventListener('click', async event => {
   if (desktopResource) {
     desktopResourceFocus = desktopResource.dataset.desktopResource === 'work' ? 'work' : 'local';
     desktopResource.closest('.desktop-subagents').outerHTML = desktopSubagentsMarkup();
+    return;
+  }
+  const desktop20586Surface = event.target.closest('[data-20586-surface]');
+  if (desktop20586Surface) {
+    desktopBuild20586Surface = desktop20586Surface.dataset['20586Surface'] === 'local' ? 'local' : 'work';
+    desktop20586Surface.closest('.desktop-20586').outerHTML = desktopBuild20586Markup();
+    return;
+  }
+  const desktop20586Status = event.target.closest('[data-20586-status]');
+  if (desktop20586Status) {
+    desktopBuild20586Status = ['waiting', 'working', 'done', 'failed'].includes(desktop20586Status.dataset['20586Status']) ? desktop20586Status.dataset['20586Status'] : 'working';
+    desktop20586Status.closest('.desktop-20586').outerHTML = desktopBuild20586Markup();
+    return;
+  }
+  const desktop20586Route = event.target.closest('[data-20586-route]');
+  if (desktop20586Route) {
+    desktopBuild20586Route = ['accepted', 'wrongHost', 'missingAncestor', 'staleSelection'].includes(desktop20586Route.dataset['20586Route'])
+      ? desktop20586Route.dataset['20586Route']
+      : 'accepted';
+    desktop20586Route.closest('.desktop-20586').outerHTML = desktopBuild20586Markup();
+    return;
+  }
+  const desktop20586Interact = event.target.closest('[data-20586-interact]');
+  if (desktop20586Interact) {
+    desktopBuild20586CanInteract = desktop20586Interact.dataset['20586Interact'] === 'yes';
+    desktop20586Interact.closest('.desktop-20586').outerHTML = desktopBuild20586Markup();
+    return;
+  }
+  const desktop20586Resume = event.target.closest('[data-20586-resume]');
+  if (desktop20586Resume) {
+    desktopBuild20586ShouldResume = desktop20586Resume.dataset['20586Resume'] === 'yes';
+    desktop20586Resume.closest('.desktop-20586').outerHTML = desktopBuild20586Markup();
+    return;
+  }
+  const desktop20586Scope = event.target.closest('[data-20586-scope]');
+  if (desktop20586Scope) {
+    desktopBuild20586ThreadScope = ['local-eligible', 'shared', 'local-ineligible'].includes(desktop20586Scope.dataset['20586Scope'])
+      ? desktop20586Scope.dataset['20586Scope']
+      : 'local-eligible';
+    desktop20586Scope.closest('.desktop-20586').outerHTML = desktopBuild20586Markup();
+    return;
+  }
+  const desktop20586Conflict = event.target.closest('[data-20586-conflict]');
+  if (desktop20586Conflict) {
+    desktopBuild20586WriterConflict = !desktopBuild20586WriterConflict;
+    desktop20586Conflict.closest('.desktop-20586').outerHTML = desktopBuild20586Markup();
     return;
   }
   const panelPipelineButton = event.target.closest('[data-panel-pipeline]');
