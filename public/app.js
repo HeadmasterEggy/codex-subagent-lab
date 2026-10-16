@@ -1712,6 +1712,23 @@ function appServerHydrationMarkup() {
 }
 
 function rendererReadPathMarkup() {
+  const overview = [
+    {
+      id: 'selected-thread', label: 'Open selected child', owner: 'app-initial · selected-thread hydrator',
+      nodes: ['Selected child ID', 'thread/turns/list', 'thread/items/list', 'Transcript view'],
+      note: 'itemsView: notLoaded → cursor-paged items',
+    },
+    {
+      id: 'spawn-history', label: 'Discover child from history', owner: 'app-initial · spawn-history lookup',
+      nodes: ['Existing history', 'thread/items/list', 'Match child reference', 'Parent context'],
+      note: 'History association; no child lifecycle proof',
+    },
+    {
+      id: 'metadata', label: 'Read shared metadata', owner: 'app-shared · history manager',
+      nodes: ['Thread ID', 'thread/read', 'turns / items', 'Shared consumers'],
+      note: 'Separate metadata and paged-history requests',
+    },
+  ];
   const routes = {
     'selected-thread': {
       label: 'Open selected child',
@@ -1750,6 +1767,11 @@ function rendererReadPathMarkup() {
   const route = routes[rendererReadRoute] ?? routes['selected-thread'];
   return `<section class="renderer-read-path" aria-labelledby="renderer-read-path-title">
     <header class="renderer-read-path-head"><div><span>INSTALLED RENDERER · STATIC CALLSITE TRACE</span><h4 id="renderer-read-path-title">How the UI reads child-thread history</h4></div><span class="renderer-read-path-build">BUILD 20586</span></header>
+    <div class="renderer-read-path-overview" role="img" aria-label="Three separate renderer history-read paths, all downstream of an existing thread identity">
+      <div class="renderer-read-path-overview-head"><span>THREE DISTINCT READ PATHS</span><span>THREAD ID / HISTORY ALREADY EXISTS</span><span>NO SPAWN CALL SHOWN</span></div>
+      ${overview.map((item,index) => `<div class="renderer-read-path-lane" data-active="${item.id === rendererReadRoute}" data-route-lane="${item.id}"><div class="renderer-read-path-lane-name"><span>0${index+1}</span><strong>${item.label}</strong><small>${item.owner}</small></div><div class="renderer-read-path-lane-flow">${item.nodes.map((node,nodeIndex) => `${nodeIndex ? '<i aria-hidden="true">→</i>' : ''}<b>${node}</b>`).join('')}</div><small class="renderer-read-path-lane-note">${item.note}</small></div>`).join('')}
+      <div class="renderer-read-path-overview-foot"><span>History hydration and discovery explain what the renderer reads after it has a thread to inspect.</span><b>STATIC SOURCE EVIDENCE · NOT A LIVE REQUEST TRACE</b></div>
+    </div>
     <div class="renderer-read-path-tabs" role="group" aria-label="Choose a renderer history-read path">${Object.entries(routes).map(([id,item],index) => `<button type="button" aria-pressed="${id === rendererReadRoute}" data-renderer-read-route="${id}"><span>0${index+1}</span>${item.label}</button>`).join('')}</div>
     <div class="renderer-read-path-map" aria-live="polite">
       <div class="renderer-read-path-kicker">${route.eyebrow}</div><ol>${route.steps.map(([label,title,detail]) => `<li><span>${label}</span><strong>${title}</strong><small>${detail}</small></li>`).join('')}</ol>
