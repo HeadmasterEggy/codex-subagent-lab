@@ -30,6 +30,7 @@ let rendererDeltaScenario = 'conversation-missing';
 let completionPayloadScenario = 'parent-input';
 let completionRouteMode = 'v2';
 let completionRouteStep = 0;
+let embeddedProbeStep = 0;
 let requestWireTransport = 'http';
 let requestWireContent = 'plaintext';
 let desktopPanelStatus = 'active';
@@ -880,6 +881,60 @@ function desktopSubagentsMarkup() {
   </section>`;
 }
 
+const embeddedProbeStages = [
+  {
+    title: 'Child thread exists',
+    evidence: 'A read-only SQLite inspection found one parent–child spawn edge, a child thread row, and a child rollout.',
+    boundary: 'Confirms creation and stored child work. The retained summary projection alone did not expose a spawn tool item.'
+  },
+  {
+    title: 'Child writes its result',
+    evidence: 'The child rollout contains the requested unique marker.',
+    boundary: 'The child-side record does not by itself prove that the parent received the result.'
+  },
+  {
+    title: 'Parent wait returns',
+    evidence: 'The parent rollout records wait_agent returning with timed_out: false.',
+    boundary: 'The capture does not identify which event woke the wait.'
+  },
+  {
+    title: 'Result enters parent rollout',
+    evidence: 'After the wait output, the parent rollout records a typed AgentMessage containing the same marker.',
+    boundary: 'This proves recorded delivery in this run, not model interpretation or the serialized request.'
+  },
+  {
+    title: 'Parent turn completes',
+    evidence: 'The parent records task_complete after the AgentMessage.',
+    boundary: 'The experiment used the embedded CLI; it did not capture the Desktop conversation host or visible UI.'
+  }
+];
+
+function embeddedProbeMarkup() {
+  const step = Math.max(0, Math.min(embeddedProbeStages.length - 1, embeddedProbeStep));
+  const stage = embeddedProbeStages[step];
+  const event = (index, label, detail) => `<button type="button" class="probe-node ${index === step ? 'current' : index < step ? 'past' : 'future'}" data-probe-step="${index}" aria-label="Step ${index + 1}: ${escapeHtml(label)}" aria-current="${index === step ? 'step' : 'false'}"><span>${String(index + 1).padStart(2, '0')}</span><strong>${escapeHtml(label)}</strong><small>${escapeHtml(detail)}</small></button>`;
+  return `<section class="embedded-probe" aria-labelledby="embedded-probe-title" data-step="${step}">
+    <div class="probe-heading"><div><span>EMBEDDED CLI · CAPTURED RUNTIME EVIDENCE</span><h5 id="embedded-probe-title">A child result reaches the parent rollout</h5></div><span class="probe-build">0.162.0-alpha.17.2</span></div>
+    <p class="probe-intro">Replay the verified order from one isolated V2 run. Select a checkpoint to see which records exist at that point.</p>
+    <div class="probe-lanes" aria-label="Recorded parent and child event lanes">
+      <div class="probe-lane-label"><span class="probe-avatar parent">P</span><span><b>PARENT</b><small>thread + rollout</small></span></div>
+      <div class="probe-lane-events">${event(0, 'spawn edge + child row', 'SQLite')}<i aria-hidden="true">· · ·</i>${event(2, 'wait_agent returns', 'not timed out')}<i aria-hidden="true">· · ·</i>${event(3, 'AgentMessage', 'same marker')}<i aria-hidden="true">· · ·</i>${event(4, 'task_complete', 'turn ends')}</div>
+      <div class="probe-lane-label"><span class="probe-avatar child">C</span><span><b>CHILD</b><small>thread + rollout</small></span></div>
+      <div class="probe-lane-events child-events"><i aria-hidden="true">· · ·</i>${event(1, 'marker in child rollout', 'child result')}<i aria-hidden="true">· · ·</i><span class="probe-route" aria-label="The marker is later recorded in the parent">↗ result recorded in parent</span></div>
+    </div>
+    <div class="probe-readout" aria-live="polite"><span class="probe-readout-index">${String(step + 1).padStart(2, '0')} / 05</span><div><strong>${escapeHtml(stage.title)}</strong><p>${escapeHtml(stage.evidence)}</p><small>${escapeHtml(stage.boundary)}</small></div></div>
+    <div class="probe-controls"><button type="button" data-probe-step="${Math.max(0, step - 1)}" ${step === 0 ? 'disabled' : ''} aria-label="Previous checkpoint">←</button><input type="range" min="0" max="4" step="1" value="${step}" aria-label="Probe checkpoint" data-probe-range><button type="button" data-probe-step="${Math.min(4, step + 1)}" ${step === 4 ? 'disabled' : ''} aria-label="Next checkpoint">→</button><a href="https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#embedded-desktop-cli-v2-spawn-and-wait-probe-2026-10-16" target="_blank" rel="noreferrer">Open sanitized probe evidence ↗</a></div>
+    <p class="probe-caveat"><b>Not shown:</b> exact wake cause, serialized model request, model interpretation, Desktop host events, or a live UI capture.</p>
+  </section>`;
+}
+
+function selectEmbeddedProbeStep(value) {
+  const next = Number.parseInt(value, 10);
+  embeddedProbeStep = Number.isFinite(next) ? Math.max(0, Math.min(4, next)) : 0;
+  const probe = $('.embedded-probe');
+  if (probe) probe.outerHTML = embeddedProbeMarkup();
+}
+
 function renderInspector() {
   const task = taskById(selectedTaskId);
   $('#inspector-empty').hidden = Boolean(task);
@@ -942,6 +997,7 @@ function renderInspector() {
         <i aria-hidden="true">→</i>
         <button type="button" data-inspector-target="activity"><span>04 · RETURN</span><strong>Status + result</strong><small>Terminal status, activity and parent result are distinct signals.</small><b>Inspect activity</b></button>
       </div>
+      ${embeddedProbeMarkup()}
       <div class="upstream-refresh" aria-label="Latest upstream changes and subagent scope">
         <div class="upstream-refresh-heading"><span>UPSTREAM DELTA · 97EBF2D → 9C84E89</span><b>BOUNDED SOURCE DIFF</b></div>
         <div class="upstream-refresh-grid">
@@ -1469,6 +1525,10 @@ document.addEventListener('input', event => {
   if (event.target.matches('.sequence-scrubber input[type="range"]')) updateSequenceStep(event.target.closest('.interaction-sequence'), event.target.value);
 });
 document.addEventListener('change', event => {
+  if (event.target.matches('[data-probe-range]')) {
+    selectEmbeddedProbeStep(event.target.value);
+    return;
+  }
   if (!event.target.matches('[data-native-panel-inline]')) return;
   desktopPanelInline = event.target.checked;
   desktopPanelSelected = null;
@@ -1758,6 +1818,11 @@ $('#tree').addEventListener('keydown', event => {
   }
 });
 document.addEventListener('click', async event => {
+  const probeStep = event.target.closest('[data-probe-step]');
+  if (probeStep) {
+    selectEmbeddedProbeStep(probeStep.dataset.probeStep);
+    return;
+  }
   const deliveryModeButton = event.target.closest('[data-delivery-flow]');
   if (deliveryModeButton) {
     deliveryFlowMode = deliveryModeButton.dataset.deliveryFlow === 'trigger-turn' ? 'trigger-turn' : 'queue-only';
