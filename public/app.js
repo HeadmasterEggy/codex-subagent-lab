@@ -39,6 +39,7 @@ let desktopPanelStatus = 'active';
 let desktopPanelInline = true;
 let desktopPanelSelected = null;
 let desktopPanelCanInteract = true;
+let desktopPanelPipelineStage = 'membership';
 let desktopCollapseHasInline = true;
 let desktopCollapseAllDone = false;
 let desktopResourceFocus = 'local';
@@ -1204,9 +1205,38 @@ function desktopSubagentsMarkup() {
   const selected = agents.find(agent => agent.id === desktopPanelSelected);
   const selectedRoute = desktopPanelSelected === 'summary' ? 'summary' : selected ? (selected.canInteract === false ? 'panel' : 'thread') : 'idle';
   const avatar = agent => `<span class="desktop-agent-avatar ${agent.status === 'done' ? 'is-done' : 'is-active'}" aria-label="${escapeHtml(agent.name)} · ${agent.status}">${escapeHtml(agent.name.slice(0,1))}</span>`;
+  const pipeline = {
+    membership: {
+      label: '01 · MEMBERSHIP',
+      title: 'Find child references',
+      copy: 'The selector combines parent-turn collaboration items with known descendant/source-linked threads. Spawn receivers and started subAgentActivity records contribute child IDs; interacted activity is excluded.',
+      output: 'Candidate child memberships → child identity and parent relationship checks.'
+    },
+    reconcile: {
+      label: '02 · RECONCILE',
+      title: 'Merge records without erasing uncertainty',
+      copy: 'The row projection reads indexed parent items, cached child conversations/summaries, thread runtime status, child turn state, and discovery completeness. A partial scan keeps missing children unknown.',
+      output: 'Latest parent reference + child/runtime evidence + completeness → derived row status and interaction hint.'
+    },
+    display: {
+      label: '03 · DISPLAY',
+      title: 'Split the derived records into two views',
+      copy: 'Named background-agent records with showInlineActivity enter the compact summary; other named agents become detail rows. Unnamed records are filtered before either projection.',
+      output: 'Derived backgroundAgents → compact summary / detail rows → selected-child route.'
+    }
+  };
+  const selectedPipeline = pipeline[desktopPanelPipelineStage] ?? pipeline.membership;
   return `<section class="desktop-subagents" aria-labelledby="desktop-subagents-title">
     <div class="desktop-subagents-head"><div><span class="desktop-subagents-eyebrow">INSTALLED CODEX · STATIC UI TRACE</span><h5 id="desktop-subagents-title">One child set, two panel projections</h5></div><span class="desktop-subagents-version">26.1007.71326</span></div>
     <p class="desktop-subagents-intro">A local bundle snapshot shows named background agents split by <code>showInlineActivity</code>. Change the sample child below to see which projection receives it.</p>
+    <section class="desktop-panel-pipeline" aria-labelledby="desktop-panel-pipeline-title">
+      <div class="desktop-panel-pipeline-head"><div><span>SELECTOR → ROWS → PANEL</span><strong id="desktop-panel-pipeline-title">Where do the panel's child rows come from?</strong></div><span>STATIC DATA FLOW</span></div>
+      <div class="desktop-panel-pipeline-steps" role="group" aria-label="Inspect the Subagents panel data flow">
+        ${Object.entries(pipeline).map(([key,step]) => `<button type="button" data-panel-pipeline="${key}" aria-pressed="${desktopPanelPipelineStage === key}"><small>${step.label}</small><strong>${step.title}</strong></button>`).join('')}
+      </div>
+      <div class="desktop-panel-pipeline-detail" data-stage="${desktopPanelPipelineStage}" aria-live="polite"><div class="desktop-pipeline-inputs"><article><span>MEMBERSHIP INPUTS</span><strong>Parent item index</strong><small><code>spawnAgent</code> receivers · started activity IDs</small></article><i aria-hidden="true">+</i><article><span>DESCENDANT INPUTS</span><strong>Thread snapshot</strong><small>Indexed descendants · source-linked threads · cached child records</small></article><i aria-hidden="true">→</i><article class="desktop-pipeline-output"><span>${selectedPipeline.label}</span><strong>${selectedPipeline.title}</strong><small>${selectedPipeline.copy}</small></article></div><p><b>Stage output</b><span>${selectedPipeline.output}</span></p></div>
+      <div class="desktop-panel-pipeline-sources"><a href="https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#the-local-row-selector-derives-caninteract-from-parent-thread-collaboration-items" target="_blank" rel="noreferrer">parent-item selector evidence</a><a href="https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#renderer-row-status-derivation-in-the-subagents-panel" target="_blank" rel="noreferrer">status projection evidence</a><a href="https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#descendant-discovery-is-a-bounded-client-side-reconciliation-workflow" target="_blank" rel="noreferrer">discovery and completeness</a></div>
+    </section>
     <div class="desktop-subagents-source" aria-label="Illustrative background agent records">
       <div class="desktop-subagents-source-label"><span>INPUT</span><strong>backgroundAgents</strong><small>Illustrative records · not captured session data</small></div>
       <article class="desktop-agent-record ${desktopPanelInline ? 'is-routed-summary' : 'is-routed-row'}"><span class="desktop-record-icon">A</span><div><strong>Map event route</strong><small>Protocol analyst · ${desktopPanelStatus === 'active' ? 'active' : 'done'} · canInteract ${desktopPanelCanInteract}</small></div><span class="desktop-route-pill">${desktopPanelInline ? 'INLINE ACTIVITY' : 'PANEL ROW'}</span></article>
@@ -1604,8 +1634,8 @@ function agentControlExplorerMarkup() {
     ${currentMain ? `<div class="controller-version-switch" role="group" aria-label="Multi-agent version"><span>API mode</span><button type="button" data-controller-version="v1" aria-pressed="${agentControlVersion === 'v1'}">V1</button><button type="button" data-controller-version="v2" aria-pressed="${agentControlVersion === 'v2'}">V2</button><small>Current API: host backends support V2; V1 requires Local control.</small></div>` : ''}
     <div class="controller-route" data-entry="${agentControlEntry}" data-factory="${agentControlFactoryEnabled}" aria-live="polite"><div class="controller-route-input"><span>ENTRY</span><strong>${entry[1]}</strong><small>${entry[2]}</small></div><i aria-hidden="true">→</i><div class="controller-route-init"><span>INITIAL CONTROLLER</span><strong>${localInit ? 'LocalAgentControl' : agentControlEntry === 'internal-child' ? 'Parent-provided' : 'Existing resident'}</strong><small>${localInit ? 'ThreadManager state + ID generator + rollout budget' : agentControlEntry === 'internal-child' ? 'captured AgentControlInit + local runtime' : 'returned before registration factory'}</small></div><i aria-hidden="true">→</i><div class="controller-route-result"><span>${selection.badge}</span><strong>${selection.title}</strong><small>${selection.detail}</small></div></div>
     ${currentMain ? '<p class="controller-identity-check"><b>Provided controller guard</b> The session startup path compares <code>control.identity()</code> with the derived session identity. A mismatch fails startup; a matching provided controller keeps its associated runtime.</p>' : ''}
-    <p class="agent-control-construction-boundary"><b>Evidence boundary</b> ${currentMain ? 'Current-main source contract, compared with a separate installed-binary sample.' : 'Version-matched installed-source decision rule.'} Static method tables contain LocalAgentControl implementations, but no runtime capture identifies the concrete table used by a specific installed Desktop spawn.</p>
-    <div class="agent-control-construction-links">${currentMain ? '<a href="https://github.com/openai/codex/blob/b5115cdd669d37a8635a9742851e97ba4fb1d42c/codex-rs/core/src/thread_manager.rs#L3331-L3368" target="_blank" rel="noreferrer">factory contract</a><a href="https://github.com/openai/codex/blob/b5115cdd669d37a8635a9742851e97ba4fb1d42c/codex-rs/core/src/agent/control/runtime.rs#L1293-L1343" target="_blank" rel="noreferrer">Local / Provided</a><a href="https://github.com/openai/codex/blob/b5115cdd669d37a8635a9742851e97ba4fb1d42c/codex-rs/core/src/session/session.rs#L3910-L4008" target="_blank" rel="noreferrer">identity validation</a><a href="https://github.com/openai/codex/blob/b5115cdd669d37a8635a9742851e97ba4fb1d42c/codex-rs/core/src/codex_delegate.rs#L1288-L1300" target="_blank" rel="noreferrer">child inheritance</a>' : '<a href="https://github.com/openai/codex/blob/4ebc485ca321243727539187169425fcf972f2c4/codex-rs/core/src/thread_manager.rs#L1136-L1155" target="_blank" rel="noreferrer">entry selection</a><a href="https://github.com/openai/codex/blob/4ebc485ca321243727539187169425fcf972f2c4/codex-rs/core/src/thread_manager.rs#L1592-L1598" target="_blank" rel="noreferrer">local construction</a><a href="https://github.com/openai/codex/blob/4ebc485ca321243727539187169425fcf972f2c4/codex-rs/core/src/thread_manager.rs#L2072-L2123" target="_blank" rel="noreferrer">registration and factory</a>'}</div>
+    <p class="agent-control-construction-boundary"><b>Evidence boundary</b> ${currentMain ? 'Current-main source contract, compared with a separate installed-binary sample; the builder does not prove that Desktop installs the factory.' : 'Version-matched installed-source decision rule. Its app-server composition calls ThreadManager::new with the factory left at default None; source-path evidence, not runtime capture.'} Static method tables contain LocalAgentControl implementations, but no runtime capture identifies the concrete table used by a specific installed Desktop spawn.</p>
+    <div class="agent-control-construction-links">${currentMain ? '<a href="https://github.com/openai/codex/blob/b5115cdd669d37a8635a9742851e97ba4fb1d42c/codex-rs/core/src/thread_manager.rs#L3331-L3368" target="_blank" rel="noreferrer">factory contract</a><a href="https://github.com/openai/codex/blob/b5115cdd669d37a8635a9742851e97ba4fb1d42c/codex-rs/core/src/agent/control/runtime.rs#L1293-L1343" target="_blank" rel="noreferrer">Local / Provided</a><a href="https://github.com/openai/codex/blob/b5115cdd669d37a8635a9742851e97ba4fb1d42c/codex-rs/core/src/session/session.rs#L3910-L4008" target="_blank" rel="noreferrer">identity validation</a><a href="https://github.com/openai/codex/blob/b5115cdd669d37a8635a9742851e97ba4fb1d42c/codex-rs/core/src/codex_delegate.rs#L1288-L1300" target="_blank" rel="noreferrer">child inheritance</a>' : '<a href="https://github.com/openai/codex/blob/4ebc485ca321243727539187169425fcf972f2c4/codex-rs/app-server/src/message_processor.rs#L329-L380" target="_blank" rel="noreferrer">app-server composition</a><a href="https://github.com/openai/codex/blob/4ebc485ca321243727539187169425fcf972f2c4/codex-rs/core/src/thread_manager.rs#L536-L650" target="_blank" rel="noreferrer">default factory is None</a><a href="https://github.com/openai/codex/blob/4ebc485ca321243727539187169425fcf972f2c4/codex-rs/core/src/thread_manager.rs#L1136-L1155" target="_blank" rel="noreferrer">entry selection</a><a href="https://github.com/openai/codex/blob/4ebc485ca321243727539187169425fcf972f2c4/codex-rs/core/src/thread_manager.rs#L2072-L2123" target="_blank" rel="noreferrer">registration and factory</a>'}</div>
   </section>`;
 }
 
@@ -2586,6 +2616,13 @@ document.addEventListener('click', async event => {
   if (desktopResource) {
     desktopResourceFocus = desktopResource.dataset.desktopResource === 'work' ? 'work' : 'local';
     desktopResource.closest('.desktop-subagents').outerHTML = desktopSubagentsMarkup();
+    return;
+  }
+  const panelPipelineButton = event.target.closest('[data-panel-pipeline]');
+  if (panelPipelineButton) {
+    desktopPanelPipelineStage = ['membership', 'reconcile', 'display'].includes(panelPipelineButton.dataset.panelPipeline) ? panelPipelineButton.dataset.panelPipeline : 'membership';
+    panelPipelineButton.closest('.desktop-subagents').outerHTML = desktopSubagentsMarkup();
+    document.querySelector(`[data-panel-pipeline="${desktopPanelPipelineStage}"]`)?.focus();
     return;
   }
   const nativePanelConflict = event.target.closest('[data-native-panel-conflict]');
