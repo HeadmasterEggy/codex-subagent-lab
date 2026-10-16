@@ -59,6 +59,7 @@ let spawnProtocolOutcome = 'success';
 let nativeSpawnFocus = 0;
 let standaloneStaticSpawnFocus = 0;
 let standaloneEvidenceLens = 0;
+let standaloneVtableArtifact = 'desktop';
 let agentControlEntry = 'new-root';
 let agentControlFactoryEnabled = false;
 let terminalScenario = 'completed';
@@ -362,7 +363,7 @@ function standaloneStaticSpawnTraceMarkup() {
     <p class="standalone-evidence-focus lens-${activeLens[3]}" aria-live="polite"><b>${activeLens[1]}</b>${activeLens[2]}</p>
     <div class="standalone-dispatch-map" role="img" aria-label="Machine-code observation: frame copy, adjacent context words, x28 spill and reload, slot load at plus 0x28, then indirect call"><div data-evidence-target="machine"><small>MACHINE CODE · FRAME</small><b>x19 → x25</b><code>[+0x298] → [+0x2c0]</code></div><i aria-hidden="true">→</i><div data-evidence-target="machine"><small>ADJACENT WORDS</small><b>x21 / x28</b><code>[x25+0x978] / [x25+0x980]</code></div><i aria-hidden="true">→</i><div data-evidence-target="machine"><small>REGISTER FLOW</small><b>x28 → x8</b><code>spill/reload · [x28+0x28]</code></div><i aria-hidden="true">→</i><div class="standalone-dispatch-target" data-evidence-target="machine"><small>INDIRECT CALL</small><b>blr x8</b><code>0x105a6bf0c</code></div></div>
     <section class="standalone-vtable-map" data-evidence-target="table" aria-label="Static method table entries confirm the AgentControl spawn slot at offset plus 0x28"><header><b>METHOD TABLE · BINARY DATA</b><span>+0x28 → LocalAgentControl::spawn</span></header><div class="standalone-vtable-rows"><article><small>HEADER</small><b>drop · size · align</b><code>0x104cf8d04 · 0x70 · 8</code></article><i aria-hidden="true">→</i><article><small>+0x18</small><b>identity</b><code>0x104980a9c</code></article><i aria-hidden="true">→</i><article><small>+0x20</small><b>resolve</b><code>0x104980804</code></article><i aria-hidden="true">→</i><article class="standalone-vtable-spawn"><small>+0x28</small><b>spawn</b><code>0x10497fc98</code></article></div><p>Both candidate __DATA_CONST tables have this +0x28 pointer. The runtime value of x28 has not been matched to either table.</p></section>
-    <section class="cross-version-table" data-evidence-target="table" aria-label="Static table slot comparison across two hash-pinned binary samples"><header><b>CROSS-VERSION SLOT CHECK · STATIC DATA</b><span>same slot meaning · two candidate tables per artifact</span></header><div class="cross-version-table-grid"><article><small>STANDALONE · 0.162.1 · 2 TABLES</small><b>+0x20 resolve</b><code>0x104980804</code><b>+0x28 spawn</b><code>0x10497fc98</code><small title="SHA-256 74c6a6d263f40d65f99c27a815275f5b4ed0bcc2baecc396b4cf3255498bdfc0">SHA-256 74c6a6d2…5498bdfc0</small></article><i aria-hidden="true">⇄</i><article><small>DESKTOP EMBEDDED · 0.163.0-alpha.10.2 · 2 TABLES</small><b>+0x20 resolve</b><code>0x1056246ac</code><b>+0x28 spawn</b><code>0x105623b3c</code><small title="SHA-256 1afb28c01d7d49e892bd75f11076b10f1451e34e0ee308a95e5ab7f69f9c84fe">SHA-256 1afb28c0…9f84fe</small></article></div><p>Separate binaries show the same trait-slot ordering and their own LocalAgentControl targets. This comparison does not show which table either runtime call selected.</p></section>
+    ${standaloneVtableInspectionMarkup()}
     <aside class="standalone-runtime-unknown" data-evidence-target="unknown"><span>RUNTIME RECEIVER · UNKNOWN</span><b>x28 value and selected table were not captured</b><small>The static slot match does not establish which implementation this execution would dispatch to.</small></aside>
     <section class="standalone-poll-map" aria-label="ABI-based interpretation of the following indirect call"><header><b>THE NEXT CALL · ABI INFERENCE</b><span>strong Future::poll match</span></header><div class="standalone-poll-steps"><article><small>RETURNED PAIR</small><b>x0 · data</b><code>x1 · vtable-like metadata</code></article><i aria-hidden="true">→</i><article><small>SELECT SLOT</small><b>[x1 + 0x18]</b><code>function pointer → x9</code></article><i aria-hidden="true">→</i><article><small>RESTORE CONTEXT</small><b>x0 stays · x1 = x27</b><code>x27 copied from entry x1</code></article><i aria-hidden="true">→</i><article class="standalone-poll-call"><small>INDIRECT CALL</small><b>blr x9</b><code>0x105a6bf30</code></article></div><p>Resume path reloads the saved pair and repeats the same slot/context pattern at <code>0x105a6b530</code>.</p></section>
   </div>` : '';
@@ -372,6 +373,37 @@ function standaloneStaticSpawnTraceMarkup() {
     <div class="standalone-static-rail" role="group" aria-label="Standalone CLI static evidence checkpoints">${steps.map((item, index) => `<button type="button" data-standalone-static-step="${index}" aria-pressed="${index === standaloneStaticSpawnFocus}"><span>0${index + 1}</span><b>${item[0]}</b></button>`).join('')}</div>
     <article class="standalone-static-detail" aria-live="polite"><div><span>${tag}</span><a href="${href}" target="_blank" rel="noreferrer">${standaloneStaticSpawnFocus === 0 ? 'evidence ledger' : standaloneStaticSpawnFocus === 2 ? 'confirmed slot evidence ledger' : 'exact-tag handler source'} ↗</a></div><h6>${title}</h6><p>${text}</p>${dispatchDiagram}</article>
     <p class="standalone-static-boundary"><b>Boundary</b> The frame copy and first target’s pointer path are directly observed. Static method tables confirm that AgentControl +0x28 is LocalAgentControl::spawn, but the runtime x28 value and concrete selected table remain unresolved. The returned pair’s repeated +0x18/context call supports a future-poll interpretation. The matching handler uses <code>Arc&lt;dyn AgentControl&gt;</code>; the source can populate it with a local or host-provided controller, so this does not identify the binary receiver. The panic Location decodes to <code>spawn.rs:112:3</code>; LLDB’s nearby <code>handle_task_abort</code> label was a nearest-symbol annotation, not the encoded source location. This supports the spawn-handler attribution but does not recover the inline/codegen chain. Version-matched source is comparative evidence, not signed build provenance. No child was launched; the separate V1 runtime record does not exercise this V2 handler.</p>
+  </section>`;
+}
+function standaloneVtableInspectionMarkup() {
+  const artifacts = {
+    standalone: {
+      label: 'Standalone CLI · 0.162.1',
+      hash: 'SHA-256 74c6a6d263f40d65f99c27a815275f5b4ed0bcc2baecc396b4cf3255498bdfc0',
+      evidenceUrl: 'https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#follow-up-standalone-binary-data-confirms-the-agentcontrolspawn-vtable-slot',
+      tables: [
+        ['0x10e084ef0', '0x104cf8d04', '0x104980a9c', '0x104980804', '0x10497fc98'],
+        ['0x10e0bc698', '0x1056bbc80', '0x1053a89d8', '0x104980804', '0x10497fc98']
+      ]
+    },
+    desktop: {
+      label: 'Desktop embedded · 0.163.0-alpha.10.2',
+      hash: 'SHA-256 1afb28c01d7d49e892bd75f11076b10f1451e34e0ee308a95e5ab7f69f9c84fe',
+      evidenceUrl: 'https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#follow-up-installed-0-163-0-agentcontrol-method-table-entries-2026-10-17',
+      tables: [
+        ['0x10e3978a0', '0x104e6f79c', '0x104afe99c', '0x1056246ac', '0x105623b3c'],
+        ['0x10e3bbca0', '0x10595d09c', '0x105624944', '0x1056246ac', '0x105623b3c']
+      ]
+    }
+  };
+  const selected = artifacts[standaloneVtableArtifact] || artifacts.desktop;
+  const evidenceUrl = selected.evidenceUrl;
+  return `<section class="cross-version-table" data-evidence-target="table" aria-label="Inspect candidate AgentControl method tables from two hash-pinned binaries">
+    <header><div><b>METHOD TABLE INSPECTOR · STATIC BINARY DATA</b><span>${selected.label} · two candidates</span></div><a href="${evidenceUrl}" target="_blank" rel="noreferrer">evidence ledger ↗</a></header>
+    <div class="vtable-artifact-picker" role="group" aria-label="Choose binary sample to inspect">${[['standalone','Standalone CLI · 0.162.1'],['desktop','Desktop embedded · 0.163.0']].map(([id,label]) => `<button type="button" data-vtable-artifact="${id}" aria-pressed="${id === standaloneVtableArtifact}">${label}</button>`).join('')}</div>
+    <div class="vtable-cards" aria-live="polite">${selected.tables.map(([address,drop,identity,resolve,spawn],index) => `<article class="vtable-card"><div class="vtable-card-heading"><span>CANDIDATE TABLE 0${index+1}</span><code>${address}</code></div><div class="vtable-layout"><span>drop</span><code>${drop}</code><span>size / align</span><code>0x70 / 8</code></div><div class="vtable-method"><span>+0x18 · identity</span><code>${identity}</code></div><div class="vtable-method"><span>+0x20 · resolve</span><code>${resolve}</code></div><div class="vtable-method vtable-spawn"><span>+0x28 · spawn</span><code>${spawn}</code></div></article>`).join('')}</div>
+    <p class="vtable-slot-note"><strong>Same slot order in both samples:</strong> <code>identity → resolve → spawn</code>. The named <code>+0x28</code> pointer is the LocalAgentControl implementation. These are static candidates; neither binary's runtime receiver was captured.</p>
+    <span class="vtable-hash" title="${selected.hash}">${selected.hash}</span>
   </section>`;
 }
 function nativeCliTraceMarkup() {
@@ -2369,6 +2401,13 @@ document.addEventListener('click', async event => {
     standaloneEvidenceLens = Math.max(0, Math.min(2, Number(evidenceLensButton.dataset.standaloneEvidenceLens) || 0));
     evidenceLensButton.closest('.standalone-static-trace').outerHTML = standaloneStaticSpawnTraceMarkup();
     document.querySelector(`[data-standalone-evidence-lens="${standaloneEvidenceLens}"]`)?.focus();
+    return;
+  }
+  const vtableArtifactButton = event.target.closest('[data-vtable-artifact]');
+  if (vtableArtifactButton) {
+    standaloneVtableArtifact = vtableArtifactButton.dataset.vtableArtifact === 'standalone' ? 'standalone' : 'desktop';
+    vtableArtifactButton.closest('.standalone-static-trace').outerHTML = standaloneStaticSpawnTraceMarkup();
+    document.querySelector(`[data-vtable-artifact="${standaloneVtableArtifact}"]`)?.focus();
     return;
   }
   const standaloneStaticButton = event.target.closest('[data-standalone-static-step]');
