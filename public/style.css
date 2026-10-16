@@ -1134,6 +1134,8 @@ button.evidence-lens:focus-visible{outline:2px solid var(--lime);outline-offset:
 .main-delta-commit small,.main-delta-change small{color:#9aa5ad;font-size:8px;line-height:1.4}
 .main-delta-commit.latest{border-color:#91b6d23d;background:#94bbd20b}
 .main-delta-commit.latest>span{color:#a8c7db}
+.main-delta-change-stack{display:grid;min-width:0;align-content:stretch;gap:4px}
+.main-delta-change-stack>i{align-self:center;color:#92a4b4;font:10px var(--mono);font-style:normal;text-align:center}
 .main-delta-change{border-color:#d5aa6c32;background:#d3a35b08}
 .main-delta-change>span{color:#d5b77e}
 .main-delta-change strong{color:#e8d6b5}
@@ -1145,7 +1147,7 @@ button.evidence-lens:focus-visible{outline:2px solid var(--lime);outline-offset:
 .main-delta-scope p span{color:#9eaaa0;font-size:7px;line-height:1.4}
 .main-delta-scope>a{margin-left:auto}
 .main-delta-boundary{margin:8px 1px 0;color:#9ba4a9;font-size:8px;line-height:1.5}
-@media(max-width:680px){.main-delta{margin:10px 0;padding:10px}.main-delta-heading{flex-direction:column;gap:5px}.main-delta-heading h4{font-size:13px}.main-delta-heading>a,.main-delta-scope>a{font-size:8px}.main-delta-rail{grid-template-columns:minmax(0,1fr) 10px minmax(0,1.15fr) 10px minmax(0,1fr);gap:3px}.main-delta-commit,.main-delta-change{padding:7px 5px}.main-delta-commit>span,.main-delta-change>span{font-size:5px}.main-delta-commit strong,.main-delta-change strong{font-size:8px}.main-delta-commit small,.main-delta-change small{font-size:7px}.main-delta-rail>i{font-size:9px}.main-delta-scope{align-items:flex-start;flex-wrap:wrap}.main-delta-scope p{flex:1}.main-delta-scope>a{margin-left:28px}.main-delta-boundary{font-size:9px}}
+@media(max-width:680px){.main-delta{margin:10px 0;padding:10px}.main-delta-heading{flex-direction:column;gap:5px}.main-delta-heading h4{font-size:13px}.main-delta-heading>a,.main-delta-scope>a{font-size:8px}.main-delta-rail{grid-template-columns:minmax(0,1fr) 10px minmax(0,1.15fr) 10px minmax(0,1fr);gap:3px}.main-delta-commit,.main-delta-change{padding:7px 5px}.main-delta-commit>span,.main-delta-change>span{font-size:5px}.main-delta-commit strong,.main-delta-change strong{font-size:8px}.main-delta-commit small,.main-delta-change small{font-size:7px}.main-delta-rail>i,.main-delta-change-stack>i{font-size:9px}.main-delta-scope{align-items:flex-start;flex-wrap:wrap}.main-delta-scope p{flex:1}.main-delta-scope>a{margin-left:28px}.main-delta-boundary{font-size:9px}}
 @media(prefers-reduced-motion:reduce){.main-delta a{transition:none}}
 
 /* Let evidence boundaries use the inspector's full reading width. */
