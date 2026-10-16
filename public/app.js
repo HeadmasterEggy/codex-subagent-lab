@@ -1834,11 +1834,27 @@ function currentMainDeltaMarkup() {
   </section>`;
 }
 
+function packagedCliFeatureRegistryMarkup() {
+  return `<section class="cli-feature-map" aria-labelledby="cli-feature-map-title">
+    <div class="cli-feature-map-head"><div><span>PACKAGED CLI · FEATURE REGISTRY</span><h4 id="cli-feature-map-title">本机 CLI 暴露了哪些 agent 开关？</h4></div><span class="cli-feature-map-build">Desktop 20586 · CLI 0.163.0-alpha.10.2</span></div>
+    <div class="cli-feature-map-tracks" role="list" aria-label="Packaged CLI feature states">
+      <article class="cli-feature-map-item enabled" role="listitem"><span class="cli-feature-map-state">STABLE · ENABLED</span><strong><code>multi_agent</code></strong><small>旧版 multi-agent 开关</small></article>
+      <article class="cli-feature-map-item disabled" role="listitem"><span class="cli-feature-map-state">STABLE · DISABLED</span><strong><code>multi_agent_v2</code></strong><small>V2 协议开关</small></article>
+      <article class="cli-feature-map-item experimental" role="listitem"><span class="cli-feature-map-state">UNDER DEVELOPMENT · DISABLED</span><strong><code>agent_message_board</code></strong><small>消息板</small></article>
+      <article class="cli-feature-map-item experimental" role="listitem"><span class="cli-feature-map-state">UNDER DEVELOPMENT · DISABLED</span><strong><code>multi_agent_v2_dynamic_tools</code></strong><small>V2 动态工具</small></article>
+      <article class="cli-feature-map-item experimental" role="listitem"><span class="cli-feature-map-state">UNDER DEVELOPMENT · DISABLED</span><strong><code>defer_mailbox_preemption</code></strong><small>延后 mailbox 抢占</small></article>
+      <article class="cli-feature-map-item experimental" role="listitem"><span class="cli-feature-map-state">UNDER DEVELOPMENT · DISABLED</span><strong><code>subagent_default_context_limits</code></strong><small>子 agent 默认上下文限制</small></article>
+    </div>
+    <p class="cli-feature-map-boundary">这是在已授权工作区内运行打包 CLI 得到的有效 feature registry；用户配置和匹配环境变量未见覆盖。它不能证明 Desktop 宿主继承了同一组解析值，也不能证明某个任务选用了哪条协议或实际启动了子 agent。</p>
+    <a class="cli-feature-map-source" href="https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#follow-up-packaged-cli-feature-registry-snapshot-2026-10-17" target="_blank" rel="noreferrer">查看版本、哈希与复核步骤 ↗</a>
+  </section>`;
+}
+
 function renderMechanismExplorer() {
   const root = $('#mechanism-explorer');
   if (!root) return;
   const step = mechanismExplorerSteps[mechanismExplorerStep];
-  root.innerHTML = `<div class="mechanism-explorer-steps" role="group" aria-label="Subagent lifecycle steps">${mechanismExplorerSteps.map((item, index) => `<button type="button" data-mechanism-step="${index}" aria-pressed="${index === mechanismExplorerStep}" aria-label="Step ${index + 1}: ${item.label}"><span>0${index + 1}</span>${item.label}</button>`).join('')}</div><article class="mechanism-explorer-detail" aria-live="polite"><div><span>STEP 0${mechanismExplorerStep + 1} · ${step.label.toUpperCase()}</span><a href="${step.href}" target="_blank" rel="noreferrer">${step.source} ↗</a></div><h4>${step.title}</h4><p>${step.text}</p></article>${mechanismExplorerStep === 4 ? shutdownScopeMarkup() : ''}${mechanismExplorerStep === 5 ? `${desktopHydrationMarkup()}${desktopBuild20586Markup()}` : ''}${standaloneStaticSpawnTraceMarkup()}${appServerProjectionMarkup()}${appServerHydrationMarkup()}${rendererReadPathMarkup()}${currentMainDeltaMarkup()}<p class="mechanism-explorer-version">Each visualization links to its pinned source snapshot. Static source analysis; no live lifecycle action is implied.</p>`;
+  root.innerHTML = `<div class="mechanism-explorer-steps" role="group" aria-label="Subagent lifecycle steps">${mechanismExplorerSteps.map((item, index) => `<button type="button" data-mechanism-step="${index}" aria-pressed="${index === mechanismExplorerStep}" aria-label="Step ${index + 1}: ${item.label}"><span>0${index + 1}</span>${item.label}</button>`).join('')}</div><article class="mechanism-explorer-detail" aria-live="polite"><div><span>STEP 0${mechanismExplorerStep + 1} · ${step.label.toUpperCase()}</span><a href="${step.href}" target="_blank" rel="noreferrer">${step.source} ↗</a></div><h4>${step.title}</h4><p>${step.text}</p></article>${mechanismExplorerStep === 4 ? shutdownScopeMarkup() : ''}${mechanismExplorerStep === 5 ? `${desktopHydrationMarkup()}${desktopBuild20586Markup()}` : ''}${standaloneStaticSpawnTraceMarkup()}${appServerProjectionMarkup()}${appServerHydrationMarkup()}${rendererReadPathMarkup()}${packagedCliFeatureRegistryMarkup()}${currentMainDeltaMarkup()}<p class="mechanism-explorer-version">Each visualization links to its pinned source snapshot. Static source analysis; no live lifecycle action is implied.</p>`;
 }
 function mailboxTimingMarkup() {
   const beforeFinal = mailboxScenario === 'before-final';
