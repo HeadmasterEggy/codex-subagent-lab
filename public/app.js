@@ -1640,11 +1640,22 @@ function agentControlExplorerMarkup() {
   </section>`;
 }
 
+function currentMainDeltaMarkup() {
+  return `<section class="main-delta" aria-labelledby="main-delta-title">
+    <div class="main-delta-heading"><div><span>UPSTREAM SOURCE · BOUNDED DIFF</span><h4 id="main-delta-title">What changed after the last subagent census?</h4></div><a href="https://github.com/openai/codex/commit/34420d42648f627f766bd347532dcaad5475a68b" target="_blank" rel="noreferrer">main · 34420d4 ↗</a></div>
+    <div class="main-delta-rail" role="img" aria-label="Source comparison from Codex main b5115cdd to 34420d4: exec-server Noise handshake handling changed; inspected subagent paths did not change">
+      <div class="main-delta-commit"><span>PREVIOUS CENSUS</span><strong>b5115cdd</strong><small>factory callsite map</small></div><i aria-hidden="true">→</i><div class="main-delta-change"><span>CHANGED IN codex-rs</span><strong>Noise handshake</strong><small>exec-server transport + tests</small></div><i aria-hidden="true">→</i><div class="main-delta-commit latest"><span>FETCHED MAIN</span><strong>34420d4</strong><small>2026-10-17</small></div>
+    </div>
+    <div class="main-delta-scope"><span class="main-delta-check" aria-hidden="true">✓</span><p><b>Inspected paths unchanged</b><span>AgentControl · child spawn · app-server wiring · TUI</span></p><a href="https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#follow-up-upstream-main-recheck-through-34420d4-2026-10-17" target="_blank" rel="noreferrer">Evidence ledger ↗</a></div>
+    <p class="main-delta-boundary">A bounded source diff keeps the earlier census current within these paths; it is not a trace of the packaged Desktop runtime.</p>
+  </section>`;
+}
+
 function renderMechanismExplorer() {
   const root = $('#mechanism-explorer');
   if (!root) return;
   const step = mechanismExplorerSteps[mechanismExplorerStep];
-  root.innerHTML = `<div class="mechanism-explorer-steps" role="group" aria-label="Subagent lifecycle steps">${mechanismExplorerSteps.map((item, index) => `<button type="button" data-mechanism-step="${index}" aria-pressed="${index === mechanismExplorerStep}" aria-label="Step ${index + 1}: ${item.label}"><span>0${index + 1}</span>${item.label}</button>`).join('')}</div><article class="mechanism-explorer-detail" aria-live="polite"><div><span>STEP 0${mechanismExplorerStep + 1} · ${step.label.toUpperCase()}</span><a href="${step.href}" target="_blank" rel="noreferrer">${step.source} ↗</a></div><h4>${step.title}</h4><p>${step.text}</p></article>${mechanismExplorerStep === 4 ? shutdownScopeMarkup() : ''}${mechanismExplorerStep === 5 ? desktopHydrationMarkup() : ''}${standaloneStaticSpawnTraceMarkup()}${appServerProjectionMarkup()}<p class="mechanism-explorer-version">Each visualization links to its pinned source snapshot. Static source analysis; no live lifecycle action is implied.</p>`;
+  root.innerHTML = `<div class="mechanism-explorer-steps" role="group" aria-label="Subagent lifecycle steps">${mechanismExplorerSteps.map((item, index) => `<button type="button" data-mechanism-step="${index}" aria-pressed="${index === mechanismExplorerStep}" aria-label="Step ${index + 1}: ${item.label}"><span>0${index + 1}</span>${item.label}</button>`).join('')}</div><article class="mechanism-explorer-detail" aria-live="polite"><div><span>STEP 0${mechanismExplorerStep + 1} · ${step.label.toUpperCase()}</span><a href="${step.href}" target="_blank" rel="noreferrer">${step.source} ↗</a></div><h4>${step.title}</h4><p>${step.text}</p></article>${mechanismExplorerStep === 4 ? shutdownScopeMarkup() : ''}${mechanismExplorerStep === 5 ? desktopHydrationMarkup() : ''}${standaloneStaticSpawnTraceMarkup()}${appServerProjectionMarkup()}${currentMainDeltaMarkup()}<p class="mechanism-explorer-version">Each visualization links to its pinned source snapshot. Static source analysis; no live lifecycle action is implied.</p>`;
 }
 function mailboxTimingMarkup() {
   const beforeFinal = mailboxScenario === 'before-final';
