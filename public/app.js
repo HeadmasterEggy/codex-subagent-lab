@@ -954,7 +954,8 @@ function renderInspector() {
         <div class="current-main-audit-heading"><span>PUBLIC MAIN · PATH RECHECK</span><b>16E578D → 6B99197</b></div>
         <div class="current-main-audit-grid">
           <article><span>SCOPED SOURCE TREE</span><strong>No path changes found</strong><small>Agent control · sessions · task scheduling · V1/V2 handlers · app-server</small></article>
-          <article><span>EVIDENCE BOUNDARY</span><strong>Existing pins remain</strong><small>Static tree comparison only; no installed Desktop or live runtime claim.</small></article>
+          <article><span>SHUTDOWN CALLSITES</span><strong>Tests only in tracked codex-rs</strong><small>Exported tree-shutdown request and direct detailed waits have no production callsite in this source tree.</small></article>
+          <article><span>EVIDENCE BOUNDARY</span><strong>Desktop host remains unknown</strong><small>Static tree and callsite search; no installed Desktop or live runtime claim.</small></article>
         </div>
         <a href="https://github.com/openai/codex/compare/16e578dd1ddaf4f5db9cd1f3dbfea0958fd74339...6b991972c5b539198dcea9bac4fc14e57559c3af" target="_blank" rel="noreferrer">Open the bounded source comparison ↗</a>
       </div>
@@ -994,15 +995,15 @@ function renderInspector() {
         </div>
         <p class="suspension-map-proof"><a href="https://github.com/openai/codex/blob/9c84e89ce0893a552058d26dc6746ff6a40ea6e6/codex-rs/core/src/session/turn_suspension.rs" target="_blank" rel="noreferrer">Suspension handler</a> · <a href="https://github.com/openai/codex/blob/9c84e89ce0893a552058d26dc6746ff6a40ea6e6/codex-rs/core/src/agent/control/runtime.rs" target="_blank" rel="noreferrer">Runtime fence and membership wait</a> · <a href="https://github.com/openai/codex/blob/9c84e89ce0893a552058d26dc6746ff6a40ea6e6/codex-rs/core/src/thread_manager/shutdown.rs" target="_blank" rel="noreferrer">Tree shutdown handle</a></p>
         <div class="host-handoff-map" aria-label="Evidence map for the unresolved host-side tree cleanup wait">
-          <div class="host-handoff-heading"><span>HOST HANDOFF · EXACT COMMIT SEARCH</span><b>9C84E89</b></div>
+          <div class="host-handoff-heading"><span>HOST HANDOFF · CURRENT MAIN CALLSITE SEARCH</span><b>6B99197</b></div>
           <div class="host-handoff-steps">
-            <article class="handoff-node signal"><span>01 · CORE EVENT</span><strong>Root emits <code>ShutdownComplete</code></strong><small>Root runtime stopped; root writer closed.</small><a href="https://github.com/openai/codex/blob/9c84e89ce0893a552058d26dc6746ff6a40ea6e6/codex-rs/core/src/session/turn_suspension.rs" target="_blank" rel="noreferrer">Source callsite ↗</a></article>
+            <article class="handoff-node signal"><span>01 · CORE EVENT</span><strong>Root emits <code>ShutdownComplete</code></strong><small>Root runtime stopped; root writer closed.</small><a href="https://github.com/openai/codex/blob/6b991972c5b539198dcea9bac4fc14e57559c3af/codex-rs/core/src/session/turn_suspension.rs" target="_blank" rel="noreferrer">Current source ↗</a></article>
             <i aria-hidden="true">→</i>
-            <article class="handoff-node api"><span>02 · EXPORTED API</span><strong><code>wait_detailed()</code></strong><small>Waits for admitted tree work and reports cleanup failures.</small><a href="https://github.com/openai/codex/blob/9c84e89ce0893a552058d26dc6746ff6a40ea6e6/codex-rs/core/src/thread_manager/shutdown.rs" target="_blank" rel="noreferrer">Handle contract ↗</a></article>
+            <article class="handoff-node api"><span>02 · EXPORTED API</span><strong><code>wait_detailed()</code></strong><small>Waits for admitted tree work and reports cleanup failures.</small><a href="https://github.com/openai/codex/blob/6b991972c5b539198dcea9bac4fc14e57559c3af/codex-rs/core/src/thread_manager/shutdown.rs" target="_blank" rel="noreferrer">Handle contract ↗</a></article>
             <i class="handoff-gap" aria-label="No production caller found in this repository snapshot">?</i>
-            <article class="handoff-node boundary"><span>03 · CALLER</span><strong>Production handoff not located</strong><small>Full tracked-source search found test callsites only. Packaged Desktop host remains outside this proof.</small><a href="https://github.com/openai/codex/tree/9c84e89ce0893a552058d26dc6746ff6a40ea6e6" target="_blank" rel="noreferrer">Commit searched ↗</a></article>
+            <article class="handoff-node boundary"><span>03 · CALLER</span><strong>No tracked production caller found</strong><small>At 6b99197, the exported request API has test callers only; direct detailed waits are test-only. Desktop host remains unknown.</small><a href="https://github.com/openai/codex/blob/6b991972c5b539198dcea9bac4fc14e57559c3af/codex-rs/core/src/thread_manager/shutdown.rs" target="_blank" rel="noreferrer">API definition ↗</a></article>
           </div>
-          <p class="host-handoff-footnote"><b>Separate mechanism:</b> app-server's <code>shutdown_drain_waiter</code> is registered for thread revert and drains the old listener after <code>ShutdownComplete</code>; it is not wired to the agent-tree handle.</p>
+          <p class="host-handoff-footnote"><b>Separate mechanism:</b> app-server's <code>shutdown_drain_waiter</code> synchronizes listener replacement after <code>ShutdownComplete</code>; it is not the tree-wait handle. <a href="https://github.com/openai/codex/blob/6b991972c5b539198dcea9bac4fc14e57559c3af/codex-rs/app-server/src/request_processors/thread_lifecycle.rs#L389" target="_blank" rel="noreferrer">Listener event path ↗</a> · <a href="https://github.com/openai/codex/blob/6b991972c5b539198dcea9bac4fc14e57559c3af/codex-rs/app-server/src/thread_state.rs#L110" target="_blank" rel="noreferrer">Waiter ownership ↗</a></p>
         </div>
         ${stopCleanupMarkup()}
       </section>
