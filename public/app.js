@@ -21,6 +21,7 @@ let toolExposureWaitEnabled = true;
 let waitScopeScenario = 'nested-relay';
 let waitScopeStep = 0;
 let appServerProjectionTool = 'spawnAgent';
+let appServerHydrationView = 'turn-link';
 let residencyScenario = 'completed-followup';
 let interruptCloseScenario = 'interrupt-resident';
 let interruptCloseLifecycleStep = 2;
@@ -1688,6 +1689,27 @@ function appServerProjectionMarkup() {
   </section>`;
 }
 
+function appServerHydrationMarkup() {
+  const views = [
+    { id:'turn-link', label:'Turn linkage', eyebrow:'START A RELATED TURN', method:'turn/start', title:'Attribute a new turn to its parent', params:[['threadId', 'Thread receiving the turn'], ['parentTurnId', 'Turn that caused this work'], ['rootTurnId', 'Root turn for the work chain']], response:'A turn-start result; the schema defines linkage fields, not a child-spawn event.', color:'violet' },
+    { id:'history-pages', label:'Page history', eyebrow:'READ THREAD HISTORY', method:'thread/read → thread/turns/list → thread/items/list', title:'Hydrate history in bounded pages', params:[['threadId', 'Thread to inspect'], ['includeTurns: false', 'Metadata-only initial read'], ['cursor + limit', 'Continue turns and item pages']], response:'Page data plus continuation cursors; full-history hydration is deprecated for paginated threads.', color:'cyan' },
+    { id:'selected-items', label:'Read selected items', eyebrow:'TARGETED PERSISTED READ', method:'thread/items/read', title:'Fetch only known item IDs', params:[['threadId + turnId', 'Scope the persisted items'], ['itemIds: 1–100', 'Request a bounded set']], response:'Selected persisted items for one turn. This method is marked experimental.', color:'amber' },
+  ];
+  const view = views.find(item => item.id === appServerHydrationView) ?? views[0];
+  return `<section class="app-server-hydration" data-tone="${view.color}" aria-labelledby="app-server-hydration-title">
+    <header class="app-server-hydration-heading"><div><span>INSTALLED APP-SERVER · SCHEMA SNAPSHOT</span><h4 id="app-server-hydration-title">Two different questions: who started this turn, and what history can be read?</h4></div><span class="schema-version">CLI 0.163.0-alpha.10.2</span></header>
+    <div class="hydration-tabs" role="tablist" aria-label="Choose an app-server observability path">${views.map((item,index) => `<button type="button" role="tab" id="hydration-tab-${item.id}" aria-selected="${item.id === view.id}" aria-controls="hydration-panel" tabindex="${item.id === view.id ? '0' : '-1'}" data-app-server-hydration-view="${item.id}"><span>0${index+1}</span>${item.label}</button>`).join('')}</div>
+    <div class="hydration-map" role="tabpanel" id="hydration-panel" aria-labelledby="hydration-tab-${view.id}" aria-live="polite">
+      <div class="hydration-step hydration-call"><span>CLIENT REQUEST</span><strong><code>${view.method}</code></strong><small>${view.eyebrow}</small></div><i aria-hidden="true">→</i>
+      <div class="hydration-step hydration-fields"><span>SCHEMA FIELDS</span><strong>${view.title}</strong><ul>${view.params.map(([name,description]) => `<li><code>${name}</code><small>${description}</small></li>`).join('')}</ul></div><i aria-hidden="true">→</i>
+      <div class="hydration-step hydration-result"><span>WHAT THE CONTRACT DESCRIBES</span><strong>${view.response}</strong><small>See protocol schema definitions ↗</small></div>
+    </div>
+    <div class="hydration-distinction"><div><span>TURN ATTRIBUTION</span><b>parentTurnId · rootTurnId</b><small>Where work is linked when starting a turn</small></div><div class="distinction-divider" aria-hidden="true">≠</div><div><span>HISTORY OBSERVABILITY</span><b>thread/read · paged items</b><small>What a client can request from stored thread history</small></div></div>
+    <p class="hydration-boundary"><b>Evidence boundary</b> This schema was generated from the exact installed Desktop CLI and establishes request/response shapes only. It does not show which calls Desktop makes during a live subagent spawn, nor prove that every child is started through <code>turn/start</code>.</p>
+    <p class="hydration-source">Schema bundle SHA-256 <code>a000c50ceb59e6a9b668f9b638bfce1df6fcd59a383aaa38291ed72c96fa92e0</code> · Full definitions and reproduction in the <a href="https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#installed-desktop-app-server-schema-distinguishes-turn-attribution-from-history-reads-2026-10-17" target="_blank" rel="noreferrer">evidence ledger ↗</a></p>
+  </section>`;
+}
+
 function agentControlExplorerMarkup() {
   const entries = [
     ['new-root', 'New root', 'InitialHistory::New'],
@@ -1736,7 +1758,7 @@ function renderMechanismExplorer() {
   const root = $('#mechanism-explorer');
   if (!root) return;
   const step = mechanismExplorerSteps[mechanismExplorerStep];
-  root.innerHTML = `<div class="mechanism-explorer-steps" role="group" aria-label="Subagent lifecycle steps">${mechanismExplorerSteps.map((item, index) => `<button type="button" data-mechanism-step="${index}" aria-pressed="${index === mechanismExplorerStep}" aria-label="Step ${index + 1}: ${item.label}"><span>0${index + 1}</span>${item.label}</button>`).join('')}</div><article class="mechanism-explorer-detail" aria-live="polite"><div><span>STEP 0${mechanismExplorerStep + 1} · ${step.label.toUpperCase()}</span><a href="${step.href}" target="_blank" rel="noreferrer">${step.source} ↗</a></div><h4>${step.title}</h4><p>${step.text}</p></article>${mechanismExplorerStep === 4 ? shutdownScopeMarkup() : ''}${mechanismExplorerStep === 5 ? `${desktopHydrationMarkup()}${desktopBuild20586Markup()}` : ''}${standaloneStaticSpawnTraceMarkup()}${appServerProjectionMarkup()}${currentMainDeltaMarkup()}<p class="mechanism-explorer-version">Each visualization links to its pinned source snapshot. Static source analysis; no live lifecycle action is implied.</p>`;
+  root.innerHTML = `<div class="mechanism-explorer-steps" role="group" aria-label="Subagent lifecycle steps">${mechanismExplorerSteps.map((item, index) => `<button type="button" data-mechanism-step="${index}" aria-pressed="${index === mechanismExplorerStep}" aria-label="Step ${index + 1}: ${item.label}"><span>0${index + 1}</span>${item.label}</button>`).join('')}</div><article class="mechanism-explorer-detail" aria-live="polite"><div><span>STEP 0${mechanismExplorerStep + 1} · ${step.label.toUpperCase()}</span><a href="${step.href}" target="_blank" rel="noreferrer">${step.source} ↗</a></div><h4>${step.title}</h4><p>${step.text}</p></article>${mechanismExplorerStep === 4 ? shutdownScopeMarkup() : ''}${mechanismExplorerStep === 5 ? `${desktopHydrationMarkup()}${desktopBuild20586Markup()}` : ''}${standaloneStaticSpawnTraceMarkup()}${appServerProjectionMarkup()}${appServerHydrationMarkup()}${currentMainDeltaMarkup()}<p class="mechanism-explorer-version">Each visualization links to its pinned source snapshot. Static source analysis; no live lifecycle action is implied.</p>`;
 }
 function mailboxTimingMarkup() {
   const beforeFinal = mailboxScenario === 'before-final';
@@ -2506,6 +2528,13 @@ $('#tree').addEventListener('keydown', event => {
   }
 });
 document.addEventListener('click', async event => {
+  const hydrationButton = event.target.closest('[data-app-server-hydration-view]');
+  if (hydrationButton) {
+    appServerHydrationView = ['turn-link','history-pages','selected-items'].includes(hydrationButton.dataset.appServerHydrationView) ? hydrationButton.dataset.appServerHydrationView : 'turn-link';
+    hydrationButton.closest('.app-server-hydration').outerHTML = appServerHydrationMarkup();
+    document.querySelector(`[data-app-server-hydration-view="${appServerHydrationView}"]`)?.focus();
+    return;
+  }
   const projectionButton = event.target.closest('[data-app-server-projection]');
   if (projectionButton) {
     appServerProjectionTool = ['spawnAgent','sendInput','wait'].includes(projectionButton.dataset.appServerProjection) ? projectionButton.dataset.appServerProjection : 'spawnAgent';
