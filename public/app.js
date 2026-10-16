@@ -62,6 +62,8 @@ let standaloneEvidenceLens = 0;
 let standaloneVtableArtifact = 'desktop';
 let agentControlEntry = 'new-root';
 let agentControlFactoryEnabled = false;
+let agentControlSource = 'installed';
+let agentControlVersion = 'v2';
 let terminalScenario = 'completed';
 let activeFilter = 'all';
 let taskSearch = '';
@@ -1583,9 +1585,12 @@ function agentControlExplorerMarkup() {
     ['internal-child', 'Internal child', 'captured parent control'],
     ['live-resume', 'Already-running resume', 'loaded thread · early return'],
   ];
+  const currentMain = agentControlSource === 'current-main';
   const entry = entries.find(([id]) => id === agentControlEntry) ?? entries[0];
   const localInit = ['new-root', 'cold-resume', 'fork-root'].includes(agentControlEntry);
-  const selection = agentControlEntry === 'live-resume'
+  const selection = currentMain && localInit && agentControlFactoryEnabled && agentControlVersion === 'v1'
+    ? { title: 'V1 requires local control', detail: 'The current-main API documents host backends for MultiAgentV2; a V1 session must stay on LocalAgentControl.', badge: 'LOCAL CONTROL REQUIRED' }
+    : agentControlEntry === 'live-resume'
     ? { title: 'Reuse the already-running thread', detail: 'ThreadManager returns the resident thread before controller-factory selection. Its existing controller stays attached.', badge: 'NO NEW CONTROLLER' }
     : localInit && agentControlFactoryEnabled
       ? { title: 'Host factory supplies the controller', detail: 'Registration calls the host factory with the selected thread ID. The local runtime is still carried alongside it; a factory error fails startup.', badge: 'HOST CONTROL · LOCAL RUNTIME' }
@@ -1593,11 +1598,14 @@ function agentControlExplorerMarkup() {
         ? { title: 'Keep LocalAgentControl', detail: 'No host factory is installed, so the locally constructed controller passes through registration unchanged.', badge: 'LOCAL CONTROL' }
         : { title: 'Inherit the parent controller', detail: 'The internal child arrives as AgentControlInit::Provided. The Local-only factory match does not replace this captured controller or runtime.', badge: 'PARENT CONTROL' };
   return `<section class="agent-control-construction" aria-labelledby="agent-control-construction-title">
-    <div class="agent-control-construction-heading"><div><span>CONTROLLER WIRING · MATCHED SOURCE + INSTALLED MACH-O</span><h5 id="agent-control-construction-title">Which AgentControl reaches this thread?</h5></div><small>Explore the source selection rules</small></div>
+    <div class="agent-control-construction-heading"><div><span>CONTROLLER WIRING · SOURCE REVISION COMPARISON</span><h5 id="agent-control-construction-title">Which AgentControl reaches this thread?</h5></div><small>Source rule ≠ runtime capture</small></div>
+    <div class="controller-source-switch" role="group" aria-label="Source revision"><button type="button" data-controller-source="installed" aria-pressed="${!currentMain}"><b>Installed match</b><small>Desktop CLI 0.163.0 · 4ebc485</small></button><button type="button" data-controller-source="current-main" aria-pressed="${currentMain}"><b>Current main</b><small>Codex · b5115cd · 2026-10-17</small></button></div>
     <div class="controller-scenario-controls"><div class="controller-entry-picker" role="group" aria-label="Thread entry path">${entries.map(([id, title, note]) => `<button type="button" data-controller-entry="${id}" aria-pressed="${agentControlEntry === id}"><b>${title}</b><small>${note}</small></button>`).join('')}</div><button class="controller-factory-toggle" type="button" data-controller-factory aria-pressed="${agentControlFactoryEnabled}"><span class="controller-toggle-dot" aria-hidden="true"></span><span>Host factory</span><b>${agentControlFactoryEnabled ? 'INSTALLED' : 'NOT INSTALLED'}</b></button></div>
+    ${currentMain ? `<div class="controller-version-switch" role="group" aria-label="Multi-agent version"><span>API mode</span><button type="button" data-controller-version="v1" aria-pressed="${agentControlVersion === 'v1'}">V1</button><button type="button" data-controller-version="v2" aria-pressed="${agentControlVersion === 'v2'}">V2</button><small>Current API: host backends support V2; V1 requires Local control.</small></div>` : ''}
     <div class="controller-route" data-entry="${agentControlEntry}" data-factory="${agentControlFactoryEnabled}" aria-live="polite"><div class="controller-route-input"><span>ENTRY</span><strong>${entry[1]}</strong><small>${entry[2]}</small></div><i aria-hidden="true">→</i><div class="controller-route-init"><span>INITIAL CONTROLLER</span><strong>${localInit ? 'LocalAgentControl' : agentControlEntry === 'internal-child' ? 'Parent-provided' : 'Existing resident'}</strong><small>${localInit ? 'ThreadManager state + ID generator + rollout budget' : agentControlEntry === 'internal-child' ? 'captured AgentControlInit + local runtime' : 'returned before registration factory'}</small></div><i aria-hidden="true">→</i><div class="controller-route-result"><span>${selection.badge}</span><strong>${selection.title}</strong><small>${selection.detail}</small></div></div>
-    <p class="agent-control-construction-boundary"><b>Evidence boundary</b> This is the matching public-source decision rule. Static method tables contain LocalAgentControl implementations, but no runtime capture identifies the concrete table used by a specific installed Desktop spawn.</p>
-    <div class="agent-control-construction-links"><a href="https://github.com/openai/codex/blob/4ebc485ca321243727539187169425fcf972f2c4/codex-rs/core/src/thread_manager.rs#L1136-L1155" target="_blank" rel="noreferrer">entry selection</a><a href="https://github.com/openai/codex/blob/4ebc485ca321243727539187169425fcf972f2c4/codex-rs/core/src/thread_manager.rs#L1592-L1598" target="_blank" rel="noreferrer">local construction</a><a href="https://github.com/openai/codex/blob/4ebc485ca321243727539187169425fcf972f2c4/codex-rs/core/src/thread_manager.rs#L2072-L2123" target="_blank" rel="noreferrer">registration and factory</a></div>
+    ${currentMain ? '<p class="controller-identity-check"><b>Provided controller guard</b> The session startup path compares <code>control.identity()</code> with the derived session identity. A mismatch fails startup; a matching provided controller keeps its associated runtime.</p>' : ''}
+    <p class="agent-control-construction-boundary"><b>Evidence boundary</b> ${currentMain ? 'Current-main source contract, compared with a separate installed-binary sample.' : 'Version-matched installed-source decision rule.'} Static method tables contain LocalAgentControl implementations, but no runtime capture identifies the concrete table used by a specific installed Desktop spawn.</p>
+    <div class="agent-control-construction-links">${currentMain ? '<a href="https://github.com/openai/codex/blob/b5115cdd669d37a8635a9742851e97ba4fb1d42c/codex-rs/core/src/thread_manager.rs#L3331-L3368" target="_blank" rel="noreferrer">factory contract</a><a href="https://github.com/openai/codex/blob/b5115cdd669d37a8635a9742851e97ba4fb1d42c/codex-rs/core/src/agent/control/runtime.rs#L1293-L1343" target="_blank" rel="noreferrer">Local / Provided</a><a href="https://github.com/openai/codex/blob/b5115cdd669d37a8635a9742851e97ba4fb1d42c/codex-rs/core/src/session/session.rs#L3910-L4008" target="_blank" rel="noreferrer">identity validation</a><a href="https://github.com/openai/codex/blob/b5115cdd669d37a8635a9742851e97ba4fb1d42c/codex-rs/core/src/codex_delegate.rs#L1288-L1300" target="_blank" rel="noreferrer">child inheritance</a>' : '<a href="https://github.com/openai/codex/blob/4ebc485ca321243727539187169425fcf972f2c4/codex-rs/core/src/thread_manager.rs#L1136-L1155" target="_blank" rel="noreferrer">entry selection</a><a href="https://github.com/openai/codex/blob/4ebc485ca321243727539187169425fcf972f2c4/codex-rs/core/src/thread_manager.rs#L1592-L1598" target="_blank" rel="noreferrer">local construction</a><a href="https://github.com/openai/codex/blob/4ebc485ca321243727539187169425fcf972f2c4/codex-rs/core/src/thread_manager.rs#L2072-L2123" target="_blank" rel="noreferrer">registration and factory</a>'}</div>
   </section>`;
 }
 
@@ -2387,6 +2395,20 @@ document.addEventListener('click', async event => {
     agentControlEntry = controllerEntryButton.dataset.controllerEntry;
     controllerEntryButton.closest('.agent-control-construction').outerHTML = agentControlExplorerMarkup();
     document.querySelector(`[data-controller-entry="${agentControlEntry}"]`)?.focus();
+    return;
+  }
+  const controllerSourceButton = event.target.closest('[data-controller-source]');
+  if (controllerSourceButton) {
+    agentControlSource = controllerSourceButton.dataset.controllerSource;
+    controllerSourceButton.closest('.agent-control-construction').outerHTML = agentControlExplorerMarkup();
+    document.querySelector(`[data-controller-source="${agentControlSource}"]`)?.focus();
+    return;
+  }
+  const controllerVersionButton = event.target.closest('[data-controller-version]');
+  if (controllerVersionButton) {
+    agentControlVersion = controllerVersionButton.dataset.controllerVersion;
+    controllerVersionButton.closest('.agent-control-construction').outerHTML = agentControlExplorerMarkup();
+    document.querySelector(`[data-controller-version="${agentControlVersion}"]`)?.focus();
     return;
   }
   const controllerFactoryButton = event.target.closest('[data-controller-factory]');
