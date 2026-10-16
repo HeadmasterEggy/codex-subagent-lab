@@ -2,6 +2,8 @@
 
 The Inspector now includes a selectable app-server projection view for `spawnAgent`, `sendInput`, and `wait`. It visualizes the boundary from tool/handler execution through the core `CollabAgentToolCall` event into the `ThreadItem` schema (`collabAgentToolCall`), including participant, status, and optional context fields. The schema records collaboration calls as thread history; it does not establish these enum values as independent JSON-RPC methods. Evidence is pinned to Codex commit `4ebc485` and the installed CLI v2 schema generated locally.
 
+The mechanism explorer also maps installed renderer history-read callsites as three distinct paths: selected-child transcript hydration, spawn/child history lookup, and shared thread-metadata reads. It distinguishes client implementation from app-server schema support and labels both as static evidence; no live request is implied. Source asset hashes and callsite scope are recorded in the [renderer history-read evidence](https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#follow-up-installed-renderer-history-read-callsites-2026-10-17).
+
 The empty workspace now opens directly into the mechanism explorer. Its interactive standalone V2 trace pairs the observed register path and binary method-table slot mapping with a separate runtime-unknown lens, so the `AgentControl::spawn` slot can be inspected without implying which concrete controller a given process used.
 
 A local prototype for exploring a parent/child agent workflow with a small browser UI. It starts one independent local `codex exec` process per task, displays the task tree and JSONL activity, and supports cancellation, delegation, and inbox messages.

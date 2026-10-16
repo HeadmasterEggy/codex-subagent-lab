@@ -22,6 +22,7 @@ let waitScopeScenario = 'nested-relay';
 let waitScopeStep = 0;
 let appServerProjectionTool = 'spawnAgent';
 let appServerHydrationView = 'turn-link';
+let rendererReadRoute = 'selected-thread';
 let residencyScenario = 'completed-followup';
 let interruptCloseScenario = 'interrupt-resident';
 let interruptCloseLifecycleStep = 2;
@@ -1710,6 +1711,63 @@ function appServerHydrationMarkup() {
   </section>`;
 }
 
+function rendererReadPathMarkup() {
+  const routes = {
+    'selected-thread': {
+      label: 'Open selected child',
+      eyebrow: 'SELECTED THREAD · TRANSCRIPT HYDRATION',
+      steps: [
+        ['01 · TARGET', 'Selected child thread', 'The panel already has a child thread identity to open.'],
+        ['02 · TURN INDEX', 'thread/turns/list', 'Request turn metadata with itemsView: "notLoaded".'],
+        ['03 · ITEM PAGES', 'thread/items/list', 'Load each turn’s item pages and follow advancing cursors.'],
+        ['04 · PROJECTION', 'Transcript blocks', 'Project the loaded typed items into the local conversation view.'],
+      ],
+      proof: 'Direct renderer callsites connect selected-thread hydration to turns and paged item reads.',
+    },
+    'spawn-history': {
+      label: 'Inspect spawn history',
+      eyebrow: 'CHILD DISCOVERY · HISTORY SCAN',
+      steps: [
+        ['01 · SOURCE THREAD', 'Existing conversation history', 'A separate renderer path examines persisted items for child/spawn context.'],
+        ['02 · ITEM READ', 'thread/items/list', 'The callsite reads item pages from the relevant thread history.'],
+        ['03 · MATCH', 'Spawn / child references', 'Loaded history can be used to associate a child with its parent context.'],
+        ['04 · LIMIT', 'No lifecycle proof', 'This lookup path does not show when or how the child process was started.'],
+      ],
+      proof: 'A distinct static callsite uses item pages for child/spawn history; it is not the selected transcript path.',
+    },
+    metadata: {
+      label: 'Read thread metadata',
+      eyebrow: 'SHARED HISTORY CONSUMER · METADATA',
+      steps: [
+        ['01 · LOOKUP', 'thread/read', 'A shared renderer helper issues a metadata-only thread read.'],
+        ['02 · TURNS', 'thread/turns/list', 'History consumers can page turn metadata separately.'],
+        ['03 · ITEMS', 'thread/items/list', 'Item content is loaded through paged reads when needed.'],
+        ['04 · SEPARATE OWNER', 'Shared history helper', 'These callsites explain data access, not the spawn handler.'],
+      ],
+      proof: 'Static shared-renderer callsites show metadata and history reads are separate requests.',
+    },
+  };
+  const route = routes[rendererReadRoute] ?? routes['selected-thread'];
+  return `<section class="renderer-read-path" aria-labelledby="renderer-read-path-title">
+    <header class="renderer-read-path-head"><div><span>INSTALLED RENDERER · STATIC CALLSITE TRACE</span><h4 id="renderer-read-path-title">How the UI reads child-thread history</h4></div><span class="renderer-read-path-build">BUILD 20586</span></header>
+    <div class="renderer-read-path-tabs" role="group" aria-label="Choose a renderer history-read path">${Object.entries(routes).map(([id,item],index) => `<button type="button" aria-pressed="${id === rendererReadRoute}" data-renderer-read-route="${id}"><span>0${index+1}</span>${item.label}</button>`).join('')}</div>
+    <div class="renderer-read-path-map" aria-live="polite">
+      <div class="renderer-read-path-kicker">${route.eyebrow}</div><ol>${route.steps.map(([label,title,detail]) => `<li><span>${label}</span><strong>${title}</strong><small>${detail}</small></li>`).join('')}</ol>
+      <p class="renderer-read-path-proof"><b>CALLSITE EVIDENCE</b>${route.proof}</p>
+    </div>
+    <p class="renderer-read-path-boundary">Static inspection of packaged JavaScript only. These paths show how the renderer can read and project persisted history; no live request was captured, and they do not establish the subagent spawn mechanism. The experimental <code>thread/items/read</code> schema had no request callsite in the inspected renderer resources.</p>
+    <p class="renderer-read-path-source">Renderer resources are SHA-256 pinned in the <a href="https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#follow-up-installed-renderer-history-read-callsites-2026-10-17" target="_blank" rel="noreferrer">evidence ledger ↗</a></p>
+  </section>`;
+}
+
+function selectRendererReadRoute(routeId) {
+  rendererReadRoute = ['selected-thread','spawn-history','metadata'].includes(routeId) ? routeId : 'selected-thread';
+  const section = $('.renderer-read-path');
+  if (!section) return;
+  section.outerHTML = rendererReadPathMarkup();
+  document.querySelector(`[data-renderer-read-route="${rendererReadRoute}"]`)?.focus();
+}
+
 function agentControlExplorerMarkup() {
   const entries = [
     ['new-root', 'New root', 'InitialHistory::New'],
@@ -1758,7 +1816,7 @@ function renderMechanismExplorer() {
   const root = $('#mechanism-explorer');
   if (!root) return;
   const step = mechanismExplorerSteps[mechanismExplorerStep];
-  root.innerHTML = `<div class="mechanism-explorer-steps" role="group" aria-label="Subagent lifecycle steps">${mechanismExplorerSteps.map((item, index) => `<button type="button" data-mechanism-step="${index}" aria-pressed="${index === mechanismExplorerStep}" aria-label="Step ${index + 1}: ${item.label}"><span>0${index + 1}</span>${item.label}</button>`).join('')}</div><article class="mechanism-explorer-detail" aria-live="polite"><div><span>STEP 0${mechanismExplorerStep + 1} · ${step.label.toUpperCase()}</span><a href="${step.href}" target="_blank" rel="noreferrer">${step.source} ↗</a></div><h4>${step.title}</h4><p>${step.text}</p></article>${mechanismExplorerStep === 4 ? shutdownScopeMarkup() : ''}${mechanismExplorerStep === 5 ? `${desktopHydrationMarkup()}${desktopBuild20586Markup()}` : ''}${standaloneStaticSpawnTraceMarkup()}${appServerProjectionMarkup()}${appServerHydrationMarkup()}${currentMainDeltaMarkup()}<p class="mechanism-explorer-version">Each visualization links to its pinned source snapshot. Static source analysis; no live lifecycle action is implied.</p>`;
+  root.innerHTML = `<div class="mechanism-explorer-steps" role="group" aria-label="Subagent lifecycle steps">${mechanismExplorerSteps.map((item, index) => `<button type="button" data-mechanism-step="${index}" aria-pressed="${index === mechanismExplorerStep}" aria-label="Step ${index + 1}: ${item.label}"><span>0${index + 1}</span>${item.label}</button>`).join('')}</div><article class="mechanism-explorer-detail" aria-live="polite"><div><span>STEP 0${mechanismExplorerStep + 1} · ${step.label.toUpperCase()}</span><a href="${step.href}" target="_blank" rel="noreferrer">${step.source} ↗</a></div><h4>${step.title}</h4><p>${step.text}</p></article>${mechanismExplorerStep === 4 ? shutdownScopeMarkup() : ''}${mechanismExplorerStep === 5 ? `${desktopHydrationMarkup()}${desktopBuild20586Markup()}` : ''}${standaloneStaticSpawnTraceMarkup()}${appServerProjectionMarkup()}${appServerHydrationMarkup()}${rendererReadPathMarkup()}${currentMainDeltaMarkup()}<p class="mechanism-explorer-version">Each visualization links to its pinned source snapshot. Static source analysis; no live lifecycle action is implied.</p>`;
 }
 function mailboxTimingMarkup() {
   const beforeFinal = mailboxScenario === 'before-final';
@@ -2528,6 +2586,11 @@ $('#tree').addEventListener('keydown', event => {
   }
 });
 document.addEventListener('click', async event => {
+  const rendererReadTab = event.target.closest('[data-renderer-read-route]');
+  if (rendererReadTab) {
+    selectRendererReadRoute(rendererReadTab.dataset.rendererReadRoute);
+    return;
+  }
   const hydrationButton = event.target.closest('[data-app-server-hydration-view]');
   if (hydrationButton) {
     appServerHydrationView = ['turn-link','history-pages','selected-items'].includes(hydrationButton.dataset.appServerHydrationView) ? hydrationButton.dataset.appServerHydrationView : 'turn-link';
