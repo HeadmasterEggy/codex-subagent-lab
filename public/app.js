@@ -20,6 +20,7 @@ let toolExposureDisableMessages = false;
 let toolExposureWaitEnabled = true;
 let waitScopeScenario = 'nested-relay';
 let waitScopeStep = 0;
+let appServerProjectionTool = 'spawnAgent';
 let residencyScenario = 'completed-followup';
 let interruptCloseScenario = 'interrupt-resident';
 let interruptCloseLifecycleStep = 2;
@@ -57,6 +58,9 @@ let spawnProtocolVersion = 'v2';
 let spawnProtocolOutcome = 'success';
 let nativeSpawnFocus = 0;
 let standaloneStaticSpawnFocus = 0;
+let standaloneEvidenceLens = 0;
+let agentControlEntry = 'new-root';
+let agentControlFactoryEnabled = false;
 let terminalScenario = 'completed';
 let activeFilter = 'all';
 let taskSearch = '';
@@ -336,22 +340,38 @@ function nativeSpawnTraceMarkup() {
   </section>`;
 }
 function standaloneStaticSpawnTraceMarkup() {
-  const evidenceUrl = 'https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#follow-up-standalone-cli-01621-v2-handler-machine-code-cross-check-2026-10-17';
+  const evidenceUrl = 'https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#follow-up-standalone-binary-data-confirms-the-agentcontrolspawn-vtable-slot';
   const sourceRoot = 'https://github.com/openai/codex/blob/rust-v0.162.1/codex-rs/core/src';
   const steps = [
     ['BINARY IDENTITY', 'Hash-pinned standalone target', 'The standalone CLI is version 0.162.1, ARM64 Mach-O UUID 73DB38F2-5290-3277-BCCC-287C54E2F0CD, SHA-256 74c6a6d263f40d65f99c27a815275f5b4ed0bcc2baecc396b4cf3255498bdfc0. The V2 handler symbol is at 0x105a6af0c.', 'Binary observation · nm', evidenceUrl],
     ['SOURCE BUILDER', 'Spawn metadata call resolves', 'The async poll contains a direct call to thread_spawn_source at 0x105a6b91c. Exact-tag source constructs the spawn source and request; this call site is directly resolved in the standalone binary.', 'Direct machine-code call', `${sourceRoot}/tools/handlers/multi_agents_v2/spawn.rs`],
-    ['SPAWN DISPATCH', 'The awaited future path is narrowed', 'At 0x105a6bf0c, an indirect call receives the receiver and prepared request, then returns a two-word value saved in the async frame. The next indirect call loads a function pointer from the returned second word at +0x18. Resume state 5 reloads that pair and jumps straight to the second call. Together with the source .spawn(...).await, this strongly fits dynamic spawn-method dispatch followed by polling its returned future. The concrete target is still unresolved; Rust does not guarantee this vtable offset.', 'Async-state + source inference; target unresolved', `${sourceRoot}/agent/control/spawn.rs`],
+    ['SPAWN DISPATCH', 'The +0x28 slot matches spawn; runtime receiver unknown', 'Direct dataflow: [x19 + 0x298] is copied to [x19 + 0x2c0] at 0x105a6b314–0x105a6b318; from there, x25 is loaded at 0x105a6bb84. The adjacent words x25+0x978 and x25+0x980 load into x21 and x28; x28 is saved at [sp+0x38] and reloaded at 0x105a6bef8, then [x28+0x28] is loaded into x8 immediately before blr x8 at 0x105a6bf0c. Exact-tag source identifies SessionServices.agent_control as Arc<dyn AgentControl>, making the x21/data + x28/vtable interpretation a strong source-correlated inference; the call’s x0 is x27+0x10 and x1 points to the prepared request. The method table slot order and LocalAgentControl pointer are independently confirmed in binary data, but this does not resolve the runtime value of x28 or prove the concrete implementation selected. The call returns two words stored in the async frame; at 0x105a6bf30 code loads a function pointer from +0x18 of the second word, keeps the first word in x0, restores x1 from x27, and calls it. The resume path repeats this shape at 0x105a6b530. The panic Location at 0x105a6b124 decodes to spawn.rs:112:3; this supports source attribution but does not expose the inline/codegen chain.', 'Direct register flow + source-correlated trait-object inference', `${sourceRoot}/agent/control/spawn.rs`],
     ['ACCEPTANCE + TELEMETRY', 'Source ordering and one resolved call', 'The matching source emits Started only after spawn returns. The binary also directly calls track_collab_tool_call at 0x105a6cc44. Telemetry does not prove the indirect spawn target or a launched child.', 'Source order + direct call', `${sourceRoot}/tools/handlers/multi_agents_v2/spawn.rs`]
   ];
   standaloneStaticSpawnFocus = Math.max(0, Math.min(steps.length - 1, Number(standaloneStaticSpawnFocus) || 0));
+  standaloneEvidenceLens = Math.max(0, Math.min(2, Number(standaloneEvidenceLens) || 0));
   const [label, title, text, tag, href] = steps[standaloneStaticSpawnFocus];
+  const evidenceLenses = [
+    ['MACHINE-CODE OBSERVATION', 'Observed register and instruction flow', 'The disassembly shows x28 loaded from [x25+0x980], saved and reloaded, then used for [x28+0x28] → x8 before blr x8. This establishes the address flow; it does not prove x28’s runtime type or value.', 'machine'],
+    ['BINARY METHOD-TABLE CONFIRMATION', 'The +0x28 slot names spawn', 'Two __DATA_CONST tables contain 0x10497fc98 at +0x28; nm names that address LocalAgentControl::spawn, and the pinned AgentControl source order matches. This confirms the slot-to-method mapping in static binary data.', 'table'],
+    ['RUNTIME UNKNOWN', 'The selected receiver is not recovered', 'No runtime capture ties x28 to either candidate table. The indirect call’s x0 is separately formed as x27+0x10, and its relationship to x21 is unresolved. Which concrete implementation this run would call remains unknown.', 'unknown']
+  ];
+  const activeLens = evidenceLenses[standaloneEvidenceLens];
+  const dispatchDiagram = standaloneStaticSpawnFocus === 2 ? `<div class="standalone-dispatch-visuals" data-active-lens="${activeLens[3]}">
+    <div class="standalone-evidence-lenses" role="group" aria-label="Choose the evidence layer to inspect">${evidenceLenses.map(([name,, , kind], index) => `<button type="button" class="standalone-evidence-lens lens-${kind}" data-standalone-evidence-lens="${index}" aria-pressed="${index === standaloneEvidenceLens}"><span>0${index + 1}</span><b>${name}</b></button>`).join('')}</div>
+    <p class="standalone-evidence-focus lens-${activeLens[3]}" aria-live="polite"><b>${activeLens[1]}</b>${activeLens[2]}</p>
+    <div class="standalone-dispatch-map" role="img" aria-label="Machine-code observation: frame copy, adjacent context words, x28 spill and reload, slot load at plus 0x28, then indirect call"><div data-evidence-target="machine"><small>MACHINE CODE · FRAME</small><b>x19 → x25</b><code>[+0x298] → [+0x2c0]</code></div><i aria-hidden="true">→</i><div data-evidence-target="machine"><small>ADJACENT WORDS</small><b>x21 / x28</b><code>[x25+0x978] / [x25+0x980]</code></div><i aria-hidden="true">→</i><div data-evidence-target="machine"><small>REGISTER FLOW</small><b>x28 → x8</b><code>spill/reload · [x28+0x28]</code></div><i aria-hidden="true">→</i><div class="standalone-dispatch-target" data-evidence-target="machine"><small>INDIRECT CALL</small><b>blr x8</b><code>0x105a6bf0c</code></div></div>
+    <section class="standalone-vtable-map" data-evidence-target="table" aria-label="Static method table entries confirm the AgentControl spawn slot at offset plus 0x28"><header><b>METHOD TABLE · BINARY DATA</b><span>+0x28 → LocalAgentControl::spawn</span></header><div class="standalone-vtable-rows"><article><small>HEADER</small><b>drop · size · align</b><code>0x104cf8d04 · 0x70 · 8</code></article><i aria-hidden="true">→</i><article><small>+0x18</small><b>identity</b><code>0x104980a9c</code></article><i aria-hidden="true">→</i><article><small>+0x20</small><b>resolve</b><code>0x104980804</code></article><i aria-hidden="true">→</i><article class="standalone-vtable-spawn"><small>+0x28</small><b>spawn</b><code>0x10497fc98</code></article></div><p>Both candidate __DATA_CONST tables have this +0x28 pointer. The runtime value of x28 has not been matched to either table.</p></section>
+    <section class="cross-version-table" data-evidence-target="table" aria-label="Static table slot comparison across two hash-pinned binary samples"><header><b>CROSS-VERSION SLOT CHECK · STATIC DATA</b><span>same slot meaning · two candidate tables per artifact</span></header><div class="cross-version-table-grid"><article><small>STANDALONE · 0.162.1 · 2 TABLES</small><b>+0x20 resolve</b><code>0x104980804</code><b>+0x28 spawn</b><code>0x10497fc98</code><small title="SHA-256 74c6a6d263f40d65f99c27a815275f5b4ed0bcc2baecc396b4cf3255498bdfc0">SHA-256 74c6a6d2…5498bdfc0</small></article><i aria-hidden="true">⇄</i><article><small>DESKTOP EMBEDDED · 0.163.0-alpha.10.2 · 2 TABLES</small><b>+0x20 resolve</b><code>0x1056246ac</code><b>+0x28 spawn</b><code>0x105623b3c</code><small title="SHA-256 1afb28c01d7d49e892bd75f11076b10f1451e34e0ee308a95e5ab7f69f9c84fe">SHA-256 1afb28c0…9f84fe</small></article></div><p>Separate binaries show the same trait-slot ordering and their own LocalAgentControl targets. This comparison does not show which table either runtime call selected.</p></section>
+    <aside class="standalone-runtime-unknown" data-evidence-target="unknown"><span>RUNTIME RECEIVER · UNKNOWN</span><b>x28 value and selected table were not captured</b><small>The static slot match does not establish which implementation this execution would dispatch to.</small></aside>
+    <section class="standalone-poll-map" aria-label="ABI-based interpretation of the following indirect call"><header><b>THE NEXT CALL · ABI INFERENCE</b><span>strong Future::poll match</span></header><div class="standalone-poll-steps"><article><small>RETURNED PAIR</small><b>x0 · data</b><code>x1 · vtable-like metadata</code></article><i aria-hidden="true">→</i><article><small>SELECT SLOT</small><b>[x1 + 0x18]</b><code>function pointer → x9</code></article><i aria-hidden="true">→</i><article><small>RESTORE CONTEXT</small><b>x0 stays · x1 = x27</b><code>x27 copied from entry x1</code></article><i aria-hidden="true">→</i><article class="standalone-poll-call"><small>INDIRECT CALL</small><b>blr x9</b><code>0x105a6bf30</code></article></div><p>Resume path reloads the saved pair and repeats the same slot/context pattern at <code>0x105a6b530</code>.</p></section>
+  </div>` : '';
   return `<section class="standalone-static-trace" aria-labelledby="standalone-static-title">
     <div class="standalone-static-heading"><div><span>STANDALONE CLI · STATIC V2 BINARY CROSS-CHECK</span><h5 id="standalone-static-title">A second binary, a separate evidence path</h5></div><small>0.162.1 · tag 092d3ac</small></div>
     <p class="standalone-static-intro">This hash-pinned CLI disassembly is separate from the Desktop 0.163.0-alpha.10.2 symbol cross-check above and the V1 JSONL runtime capture below.</p>
     <div class="standalone-static-rail" role="group" aria-label="Standalone CLI static evidence checkpoints">${steps.map((item, index) => `<button type="button" data-standalone-static-step="${index}" aria-pressed="${index === standaloneStaticSpawnFocus}"><span>0${index + 1}</span><b>${item[0]}</b></button>`).join('')}</div>
-    <article class="standalone-static-detail" aria-live="polite"><div><span>${tag}</span><a href="${href}" target="_blank" rel="noreferrer">${standaloneStaticSpawnFocus === 0 ? 'evidence ledger' : standaloneStaticSpawnFocus === 2 ? 'spawn controller source' : 'exact-tag handler source'} ↗</a></div><h6>${title}</h6><p>${text}</p></article>
-    <p class="standalone-static-boundary"><b>Boundary</b> The async-state pattern narrows the indirect path but does not identify the concrete spawn implementation. Version-matched source is comparative evidence, not signed build provenance. No child was launched; the separate V1 runtime record does not exercise this V2 handler.</p>
+    <article class="standalone-static-detail" aria-live="polite"><div><span>${tag}</span><a href="${href}" target="_blank" rel="noreferrer">${standaloneStaticSpawnFocus === 0 ? 'evidence ledger' : standaloneStaticSpawnFocus === 2 ? 'confirmed slot evidence ledger' : 'exact-tag handler source'} ↗</a></div><h6>${title}</h6><p>${text}</p>${dispatchDiagram}</article>
+    <p class="standalone-static-boundary"><b>Boundary</b> The frame copy and first target’s pointer path are directly observed. Static method tables confirm that AgentControl +0x28 is LocalAgentControl::spawn, but the runtime x28 value and concrete selected table remain unresolved. The returned pair’s repeated +0x18/context call supports a future-poll interpretation. The matching handler uses <code>Arc&lt;dyn AgentControl&gt;</code>; the source can populate it with a local or host-provided controller, so this does not identify the binary receiver. The panic Location decodes to <code>spawn.rs:112:3</code>; LLDB’s nearby <code>handle_task_abort</code> label was a nearest-symbol annotation, not the encoded source location. This supports the spawn-handler attribution but does not recover the inline/codegen chain. Version-matched source is comparative evidence, not signed build provenance. No child was launched; the separate V1 runtime record does not exercise this V2 handler.</p>
   </section>`;
 }
 function nativeCliTraceMarkup() {
@@ -1349,8 +1369,10 @@ function renderInspector() {
         <i aria-hidden="true">→</i>
         <button type="button" data-inspector-target="activity"><span>04 · RETURN</span><strong>Status + result</strong><small>Terminal status, activity and parent result are distinct signals.</small><b>Inspect activity</b></button>
       </div>
+      ${agentControlExplorerMarkup()}
       ${nativeSpawnTraceMarkup()}
       ${standaloneStaticSpawnTraceMarkup()}
+      ${appServerProjectionMarkup()}
       <div class="parallel-lifecycle" aria-label="Parent and child lifecycle after spawn">
         <div class="parallel-lifecycle-heading"><span>AFTER SPAWN · PARALLEL THREADS</span><small>Spawn receipt does not wait for child completion</small></div>
         <div class="parallel-lifecycle-scroll">
@@ -1500,11 +1522,58 @@ function desktopHydrationMarkup() {
   const lastNodeState = states.skipped ? 'skipped' : states.stage > 2 ? 'done' : 'active';
   return `<section class="desktop-hydration" aria-labelledby="desktop-hydration-title"><div class="desktop-hydration-heading"><div><span class="desktop-hydration-kicker">INSTALLED DESKTOP · STATIC TRACE</span><h5 id="desktop-hydration-title">子线程详情是有边界的分页状态</h5></div><span class="desktop-hydration-version">26.1007.71326</span></div><div class="desktop-hydration-controls" role="group" aria-label="选择静态源码中的历史加载分支">${buttons.map(([id, label]) => `<button type="button" data-desktop-hydration="${id}" aria-pressed="${desktopHydrationState === id}">${label}</button>`).join('')}</div><div class="desktop-hydration-map" data-state="${desktopHydrationState}" aria-label="子线程路由、摘要激活与详情历史分页"><article class="desktop-hydration-node ${states.stage > 0 ? 'done' : 'active'}"><small>01 · PANEL ROUTE</small><strong>选中已有 child thread ID</strong><span>写入 parent-keyed route；检查 ancestry 与当前选择</span></article><i aria-hidden="true">→</i><article class="desktop-hydration-node ${states.stage > 1 ? 'done' : 'active'}"><small>02 · LOCAL SUMMARY</small><strong>activateThreadSummary</strong><span>投影已知摘要；按需确保首个 conversation page</span></article><i aria-hidden="true">→</i><article class="desktop-hydration-node ${lastNodeState}"><small>03 · HISTORY PAGE</small><strong>${states.result}</strong><span>${states.label}：${states.detail}</span></article></div><p class="desktop-hydration-proof">${states.detail} 读取参数会随调用路径变化：thread/read 的 includeTurns 可为 false；首次本地历史初始化则会包含 turns，并在分页历史下限制初始窗口。</p><p class="desktop-hydration-caveat">Source inspection only · branch selector is illustrative · no live RPC or UI paint observed</p></section>`;
 }
+function appServerProjectionMarkup() {
+  const tools = [
+    { id:'spawnAgent', label:'spawnAgent', receiver:'new child thread', fields:'receiverThreadIds · prompt · model' },
+    { id:'sendInput', label:'sendInput', receiver:'existing child thread', fields:'receiverThreadIds · status · agentsStates' },
+    { id:'wait', label:'wait', receiver:'selected agent set', fields:'receiverThreadIds · status · agentsStates' },
+  ];
+  const selected = tools.find(tool => tool.id === appServerProjectionTool) ?? tools[0];
+  return `<section class="app-server-projection" aria-labelledby="app-server-projection-title">
+    <header><div><span>APP-SERVER SCHEMA · THREAD ITEM PROJECTION</span><h4 id="app-server-projection-title">A tool call becomes a timeline record</h4></div><a href="https://github.com/openai/codex/blob/4ebc485ca321243727539187169425fcf972f2c4/codex-rs/app-server-protocol/src/protocol/v2/item.rs#L372-L399" target="_blank" rel="noreferrer">pinned item.rs</a></header>
+    <div class="app-server-projection-controls" role="group" aria-label="Choose a collaboration operation to project"><span>Example operation</span>${tools.map(tool => `<button type="button" data-app-server-projection="${tool.id}" aria-pressed="${selected.id === tool.id}">${tool.label}</button>`).join('')}</div>
+    <div class="app-server-projection-flow" aria-live="polite">
+      <article class="projection-execution"><span>01 · MODEL TOOL / HANDLER</span><strong><code>${selected.label}</code></strong><small>Tool registration and handler execute the operation.</small></article><i aria-hidden="true">→</i>
+      <article class="projection-core"><span>02 · CORE TURN ITEM</span><strong><code>CollabAgentToolCall</code></strong><small>Call identity, status and participants are carried as event data.</small></article><i aria-hidden="true">→</i>
+      <article class="projection-schema"><span>03 · APP-SERVER TIMELINE</span><strong><code>ThreadItem</code></strong><small><code>type: collabAgentToolCall</code><br><code>tool: ${selected.id}</code><br>${selected.fields}</small></article>
+    </div>
+    <div class="app-server-projection-payload"><span>PROJECTED RECEIVER</span><strong>${selected.receiver}</strong><span>STATUS ENUM</span><strong>inProgress → completed · failed · interrupted</strong><span>OTHER OPTIONAL FIELDS</span><strong>id · senderThreadId · prompt · model · reasoningEffort · agentsStates</strong></div>
+    <p class="app-server-projection-boundary"><b>Read this boundary:</b> this proves a serialized history/event shape, not a standalone JSON-RPC method for <code>${selected.id}</code>. The tool’s execution contract and the app-server’s timeline projection are separate layers.</p>
+    <p class="app-server-projection-source">Generated from the installed CLI <code>0.163.0-alpha.10.2</code>; source comparison pinned to Codex commit <code>4ebc485</code>. Static schema/source analysis, not a live notification capture.</p>
+  </section>`;
+}
+
+function agentControlExplorerMarkup() {
+  const entries = [
+    ['new-root', 'New root', 'InitialHistory::New'],
+    ['cold-resume', 'Cold resume', 'Resumed history · not loaded'],
+    ['fork-root', 'Forked root', 'InitialHistory::Forked'],
+    ['internal-child', 'Internal child', 'captured parent control'],
+    ['live-resume', 'Already-running resume', 'loaded thread · early return'],
+  ];
+  const entry = entries.find(([id]) => id === agentControlEntry) ?? entries[0];
+  const localInit = ['new-root', 'cold-resume', 'fork-root'].includes(agentControlEntry);
+  const selection = agentControlEntry === 'live-resume'
+    ? { title: 'Reuse the already-running thread', detail: 'ThreadManager returns the resident thread before controller-factory selection. Its existing controller stays attached.', badge: 'NO NEW CONTROLLER' }
+    : localInit && agentControlFactoryEnabled
+      ? { title: 'Host factory supplies the controller', detail: 'Registration calls the host factory with the selected thread ID. The local runtime is still carried alongside it; a factory error fails startup.', badge: 'HOST CONTROL · LOCAL RUNTIME' }
+      : localInit
+        ? { title: 'Keep LocalAgentControl', detail: 'No host factory is installed, so the locally constructed controller passes through registration unchanged.', badge: 'LOCAL CONTROL' }
+        : { title: 'Inherit the parent controller', detail: 'The internal child arrives as AgentControlInit::Provided. The Local-only factory match does not replace this captured controller or runtime.', badge: 'PARENT CONTROL' };
+  return `<section class="agent-control-construction" aria-labelledby="agent-control-construction-title">
+    <div class="agent-control-construction-heading"><div><span>CONTROLLER WIRING · MATCHED SOURCE + INSTALLED MACH-O</span><h5 id="agent-control-construction-title">Which AgentControl reaches this thread?</h5></div><small>Explore the source selection rules</small></div>
+    <div class="controller-scenario-controls"><div class="controller-entry-picker" role="group" aria-label="Thread entry path">${entries.map(([id, title, note]) => `<button type="button" data-controller-entry="${id}" aria-pressed="${agentControlEntry === id}"><b>${title}</b><small>${note}</small></button>`).join('')}</div><button class="controller-factory-toggle" type="button" data-controller-factory aria-pressed="${agentControlFactoryEnabled}"><span class="controller-toggle-dot" aria-hidden="true"></span><span>Host factory</span><b>${agentControlFactoryEnabled ? 'INSTALLED' : 'NOT INSTALLED'}</b></button></div>
+    <div class="controller-route" data-entry="${agentControlEntry}" data-factory="${agentControlFactoryEnabled}" aria-live="polite"><div class="controller-route-input"><span>ENTRY</span><strong>${entry[1]}</strong><small>${entry[2]}</small></div><i aria-hidden="true">→</i><div class="controller-route-init"><span>INITIAL CONTROLLER</span><strong>${localInit ? 'LocalAgentControl' : agentControlEntry === 'internal-child' ? 'Parent-provided' : 'Existing resident'}</strong><small>${localInit ? 'ThreadManager state + ID generator + rollout budget' : agentControlEntry === 'internal-child' ? 'captured AgentControlInit + local runtime' : 'returned before registration factory'}</small></div><i aria-hidden="true">→</i><div class="controller-route-result"><span>${selection.badge}</span><strong>${selection.title}</strong><small>${selection.detail}</small></div></div>
+    <p class="agent-control-construction-boundary"><b>Evidence boundary</b> This is the matching public-source decision rule. Static method tables contain LocalAgentControl implementations, but no runtime capture identifies the concrete table used by a specific installed Desktop spawn.</p>
+    <div class="agent-control-construction-links"><a href="https://github.com/openai/codex/blob/4ebc485ca321243727539187169425fcf972f2c4/codex-rs/core/src/thread_manager.rs#L1136-L1155" target="_blank" rel="noreferrer">entry selection</a><a href="https://github.com/openai/codex/blob/4ebc485ca321243727539187169425fcf972f2c4/codex-rs/core/src/thread_manager.rs#L1592-L1598" target="_blank" rel="noreferrer">local construction</a><a href="https://github.com/openai/codex/blob/4ebc485ca321243727539187169425fcf972f2c4/codex-rs/core/src/thread_manager.rs#L2072-L2123" target="_blank" rel="noreferrer">registration and factory</a></div>
+  </section>`;
+}
+
 function renderMechanismExplorer() {
   const root = $('#mechanism-explorer');
   if (!root) return;
   const step = mechanismExplorerSteps[mechanismExplorerStep];
-  root.innerHTML = `<div class="mechanism-explorer-steps" role="group" aria-label="Subagent lifecycle steps">${mechanismExplorerSteps.map((item, index) => `<button type="button" data-mechanism-step="${index}" aria-pressed="${index === mechanismExplorerStep}" aria-label="Step ${index + 1}: ${item.label}"><span>0${index + 1}</span>${item.label}</button>`).join('')}</div><article class="mechanism-explorer-detail" aria-live="polite"><div><span>STEP 0${mechanismExplorerStep + 1} · ${step.label.toUpperCase()}</span><a href="${step.href}" target="_blank" rel="noreferrer">${step.source} ↗</a></div><h4>${step.title}</h4><p>${step.text}</p></article>${mechanismExplorerStep === 4 ? shutdownScopeMarkup() : ''}${mechanismExplorerStep === 5 ? desktopHydrationMarkup() : ''}<p class="mechanism-explorer-version">Each visualization links to its pinned source snapshot. Static source analysis; no live lifecycle action is implied.</p>`;
+  root.innerHTML = `<div class="mechanism-explorer-steps" role="group" aria-label="Subagent lifecycle steps">${mechanismExplorerSteps.map((item, index) => `<button type="button" data-mechanism-step="${index}" aria-pressed="${index === mechanismExplorerStep}" aria-label="Step ${index + 1}: ${item.label}"><span>0${index + 1}</span>${item.label}</button>`).join('')}</div><article class="mechanism-explorer-detail" aria-live="polite"><div><span>STEP 0${mechanismExplorerStep + 1} · ${step.label.toUpperCase()}</span><a href="${step.href}" target="_blank" rel="noreferrer">${step.source} ↗</a></div><h4>${step.title}</h4><p>${step.text}</p></article>${mechanismExplorerStep === 4 ? shutdownScopeMarkup() : ''}${mechanismExplorerStep === 5 ? desktopHydrationMarkup() : ''}${standaloneStaticSpawnTraceMarkup()}${appServerProjectionMarkup()}<p class="mechanism-explorer-version">Each visualization links to its pinned source snapshot. Static source analysis; no live lifecycle action is implied.</p>`;
 }
 function mailboxTimingMarkup() {
   const beforeFinal = mailboxScenario === 'before-final';
@@ -2274,6 +2343,34 @@ $('#tree').addEventListener('keydown', event => {
   }
 });
 document.addEventListener('click', async event => {
+  const projectionButton = event.target.closest('[data-app-server-projection]');
+  if (projectionButton) {
+    appServerProjectionTool = ['spawnAgent','sendInput','wait'].includes(projectionButton.dataset.appServerProjection) ? projectionButton.dataset.appServerProjection : 'spawnAgent';
+    projectionButton.closest('.app-server-projection').outerHTML = appServerProjectionMarkup();
+    document.querySelector(`[data-app-server-projection="${appServerProjectionTool}"]`)?.focus();
+    return;
+  }
+  const controllerEntryButton = event.target.closest('[data-controller-entry]');
+  if (controllerEntryButton) {
+    agentControlEntry = controllerEntryButton.dataset.controllerEntry;
+    controllerEntryButton.closest('.agent-control-construction').outerHTML = agentControlExplorerMarkup();
+    document.querySelector(`[data-controller-entry="${agentControlEntry}"]`)?.focus();
+    return;
+  }
+  const controllerFactoryButton = event.target.closest('[data-controller-factory]');
+  if (controllerFactoryButton) {
+    agentControlFactoryEnabled = !agentControlFactoryEnabled;
+    controllerFactoryButton.closest('.agent-control-construction').outerHTML = agentControlExplorerMarkup();
+    document.querySelector('[data-controller-factory]')?.focus();
+    return;
+  }
+  const evidenceLensButton = event.target.closest('[data-standalone-evidence-lens]');
+  if (evidenceLensButton) {
+    standaloneEvidenceLens = Math.max(0, Math.min(2, Number(evidenceLensButton.dataset.standaloneEvidenceLens) || 0));
+    evidenceLensButton.closest('.standalone-static-trace').outerHTML = standaloneStaticSpawnTraceMarkup();
+    document.querySelector(`[data-standalone-evidence-lens="${standaloneEvidenceLens}"]`)?.focus();
+    return;
+  }
   const standaloneStaticButton = event.target.closest('[data-standalone-static-step]');
   if (standaloneStaticButton) {
     standaloneStaticSpawnFocus = Math.max(0, Math.min(3, Number(standaloneStaticButton.dataset.standaloneStaticStep) || 0));
