@@ -815,3 +815,48 @@ button.relation-node:hover,button.relation-node:focus-visible{border-color:#c5f3
 @media(max-width:680px){.probe-lanes{grid-template-columns:1fr;gap:6px}.probe-lane-label{margin-top:3px}.probe-lane-events{grid-template-columns:repeat(4,minmax(105px,1fr));overflow-x:auto;padding:3px 2px 7px;scrollbar-width:thin;scrollbar-color:#35454d transparent}.probe-lane-events>i{display:none}.probe-lane-events.child-events{grid-template-columns:repeat(4,minmax(105px,1fr))}.probe-route{grid-column:3/5}.probe-node{min-height:63px}.probe-readout{grid-template-columns:40px minmax(0,1fr)}.probe-controls>a{font-size:7px}}
 @media(max-width:400px){.probe-heading{flex-wrap:wrap}.probe-controls{gap:5px}.probe-controls>a{white-space:normal;text-align:right}}
 @media(prefers-reduced-motion:reduce){.probe-node{transition:none}}
+
+/* Visual polish: keep every captured checkpoint readable, including future and narrow-screen states. */
+.probe-heading h5{font-size:13px;line-height:1.45}
+.probe-intro{max-width:70ch;font-size:10px;line-height:1.65}
+.probe-lanes{gap:10px;padding:12px}
+.probe-lane-label{min-height:36px;padding:5px 7px;border:1px solid #ffffff0b;border-radius:7px;background:#ffffff03}
+.probe-lane-label b{font-size:8px}
+.probe-lane-label small{font-size:9px}
+.probe-lane-events{gap:6px;align-items:stretch}
+.probe-node{min-height:68px;gap:5px;padding:8px;border-color:#ffffff16;line-height:1.45}
+.probe-node>span{font-size:8px}
+.probe-node strong{font-size:9px;line-height:1.45}
+.probe-node small{font-size:8px;line-height:1.45;overflow-wrap:anywhere}
+.probe-node.current{box-shadow:0 0 0 2px #81b8da22,inset 0 1px #ffffff0b}
+.probe-node.past{border-color:#9bbf7770;background:linear-gradient(145deg,#1a2718,#141b14)}
+.probe-node.future{border-style:dashed;border-color:#ffffff24;background:#ffffff04;color:#cbd2d6;opacity:1}
+.probe-node.future>span,.probe-node.future small{color:#a2adb3}
+.probe-node:hover,.probe-node:focus-visible{border-color:#b8e3fa;box-shadow:0 0 0 2px #8fb6ff1c;outline:none}
+.probe-route{font-size:8px;line-height:1.5}
+.probe-readout{grid-template-columns:50px minmax(0,1fr);gap:11px;padding:11px}
+.probe-readout-index{font-size:8px}
+.probe-readout strong{font-size:11px;line-height:1.5}
+.probe-readout p{font-size:10px;line-height:1.6}
+.probe-readout small{font-size:9px;line-height:1.6}
+.probe-controls button{flex:0 0 34px;width:34px;height:34px}
+.probe-controls>a{font-size:9px}
+.probe-caveat{margin-top:10px;padding:9px 10px;border:1px solid #d2b36f30;border-radius:7px;background:#d2b36f08;color:#c0c7c9;font-size:9px;line-height:1.6}
+.probe-caveat b{color:#e5c77e}
+@media(max-width:680px){
+  .probe-lanes{gap:8px;padding:10px}
+  .probe-lane-events,.probe-lane-events.child-events{grid-template-columns:repeat(4,minmax(120px,1fr));gap:7px;padding:4px 3px 9px;scroll-snap-type:x proximity}
+  .probe-node{scroll-snap-align:start}
+  .probe-readout{grid-template-columns:44px minmax(0,1fr)}
+  .probe-controls{flex-wrap:wrap}
+  .probe-controls input{min-width:80px}
+  .probe-controls>a{margin-left:0}
+}
+@media(max-width:400px){
+  .embedded-probe{padding:10px}
+  .probe-heading h5{font-size:12px}
+  .probe-intro{font-size:10px}
+  .probe-readout{grid-template-columns:minmax(0,1fr);gap:4px}
+  .probe-readout-index{padding:0}
+  .probe-controls>a{flex-basis:100%;text-align:left}
+}
