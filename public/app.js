@@ -1045,7 +1045,7 @@ function renderInspector() {
       <div class="inspector-nav-links"><button type="button" data-inspector-target="context">Context</button><button type="button" data-inspector-target="links">Task links</button><button type="button" data-inspector-target="agent-mailbox">Mailbox</button><button type="button" data-inspector-target="output">Output</button><button type="button" data-inspector-target="activity">Activity</button></div>
     </nav>
     <details class="source-map-index">
-        <summary><span class="source-map-index-mark" aria-hidden="true">⌕</span><span class="source-map-index-title">Source map index</span><span class="source-map-index-count">23 VISUAL TRACES</span><span class="source-map-index-hint">Jump to an evidence diagram</span></summary>
+        <summary><span class="source-map-index-mark" aria-hidden="true">⌕</span><span class="source-map-index-title">Source map index</span><span class="source-map-index-count" data-map-count>23 / 23 MAPS</span><span class="source-map-index-hint">Search by mechanism or question</span></summary>
       <div class="source-map-groups">
         <section class="source-map-group" aria-label="Orchestration and lifecycle maps"><h5>ORCHESTRATION · LIFECYCLE</h5><div>
           <button type="button" data-inspector-target="spawn-config-title">Child config</button><button type="button" data-inspector-target="spawn-protocol-title">Spawn ordering</button><button type="button" data-inspector-target="capacity-race-title">Capacity race</button><button type="button" data-inspector-target="admission-map-title">Execution admission</button><button type="button" data-inspector-target="residency-map-title">Runtime residency</button><button type="button" data-inspector-target="suspension-map-title">Root suspension</button><button type="button" data-inspector-target="interrupt-close-title">Stop and close</button><button type="button" data-inspector-target="terminal-lifecycle-title">Terminal signals</button><button type="button" data-inspector-target="wait-scope-title">Wait scope</button>
@@ -1057,6 +1057,8 @@ function renderInspector() {
           <button type="button" data-inspector-target="topology-map-title">Panel topology</button><button type="button" data-inspector-target="history-gate-title">History gate</button><button type="button" data-inspector-target="desktop-subagents-title">Subagents panel</button><button type="button" data-inspector-target="fidelity-title">Activity forwarding</button><button type="button" data-inspector-target="renderer-delta-title">Transcript updates</button>
         </div></section>
       </div>
+      <label class="source-map-search"><span aria-hidden="true">⌕</span><input type="search" data-map-search aria-label="Search source maps" placeholder="Try: shutdown, message, Desktop…" autocomplete="off"><kbd>ESC</kbd></label>
+      <p class="source-map-search-status" data-map-search-status aria-live="polite">Showing all 23 source-linked diagrams.</p>
     </details>
     <section class="mechanism-overview" aria-labelledby="mechanism-overview-title">
       <div class="mechanism-overview-heading"><div><span>MECHANISM MAP · SOURCE SYNTHESIS</span><h4 id="mechanism-overview-title">How a child agent fits into the parent thread</h4></div><a href="https://github.com/openai/codex/blob/a45b8ccb016fb74f63a6bc29e701568e387cbe38/codex-rs/core/src/session/turn_suspension.rs" target="_blank" rel="noreferrer">root handoff check · a45b8cc</a></div>
@@ -1604,6 +1606,7 @@ document.addEventListener('toggle', event => {
 }, true);
 document.addEventListener('input', event => {
   if (event.target.matches('.sequence-scrubber input[type="range"]')) updateSequenceStep(event.target.closest('.interaction-sequence'), event.target.value);
+  if (event.target.matches('[data-map-search]')) filterSourceMaps(event.target.value);
 });
 document.addEventListener('change', event => {
   if (event.target.matches('[data-probe-range]')) {
@@ -1617,6 +1620,12 @@ document.addEventListener('change', event => {
   if (panel) panel.outerHTML = desktopSubagentsMarkup();
 });
 document.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && event.target.matches?.('[data-map-search]')) {
+    event.preventDefault();
+    event.target.value = '';
+    filterSourceMaps('');
+    return;
+  }
   const sequenceEvent = event.target.closest?.('.sequence-plot-event, .sequence-event');
   if (!sequenceEvent || !['Enter',' '].includes(event.key)) return;
   event.preventDefault();
@@ -1634,6 +1643,34 @@ function scrollInspectorTo(targetId) {
   } else {
     target.scrollIntoView({ behavior, block: 'start' });
   }
+}
+function filterSourceMaps(rawQuery) {
+  const index = $('.source-map-index');
+  if (!index) return;
+  const query = rawQuery.trim().toLocaleLowerCase();
+  const groups = [...index.querySelectorAll('.source-map-group')];
+  const totalCount = groups.reduce((count, group) => count + group.querySelectorAll('[data-inspector-target]').length, 0);
+  let visibleCount = 0;
+  for (const group of groups) {
+    const categoryMatches = Boolean(query && group.querySelector('h5')?.textContent.toLocaleLowerCase().includes(query));
+    let groupCount = 0;
+    for (const button of group.querySelectorAll('[data-inspector-target]')) {
+      const target = document.getElementById(button.dataset.inspectorTarget);
+      const mapText = target?.closest('section')?.textContent ?? target?.textContent ?? '';
+      const searchableText = `${button.textContent} ${mapText}`.toLocaleLowerCase();
+      const matches = !query || categoryMatches || searchableText.includes(query);
+      button.hidden = !matches;
+      if (matches) groupCount++;
+    }
+    group.hidden = groupCount === 0;
+    visibleCount += groupCount;
+  }
+  const count = index.querySelector('[data-map-count]');
+  if (count) count.textContent = `${visibleCount} / ${totalCount} MAPS`;
+  const status = index.querySelector('[data-map-search-status]');
+  if (status) status.textContent = query
+    ? `${visibleCount} of ${totalCount} source-linked diagrams match “${rawQuery.trim()}”.`
+    : `Showing all ${totalCount} source-linked diagrams.`;
 }
 function updateInspectorNav() {
   inspectorNavFrame = 0;

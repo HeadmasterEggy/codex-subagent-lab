@@ -475,8 +475,16 @@ button.relation-node:hover,button.relation-node:focus-visible{border-color:#c5f3
 .source-map-group>div{display:flex;flex-wrap:wrap;gap:5px}
 .source-map-group button{min-height:25px;padding:4px 7px;border:1px solid #ffffff13;border-radius:5px;background:#151a1a;color:#aebbb6;font-size:8px;line-height:1.2;text-align:left;cursor:pointer;transition:background .14s,border-color .14s,color .14s}
 .source-map-group button:hover,.source-map-group button:focus-visible{border-color:#83c8b66b;background:#1a2724;color:#d9eee5}
+.source-map-group[hidden]{display:none}
+.source-map-search{display:flex;min-height:34px;align-items:center;gap:8px;margin:0 9px;padding:0 9px;border:1px solid #ffffff14;border-radius:7px;background:#0c0f10;color:#88b9aa}
+.source-map-search:focus-within{border-color:#83c8b66b;box-shadow:0 0 0 2px #83c8b614}
+.source-map-search>span{font:16px var(--mono)}
+.source-map-search input{width:100%;min-width:0;border:0;outline:0;background:transparent;color:#d9e6e0;font:9px var(--sans)}
+.source-map-search input::placeholder{color:#74817b}
+.source-map-search kbd{padding:2px 4px;border:1px solid #ffffff1a;border-radius:4px;color:#77837e;font:7px var(--mono);white-space:nowrap}
+.source-map-search-status{margin:6px 11px 9px;color:#77837e;font-size:8px;line-height:1.4}
 @media(max-width:900px){.source-map-groups{grid-template-columns:1fr}.source-map-group>div{gap:6px}.source-map-group button{font-size:9px}}
-@media(max-width:680px){.source-map-index{margin:8px 0 12px}.source-map-index>summary{position:relative;flex-wrap:wrap;gap:6px}.source-map-index-hint{flex-basis:100%;padding-left:28px}.source-map-index>summary::after{position:absolute;right:25px}.source-map-groups{gap:7px}.source-map-group{padding:9px}.source-map-group button{min-height:29px;padding:6px 8px;font-size:10px}}
+@media(max-width:680px){.source-map-index{margin:8px 0 12px}.source-map-index>summary{position:relative;flex-wrap:wrap;gap:6px}.source-map-index-hint{flex-basis:100%;padding-left:28px}.source-map-index>summary::after{position:absolute;right:25px}.source-map-groups{gap:7px}.source-map-group{padding:9px}.source-map-group button{min-height:29px;padding:6px 8px;font-size:10px}.source-map-search{min-height:40px;margin:0 9px}.source-map-search input{font-size:12px}.source-map-search-status{font-size:10px}}
 @media(prefers-reduced-motion:reduce){.source-map-index>summary::after,.source-map-group button{transition:none}}
 
 /* Parent result delivery stays queued unless the parent session can accept work. */
