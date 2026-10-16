@@ -38,12 +38,17 @@ let desktopPanelStatus = 'active';
 let desktopPanelInline = true;
 let desktopPanelSelected = null;
 let desktopPanelCanInteract = true;
+let desktopCollapseHasInline = true;
+let desktopCollapseAllDone = false;
 let desktopResourceFocus = 'local';
 let treeHandoffStage = 'root-return';
 let desktopPanelShouldResume = true;
 let desktopPanelWriterConflict = false;
 let stopCleanupMode = 'user-stop';
+let stopAllDiscovery = 'success';
 let shutdownPathFocus = 'desktop-stop';
+let shutdownScopeMode = 'shared-runtime';
+let appServerExitMode = 'desktop-sigterm';
 let spawnConfigMode = 'fresh-v2';
 let spawnConfigModelSource = 'inherited';
 let spawnConfigRole = false;
@@ -619,30 +624,33 @@ function selectCompletionPayload(scenario) {
 }
 function parentResultStateMarkup() {
   const cases = {
-    active: { label: 'PARENT SESSION · ACTIVE', location: 'Loaded session mailbox', handling: 'Active turn may accept it; otherwise it stays pending for later input.', outcome: 'QUEUED · TURN RECEPTIVITY DECIDES', tone: 'active' },
-    idle: { label: 'PARENT SESSION · IDLE', location: 'Loaded session mailbox', handling: 'No wake is requested. The item waits until later work collects it.', outcome: 'PENDING · NO WAKE REQUEST', tone: 'idle' },
-    unloaded: { label: 'PARENT SESSION · UNLOADED', location: 'Controller runtime mailbox', handling: 'On session load, retained messages move into the session input queue.', outcome: 'RETAINED · DRAINED ON LATER LOAD', tone: 'unloaded' }
+    active: { label: 'PARENT · LOADED + ACTIVE', location: 'Session mailbox', handling: 'An active turn may accept it while mailbox delivery is open; otherwise it waits for a later turn.', storage: 'In process memory until accepted as turn input.', outcome: 'QUEUED · TURN RECEPTIVITY DECIDES', tone: 'active' },
+    idle: { label: 'PARENT · LOADED + IDLE', location: 'Session mailbox', handling: 'QueueOnly does not start an ordinary turn. A durable-sleep marker is the wake exception.', storage: 'Pending in the session input queue.', outcome: 'PENDING · NO ORDINARY WAKE', tone: 'idle' },
+    evicted: { label: 'PARENT · LOCALLY EVICTED', location: 'Runtime mailbox', handling: 'No session reload is needed while the runtime retains the eviction record; later load drains this mailbox.', storage: 'In-memory only; unread delivery is not shown as disk-persisted.', outcome: 'RETAINED · AWAITING SESSION LOAD', tone: 'evicted' },
+    cold: { label: 'PARENT · COLD RESTORE', location: 'Restore history, then deliver', handling: 'Without a local eviction record, the QueueOnly path lazily restores the parent before session delivery.', storage: 'History is restored; the new unread result remains queued in memory.', outcome: 'RESTORE FIRST · THEN QUEUE', tone: 'cold' }
   };
   const scenario = cases[parentResultState] ?? cases.active;
   return `<section class="parent-result-state" aria-labelledby="parent-result-state-title">
     <div class="parent-result-state-heading"><div><span>PARENT DELIVERY · V2 SOURCE TRACE</span><h5 id="parent-result-state-title">A child result does not always wake its parent</h5></div><span>Codex source · 740e5af</span></div>
-    <p class="parent-result-state-intro">Choose the parent session state at completion time. The result is routed to the structural parent with <code>trigger_turn=false</code>; session residency and turn receptivity determine what happens next.</p>
+    <p class="parent-result-state-intro">Choose the parent’s residency when the child finishes. Every result uses <code>QueueOnly</code> (<code>trigger_turn=false</code>); residency determines where it waits, while turn receptivity determines when it is recorded.</p>
     <div class="parent-result-state-controls" role="group" aria-label="Choose parent session state">
-      <button type="button" data-parent-result-state="active" aria-pressed="${parentResultState === 'active'}">Active turn</button><button type="button" data-parent-result-state="idle" aria-pressed="${parentResultState === 'idle'}">Idle session</button><button type="button" data-parent-result-state="unloaded" aria-pressed="${parentResultState === 'unloaded'}">Unloaded session</button>
+      <button type="button" data-parent-result-state="active" aria-pressed="${parentResultState === 'active'}">Active turn</button><button type="button" data-parent-result-state="idle" aria-pressed="${parentResultState === 'idle'}">Idle session</button><button type="button" data-parent-result-state="evicted" aria-pressed="${parentResultState === 'evicted'}">Locally evicted</button><button type="button" data-parent-result-state="cold" aria-pressed="${parentResultState === 'cold'}">Cold restore</button>
     </div>
     <div class="parent-result-state-flow" data-case="${scenario.tone}" aria-live="polite">
       <article><span>01 · CHILD</span><strong>Terminal outcome</strong><small>Completion result is formatted separately from lifecycle activity.</small></article><i aria-hidden="true">→</i>
       <article><span>02 · ROUTE</span><strong>Structural parent</strong><small><code>QueueOnly</code> · <code>trigger_turn=false</code></small></article><i aria-hidden="true">→</i>
       <article class="parent-result-state-current"><span>${scenario.label}</span><strong>${scenario.location}</strong><small>${scenario.handling}</small></article><i aria-hidden="true">→</i>
-      <article class="parent-result-state-boundary-node"><span>04 · MODEL INPUT</span><strong>Request assembly is downstream</strong><small>Trace the conditional path from accepted turn input through history projection and transport.</small><button class="parent-result-request-link" type="button" data-inspector-target="request-wire-title">Open request trace ↓</button></article>
+      <article class="parent-result-state-storage"><span>04 · BEFORE PARENT READ</span><strong>${scenario.storage}</strong><small>Mailbox acceptance does not persist an unread result to the rollout.</small></article><i aria-hidden="true">→</i>
+      <article class="parent-result-state-boundary-node"><span>05 · TURN INPUT</span><strong>Record in parent history</strong><small>When processed as turn input, the typed AgentMessage and metadata enter the rollout; request assembly follows.</small><button class="parent-result-request-link" type="button" data-inspector-target="request-wire-title">Open request trace ↓</button></article>
       <b class="parent-result-state-outcome">${scenario.outcome}</b>
     </div>
-    <p class="parent-result-state-boundary">Queue acceptance or retention is not proof that the parent model consumed the result. This is a static source trace; it does not represent a live session.</p>
+    <div class="parent-result-checkpoints" aria-label="Result delivery and persistence milestones"><span class="checkpoint-queued"><b>1</b><strong>Queued</strong><small>runtime/session memory</small></span><i aria-hidden="true">→</i><span><b>2</b><strong>Recorded</strong><small>only after turn input</small></span><i aria-hidden="true">→</i><span><b>3</b><strong>Request built</strong><small>model can then receive it</small></span></div>
+    <p class="parent-result-state-boundary">A queued result is not yet rollout-persisted or model-consumed. Runtime mailbox contents are in-memory; recovery of unread results after process shutdown is not established. Static source trace, not a live session.</p>
     <p class="parent-result-state-source"><a href="https://github.com/openai/codex/blob/740e5af33c71225640e0c1c1555c514c2c93ab74/codex-rs/core/src/agent/control/completion.rs" target="_blank" rel="noreferrer">Completion routing</a> · <a href="https://github.com/openai/codex/blob/740e5af33c71225640e0c1c1555c514c2c93ab74/codex-rs/core/src/agent/control/delivery.rs" target="_blank" rel="noreferrer">Delivery policy</a> · <a href="https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#parent-result-delivery-after-child-termination" target="_blank" rel="noreferrer">Evidence ledger</a></p>
   </section>`;
 }
 function selectParentResultState(stateName) {
-  parentResultState = ['idle','unloaded'].includes(stateName) ? stateName : 'active';
+  parentResultState = ['idle','evicted','cold'].includes(stateName) ? stateName : 'active';
   const container = $('.parent-result-state');
   if (container) container.outerHTML = parentResultStateMarkup();
 }
@@ -710,8 +718,8 @@ function requestWireMarkup() {
     ? 'EncodedJsonBody serializes the ResponsesApiRequest before the HTTP request is sent.'
     : 'ResponseCreateWsRequest carries the same typed input, serializes as JSON, then is sent in a text frame.';
   return `<section class="request-wire" aria-labelledby="request-wire-title">
-    <div class="request-wire-heading"><div><span class="request-wire-eyebrow">PARENT SAMPLING · PINNED PUBLIC SOURCE</span><h5 id="request-wire-title">How a child result becomes a model request</h5></div><span>Codex source · 67a7096</span></div>
-    <p class="request-wire-intro">Follow an admitted mailbox item through parent history projection into the typed Responses request. Switch the wire transport and content representation to inspect each source-defined shape.</p>
+    <div class="request-wire-heading"><div><span class="request-wire-eyebrow">PARENT SAMPLING · PUBLIC SOURCE SNAPSHOT</span><h5 id="request-wire-title">How a child result becomes a model request</h5></div><span>Codex · 67a7096 · 2026-09-27</span></div>
+    <p class="request-wire-intro">Follow an admitted mailbox item through parent history projection into the typed Responses request. This panel is pinned to a dated public source snapshot. Switch transport and content representation to inspect the source-defined shapes.</p>
     <div class="request-wire-controls">
       <div role="group" aria-label="Choose source transport"><span>TRANSPORT</span><button type="button" data-request-wire-transport="http" aria-pressed="${transport === 'http'}">HTTP</button><button type="button" data-request-wire-transport="websocket" aria-pressed="${transport === 'websocket'}">WebSocket</button></div>
       <div role="group" aria-label="Choose AgentMessage content representation"><span>CONTENT</span><button type="button" data-request-wire-content="plaintext" aria-pressed="${content === 'plaintext'}">Plain text</button><button type="button" data-request-wire-content="encrypted" aria-pressed="${content === 'encrypted'}">Encrypted</button></div>
@@ -723,14 +731,21 @@ function requestWireMarkup() {
       <li class="request-wire-current"><span>04 · REQUEST INPUT</span><strong><code>ResponsesApiRequest.input</code></strong><small><code>Vec&lt;ResponseItem&gt;</code> keeps the agent-message discriminator.</small></li>
       <li class="request-wire-transport"><span>05 · ${transportLabel}</span><strong>${transport === 'http' ? 'JSON body → /responses' : 'JSON → text frame'}</strong><small>${transportDetail}</small></li>
     </ol>
+    <div class="request-window" role="img" aria-label="A result arriving after a sampling request was sent stays queued for a later sampling request; it cannot rewrite the request already in flight">
+      <div class="request-window-heading"><span>IN-FLIGHT BOUNDARY</span><small>Example: result arrives after request A was sent</small></div>
+      <div class="request-window-lanes">
+        <div class="request-window-lane frozen"><span class="request-window-lane-label">REQUEST A · ALREADY SENT</span><div class="request-window-track"><b>history snapshot</b><i aria-hidden="true">→</i><b>serialized input</b><i aria-hidden="true">→</i><b>response stream</b></div><small>Its input is fixed for this dispatch.</small></div>
+        <div class="request-window-lane later"><span class="request-window-lane-label">CHILD RESULT · ARRIVES DURING A</span><div class="request-window-track"><b>mailbox</b><i aria-hidden="true">→</i><b>phase accepts</b><i aria-hidden="true">→</i><b>record AgentMessage</b><i aria-hidden="true">→</i><b>build request B</b></div><small>It can affect a later sampling request after the turn processes it; it is not spliced into A.</small></div>
+      </div>
+    </div>
     <div class="request-wire-payload" aria-live="polite"><div><span>SIMPLIFIED TYPED SHAPE</span><small>${content === 'encrypted' ? 'Content value is opaque; this view does not decrypt it.' : 'Illustrative fields; IDs and optional metadata omitted.'}</small></div><pre><code>{
   "type": "agent_message",
   "author": "child-…",
   "recipient": "parent-…",
   "content": [{ "type": "${contentType}", "${content === 'encrypted' ? 'content' : 'text'}": ${contentValue} }]
 }</code></pre></div>
-    <p class="request-wire-boundary">Static source trace only. It does not establish that a live item passed admission, survived projection, used the selected transport, was accepted remotely, or was consumed by a model. The controls change this illustration, not Codex configuration.</p>
-    <p class="request-wire-source"><a href="https://github.com/openai/codex/tree/67a709665ac7b50311b93e32612c9a8281684787" target="_blank" rel="noreferrer">pinned public Codex source</a> · <a href="https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#parent-model-request-serialization-and-transport-boundary" target="_blank" rel="noreferrer">request and transport evidence ledger</a></p>
+    <p class="request-wire-boundary">Static source trace only, pinned to the public 2026-09-27 snapshot. It does not establish that a live item passed admission, survived projection, used the selected transport, was accepted remotely, or was consumed by a model. The controls change this illustration, not Codex configuration.</p>
+    <p class="request-wire-source"><a href="https://github.com/openai/codex/tree/67a709665ac7b50311b93e32612c9a8281684787" target="_blank" rel="noreferrer">public Codex snapshot · 2026-09-27</a> · <a href="https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#parent-model-request-serialization-and-transport-boundary" target="_blank" rel="noreferrer">request and transport evidence ledger</a></p>
   </section>`;
 }
 function selectRequestWireOption(kind, value) {
@@ -756,6 +771,29 @@ function stopCleanupMarkup() {
     <p class="stop-cleanup-source"><a href="https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#installed-desktop-26100771326-stop-path-schedules-child-cleanup" target="_blank" rel="noreferrer">Evidence ledger ↗</a> · app-shared SHA-256 <code>3b4cabc3…31d1bf5</code></p>
   </div>`;
 }
+function stopAllDispatchMarkup() {
+  const discovered = stopAllDiscovery === 'success';
+  return `<section class="stop-all-dispatch" aria-labelledby="stop-all-dispatch-title">
+    <div class="stop-all-dispatch-head"><div><span>INSTALLED DESKTOP · PANEL + MANAGER</span><h4 id="stop-all-dispatch-title">“Stop all” can finish before child interrupts</h4></div><strong>26.1007.71326</strong></div>
+    <div class="stop-all-discovery-control" role="group" aria-label="Choose descendant refresh result">
+      <span>Topology refresh</span>
+      <button type="button" data-stop-all-discovery="success" aria-pressed="${discovered}">Succeeds</button>
+      <button type="button" data-stop-all-discovery="failure" aria-pressed="${!discovered}">Fails</button>
+      <small>${discovered ? 'Use the reconciled descendant snapshot.' : 'Failure is swallowed; continue with the snapshot already in the store.'}</small>
+    </div>
+    <div class="stop-all-lanes" aria-label="Panel dispatch and child cleanup are separate timelines">
+      <div class="stop-all-lane panel-lane"><div class="stop-all-lane-title"><span>01</span><b>PANEL ACTION · LOADING STATE</b></div>
+        <ol><li><b>Refresh descendants</b><small>${discovered ? 'Reconcile current tree' : 'Refresh fails → keep current tree'}</small></li><li><b>Prepare eligible rows</b><small>Hydrate missing / non-running children; ignore errors</small></li><li class="dispatch-edge"><b>Invoke each callback</b><small>Plain loop; callback promise is not returned</small></li><li class="panel-settles"><b>Clear loading</b><small>Handler settles after dispatch</small></li></ol>
+      </div>
+      <div class="stop-all-lane child-lane"><div class="stop-all-lane-title"><span>02</span><b>PER CHILD · INTERRUPT + DESCENDANTS</b></div>
+        <ol><li><b><code>yda(... user)</code></b><small>Async callback work continues independently</small></li><li><b>Interrupt this child</b><small>Manager awaits its self-interrupt</small></li><li class="cascade-edge"><b>Schedule its descendants</b><small>User-stop starts best-effort cleanup in background</small></li><li><b>Two-pass sweep</b><small>Known descendants → rediscover → remaining active</small></li></ol>
+      </div>
+    </div>
+    <div class="stop-all-clock-note"><span aria-hidden="true">↗</span><p><b>Two clocks, no shared completion receipt.</b> The panel can stop showing “Stopping” after callbacks are dispatched. That does not confirm the child interrupt RPCs finished, the descendant sweeps finished, or every agent reached a terminal state.</p></div>
+    <p class="stop-all-evidence"><a href="https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#stop-all-panel-action" target="_blank" rel="noreferrer">Stop-all evidence ledger ↗</a> · panel offsets <code>1,243,059–1,243,550</code> · callback offsets <code>5,441,899–5,454,015</code></p>
+    <p class="stop-all-boundary">Static installed-bundle trace; no Stop all click or child terminal-state transition was observed.</p>
+  </section>`;
+}
 function shutdownPathCompareMarkup() {
   const desktop = shutdownPathFocus === 'desktop-stop';
   return `<div class="shutdown-path-compare" data-focus="${desktop ? 'desktop' : 'rust'}" aria-labelledby="shutdown-path-title">
@@ -766,10 +804,92 @@ function shutdownPathCompareMarkup() {
     </div>
     <div class="shutdown-path-lanes">
       <article class="shutdown-path-lane desktop"><span>INSTALLED DESKTOP · APP-SHARED BUNDLE</span><strong>User Stop interrupts root, then schedules descendant cascade</strong><small>Two-pass per-thread best effort; the UI call may return before cleanup. Exact bundle SHA-256: <code>3b4cabc3…31d1bf5</code>.</small><a href="https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#installed-desktop-26100771326-stop-path-schedules-child-cleanup" target="_blank" rel="noreferrer">Desktop source evidence ↗</a></article>
-      <article class="shutdown-path-lane rust"><span>PUBLIC CODEX MAIN · A45B8CC</span><strong>Root suspension signals shared-runtime shutdown, then closes root writer</strong><small>It emits root <code>ShutdownComplete</code>; host-owned tree wait and writer fencing remain a separate handoff. Production caller is not located in checked <code>codex-rs</code>.</small><a href="https://github.com/openai/codex/blob/a45b8ccb016fb74f63a6bc29e701568e387cbe38/codex-rs/core/src/session/turn_suspension.rs#L87-L109" target="_blank" rel="noreferrer">Suspension source ↗</a></article>
+      <article class="shutdown-path-lane rust"><span>PUBLIC CODEX MAIN · 6AE8B8A</span><strong>Root suspension signals shared-runtime shutdown, then closes root writer</strong><small>It emits root <code>ShutdownComplete</code>; host-owned tree wait and writer fencing remain a separate handoff. Production caller is not located in checked <code>codex-rs</code>.</small><a href="https://github.com/openai/codex/blob/6ae8b8aa7c608730d4315d59c5c081897ae02780/codex-rs/core/src/session/turn_suspension.rs#L83-L110" target="_blank" rel="noreferrer">Suspension source ↗</a></article>
     </div>
     <p class="shutdown-path-conclusion" aria-live="polite">${desktop ? '<b>FOCUS · DESKTOP STOP</b> Static installed-bundle code shows a best-effort UI descendant cascade. It does not establish that this path invokes Rust root suspension.' : '<b>FOCUS · RUST CORE</b> Public source defines a host tree-wait contract. It does not establish that the packaged Desktop host follows this path or completes that handoff.'}</p>
     <p class="shutdown-path-boundary">These are independently evidenced paths with different owners and snapshots. No source or live trace here proves they converge or are interchangeable.</p>
+  </div>`;
+}
+function shutdownScopeMarkup() {
+  const modes = {
+    'shared-runtime': {
+      title: 'Shared runtime fence',
+      detail: 'request_agent_tree_shutdown(child A) resolves the loaded thread, then fences and signals sessions sharing its LocalAgentRuntime. This illustration assumes all four example sessions share that runtime; the source defines scope by runtime membership, not spawn ancestry.',
+      nodes: ['root', 'child-a', 'grandchild', 'sibling'],
+      source: 'https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/core/src/thread_manager/shutdown.rs#L710-L746',
+      label: 'ThreadManager::request_agent_tree_shutdown'
+    },
+    'spawn-subtree': {
+      title: 'Explicit spawn subtree close',
+      detail: 'close_agent(child A) persists the edge as closed, then shutdown_agent_tree walks live descendants from the in-memory spawn tree. Root and sibling are outside this selected subtree.',
+      nodes: ['child-a', 'grandchild'],
+      source: 'https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/core/src/agent/control/legacy.rs#L535-L679',
+      label: 'close_agent → shutdown_agent_tree'
+    },
+    'single-thread': {
+      title: 'Idle thread unload',
+      detail: 'The app-server idle unload path waits for this thread shutdown, then removes that exact runtime only if it still matches. That path does not itself traverse spawn descendants.',
+      nodes: ['child-a'],
+      source: 'https://github.com/openai/codex/blob/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/app-server/src/request_processors/thread_lifecycle.rs#L2888-L3005',
+      label: 'unload_thread_without_subscribers'
+    }
+  }[shutdownScopeMode];
+  const node = (id, name, role) => `<div class="shutdown-scope-node ${modes.nodes.includes(id) ? 'in-scope' : ''} ${id === 'child-a' ? 'selected' : ''}" data-scope-node="${id}"><span>${role}</span><b>${name}</b><small>${modes.nodes.includes(id) ? 'IN SCOPE' : 'OUTSIDE SCOPE'}</small></div>`;
+  return `<section class="shutdown-scope" data-mode="${shutdownScopeMode}" aria-labelledby="shutdown-scope-title">
+    <div class="shutdown-scope-heading"><span>FIXED SOURCE SNAPSHOT · rust-v0.162.1</span><h4 id="shutdown-scope-title">A shutdown name does not define its tree boundary</h4><p>Choose an operation to compare source-defined scope on the same four-node example. Runtime membership is explicitly illustrative.</p></div>
+    <div class="shutdown-scope-controls" role="group" aria-label="Choose shutdown operation">
+      <button type="button" data-shutdown-scope="shared-runtime" aria-pressed="${shutdownScopeMode === 'shared-runtime'}">Shared runtime fence</button>
+      <button type="button" data-shutdown-scope="spawn-subtree" aria-pressed="${shutdownScopeMode === 'spawn-subtree'}">Close child subtree</button>
+      <button type="button" data-shutdown-scope="single-thread" aria-pressed="${shutdownScopeMode === 'single-thread'}">Unload one thread</button>
+    </div>
+    <div class="shutdown-scope-content">
+      <div class="shutdown-scope-tree" role="img" aria-label="Example spawn tree. Root has child A and a sibling. Child A has a grandchild. Highlighted nodes are within the selected operation's shutdown scope.">
+        ${node('root', 'Root', 'PARENT')}
+        <div class="shutdown-scope-children"><div class="shutdown-scope-branch">${node('child-a', 'Child A', 'SELECTED TARGET')}<div class="shutdown-scope-grandchild">${node('grandchild', 'Grandchild', 'DESCENDANT')}</div></div><div class="shutdown-scope-branch">${node('sibling', 'Sibling', 'SIBLING')}</div></div>
+      </div>
+      <article class="shutdown-scope-explanation" aria-live="polite"><span>OPERATION</span><strong>${modes.title}</strong><code>${modes.label}</code><p>${modes.detail}</p><a href="${modes.source}" target="_blank" rel="noreferrer">Pinned source ↗</a></article>
+    </div>
+    <p class="shutdown-scope-boundary"><b>Interpretation boundary:</b> the diagram distinguishes source-level ownership and traversal. It does not claim the installed Desktop host invokes any one of these paths for a user Stop.</p>
+  </section>`;
+}
+function appServerExitScenarioMarkup() {
+  const scenarios = {
+    'desktop-sigterm': {
+      title: 'Desktop close → child.kill() → SIGTERM → normal stdio cleanup',
+      label: 'DESKTOP-SPAWNED STDIO · SIGNAL HANDLER ENABLED',
+      steps: ['Electron calls child.kill() → SIGTERM', 'Start the 45 s process watchdog; close stdio forwarding', 'Drain tracked startup tasks (up to 10 s)', 'After drain, snapshot registered threads; shut down concurrently (10 s each)', 'Remove completed threads; retain timed-out or failed entries'],
+      note: 'Startup registers only after SessionConfigured. If the 10 s drain expires first, a still-starting thread may miss the later map snapshot; this source-possible edge is not a reproduced race. This tag exposes AgentTreeShutdown.wait(), a separate handle not called by this exit path. Electron does not await child exit.',
+      source: 'https://github.com/openai/codex/blob/rust-v0.162.0-alpha.17.2/codex-rs/app-server-transport/src/transport/stdio.rs#L28-L50'
+    },
+    'stdio-eof': {
+      title: 'stdin EOF → ConnectionClosed → normal stdio cleanup',
+      label: 'STDIO EOF · SAME PROCESS WATCHDOG',
+      steps: ['stdin reader reaches EOF', 'stdio transport starts the 45 s watchdog', 'transport emits ConnectionClosed', 'Snapshot ThreadManager map; shut down concurrently (10 s each)'],
+      note: 'This is a transport-close route, not evidence that Desktop exit closes stdin; the watchdog can exit with code 1.',
+      source: 'https://github.com/openai/codex/blob/rust-v0.162.0-alpha.17.2/codex-rs/app-server-transport/src/transport/stdio.rs#L125-L132'
+    },
+    'managed-daemon': {
+      title: 'Managed Unix socket daemon → forced shutdown branch',
+      label: 'SEPARATE TRANSPORT · NOT DESKTOP STDIO',
+      steps: ['Managed daemon enters forced shutdown', 'Abort connection-cleanup tasks', 'Return AppServerExit::Forced', 'CLI calls process::exit(0)'],
+      note: 'This branch skips normal background drain and tracked-thread shutdown; it is not the Desktop child.kill() path.',
+      source: 'https://github.com/openai/codex/blob/rust-v0.162.0-alpha.17.2/codex-rs/app-server/src/main.rs#L127-L134'
+    }
+  };
+  const scenario = scenarios[appServerExitMode] ?? scenarios['desktop-sigterm'];
+  const drainSource = appServerExitMode === 'desktop-sigterm' ? ' · <a href="https://github.com/openai/codex/blob/rust-v0.162.0-alpha.17.2/codex-rs/app-server/src/request_processors/thread_processor.rs#L1248-L1294" target="_blank" rel="noreferrer">startup drain + thread shutdown ↗</a>' : '';
+  return `<article class="app-server-exit-scenario"><span>${scenario.label}</span><strong>${scenario.title}</strong><ol aria-label="Shutdown sequence">${scenario.steps.map((step, index) => `<li><span>${String(index + 1).padStart(2, '0')}</span>${step}</li>`).join('')}</ol><p>${scenario.note}</p><div><a href="${scenario.source}" target="_blank" rel="noreferrer">Pinned transport source ↗</a>${drainSource}</div></article>`;
+}
+function appServerExitCompareMarkup() {
+  return `<div class="app-server-exit-compare" aria-label="Version-matched app-server shutdown scenarios">
+    <div class="app-server-exit-compare-head"><span>EMBEDDED CLI · 0.162.0-alpha.17.2 · MATCHED UPSTREAM TAG</span><b>Choose the transport-close trigger</b></div>
+    <div class="app-server-exit-controls" role="group" aria-label="Choose app-server shutdown scenario">
+      <button type="button" data-app-server-exit="desktop-sigterm" aria-pressed="${appServerExitMode === 'desktop-sigterm'}">Desktop · SIGTERM</button>
+      <button type="button" data-app-server-exit="stdio-eof" aria-pressed="${appServerExitMode === 'stdio-eof'}">stdio · EOF</button>
+      <button type="button" data-app-server-exit="managed-daemon" aria-pressed="${appServerExitMode === 'managed-daemon'}">Unix socket · forced daemon</button>
+    </div>
+    ${appServerExitScenarioMarkup()}
+    <p class="app-server-exit-boundary"><b>Boundary:</b> tracked-thread shutdown is not the pinned tag’s <code>AgentTreeShutdown.wait()</code>; explicit <code>close_agent</code> uses a separate subtree path. The Desktop asks its direct child to stop but does not await exit; neither descendant coverage nor tree-wait/persistence handoff completion is proven.</p>
   </div>`;
 }
 function desktopExitFlushMarkup() {
@@ -781,8 +901,18 @@ function desktopExitFlushMarkup() {
       <li><i>03</i><span><b>Dispose context and flush</b><small><code>flushAndDisposeContext</code> disposes the host context and awaits <code>x.flush()</code>.</small></span></li>
       <li><i>04</i><span><b>Continue on settle or 5 s timeout</b><small>The bounded wait lets exit proceed after completion, rejection, or timeout.</small></span></li>
     </ol>
-    <p class="desktop-exit-flush-boundary"><b>Separate from descendant cleanup.</b> This asset shows no tree-wait call or link to the renderer's user-Stop background cascade. Literal API-name searches are limited to this bundle; dynamic IPC/RPC, native-host, and external app-server paths remain unknown.</p>
-    <p class="desktop-exit-flush-source"><a href="https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#installed-desktop-app-exit-flush-is-bounded-and-separate-from-tree-cleanup-2026-10-16" target="_blank" rel="noreferrer">Exit-path evidence ledger ↗</a> · main bundle SHA-256 <code>87d52265…ea6d32d51</code> · character offsets <code>3,365,131</code>, <code>3,377,743</code>, <code>3,387,801</code></p>
+    <div class="connection-dispose-trace" aria-label="Connection close and transport disposal calls during context disposal">
+      <div class="connection-dispose-head"><span>INSIDE STEP 03 · HOST CONNECTION</span><b>Close is initiated; exit completion is not shown</b></div>
+      <ol>
+        <li><b>Manager calls <code>dispose()</code></b><small>Per-host connection calls are synchronous.</small></li>
+        <li><b><code>stopProcess()</code></b><small>Stops timers, clears queues, detaches connection.</small></li>
+        <li><b><code>connection.close()</code></b><small>Called without awaiting its result.</small></li>
+        <li class="transport-boundary"><b>stdio <code>connection.close()</code></b><small>Calls <code>child.kill()</code>; exit is not awaited. <code>closeGracefully()</code> is used by a separate network/config helper, not this exit chain.</small></li>
+      </ol>
+    </div>
+    ${appServerExitCompareMarkup()}
+    <p class="desktop-exit-flush-boundary"><b>Separate from descendant cleanup.</b> The traced chain requests termination of the directly spawned Codex CLI/app-server process, but does not await its exit before app quit. It does not establish termination of that process's descendants or app-server agent-tree cleanup. The bundle shows no tree-wait call or link to the renderer's user-Stop cascade; dynamic IPC/RPC, native-host, and external app-server paths remain unknown.</p>
+    <p class="desktop-exit-flush-source"><a href="https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#installed-desktop-app-exit-flush-is-bounded-and-separate-from-tree-cleanup-2026-10-16" target="_blank" rel="noreferrer">Exit-path evidence ledger ↗</a> · main bundle SHA-256 <code>87d52265…ea6d32d51</code> · connection asset SHA-256 <code>86fb2066…a66df25</code> · stdio asset SHA-256 <code>52f0be37…fda6344e</code> · offsets <code>3,248,213</code>, <code>1,218,413</code>, <code>1,229,877</code>, <code>258,189</code></p>
   </div>`;
 }
 function topologyMarkup() {
@@ -903,6 +1033,7 @@ function desktopSubagentsMarkup() {
   const detailRows = named.filter(agent => !agent.showInlineActivity);
   const working = summaryAgents.filter(agent => agent.status !== 'done');
   const done = summaryAgents.filter(agent => agent.status === 'done');
+  const autoCollapse = !desktopCollapseHasInline && desktopCollapseAllDone;
   const selected = agents.find(agent => agent.id === desktopPanelSelected);
   const selectedRoute = desktopPanelSelected === 'summary' ? 'summary' : selected ? (selected.canInteract === false ? 'panel' : 'thread') : 'idle';
   const avatar = agent => `<span class="desktop-agent-avatar ${agent.status === 'done' ? 'is-done' : 'is-active'}" aria-label="${escapeHtml(agent.name)} · ${agent.status}">${escapeHtml(agent.name.slice(0,1))}</span>`;
@@ -933,6 +1064,17 @@ function desktopSubagentsMarkup() {
       </article>
     </div>
     <div class="desktop-projection-controls"><div><span>ILLUSTRATIVE ROUTE CONTROLS</span><strong>Map event route</strong></div><div class="desktop-control-group" role="group" aria-label="Sample agent status"><button type="button" data-native-panel-status="active" aria-pressed="${desktopPanelStatus === 'active'}">active</button><button type="button" data-native-panel-status="done" aria-pressed="${desktopPanelStatus === 'done'}">done</button></div><div class="desktop-control-group" role="group" aria-label="Parent-thread interactivity evidence"><button type="button" data-native-panel-interact="true" aria-pressed="${desktopPanelCanInteract}">canInteract true</button><button type="button" data-native-panel-interact="false" aria-pressed="${!desktopPanelCanInteract}">false</button></div><label class="desktop-inline-toggle"><input type="checkbox" data-native-panel-inline ${desktopPanelInline ? 'checked' : ''}><span>showInlineActivity</span></label></div>
+    <div class="desktop-collapse-rule" data-result="${autoCollapse ? 'collapsed' : 'expanded'}" aria-labelledby="desktop-collapse-title">
+      <div class="desktop-collapse-heading"><div><span>SECTION STATE · STATIC PREDICATE</span><strong id="desktop-collapse-title">When does the Subagents section auto-collapse?</strong></div><b>${autoCollapse ? 'AUTO-COLLAPSE' : 'STAYS EXPANDED'}</b></div>
+      <div class="desktop-collapse-controls">
+        <div class="desktop-collapse-condition"><span>01 · INLINE ACTIVITY</span><strong>Any named child passes showInlineActivity?</strong><div role="group" aria-label="Whether an inline-activity child exists"><button type="button" data-collapse-inline="true" aria-pressed="${desktopCollapseHasInline}">Yes</button><button type="button" data-collapse-inline="false" aria-pressed="${!desktopCollapseHasInline}">No</button></div></div>
+        <i aria-hidden="true">AND</i>
+        <div class="desktop-collapse-condition"><span>02 · TERMINAL STATUS</span><strong>Every background agent is done?</strong><div role="group" aria-label="Whether every background agent is done"><button type="button" data-collapse-done="true" aria-pressed="${desktopCollapseAllDone}">Yes</button><button type="button" data-collapse-done="false" aria-pressed="${!desktopCollapseAllDone}">No</button></div></div>
+        <i aria-hidden="true">→</i>
+        <div class="desktop-collapse-outcome"><span>RESULT</span><strong>${autoCollapse ? 'Collapse section' : 'Keep section open'}</strong><small>${desktopCollapseHasInline ? 'Inline child present: collapse predicate fails.' : desktopCollapseAllDone ? 'No inline child and all agents done: predicate passes.' : 'At least one agent is not done: predicate fails.'}</small></div>
+      </div>
+      <p>This is the section auto-collapse predicate from the installed renderer. The two controls are independent illustrative aggregate inputs; they do not read a live conversation.</p>
+    </div>
     <div class="desktop-panel-selection" aria-live="polite"><span>${selected ? (selectedRoute === 'panel' ? 'SELECTED CHILD · PANEL ROUTE' : 'SELECTED CHILD · THREAD ROUTE') : desktopPanelSelected === 'summary' ? 'SUMMARY CLICK PATH' : 'CLICK PATH'}</span><strong>${selected ? `Selected “${escapeHtml(selected.name)}” → ${selectedRoute === 'panel' ? 'parent Subagents panel with this child selected' : 'validated local child thread'}` : desktopPanelSelected === 'summary' ? 'Compact summary → onOpenSubagentsPanel → Subagents overview.' : 'Choose the summary or a named child row to reveal the next UI route.'}</strong></div>
     <div class="desktop-open-route" data-route="${selectedRoute}" aria-live="polite">
       ${selectedRoute === 'summary' ? `<div class="desktop-open-route-head"><span>OVERVIEW ROUTE</span><strong>Summary click opens the parent’s Subagents overview</strong></div><div class="desktop-route-steps"><article><small>01 · CLICK</small><b>Compact summary row</b><span>onOpenSubagentsPanel</span></article><i aria-hidden="true">→</i><article><small>02 · DESTINATION</small><b>Parent Subagents overview</b><span>Child selection happens in a separate step.</span></article></div>` : selectedRoute === 'idle' ? `<div class="desktop-route-idle"><span>↗</span><div><b>Two click destinations</b><small>Summary opens the overview; a child row routes according to its parent-thread evidence.</small></div></div>` : selectedRoute === 'thread' ? `<div class="desktop-open-route-head"><span>CANINTERACT = TRUE · LOCAL THREAD ROUTE</span><strong>Resolve the child before mounting its conversation</strong></div><div class="desktop-route-steps"><article><small>01 · LOOK UP</small><b>Indexed child or parent history</b><span>Find the matching spawn/activity reference.</span></article><i aria-hidden="true">→</i><article><small>02 · VALIDATE</small><b>Parent ancestry + first page</b><span>Check the requested parent, then require child first-page readiness.</span></article><i aria-hidden="true">→</i><article><small>03 · OPEN</small><b>Durable local thread tab</b><span>Composer and resume can be enabled, subject to writer conflict.</span></article></div>` : `<div class="desktop-open-route-head"><span>CANINTERACT = FALSE · EMBEDDED PANEL ROUTE</span><strong>Keep the selected child inside the parent’s Subagents panel</strong></div><div class="desktop-route-steps"><article><small>01 · SELECT</small><b>Activity-only or non-interactive child</b><span>Open the parent panel with this child selected.</span></article><i aria-hidden="true">→</i><article><small>02 · CHECK</small><b>Verify descendant relationship</b><span>Missing ancestry can be hydrated without loading turns.</span></article><i aria-hidden="true">→</i><article><small>03 · PROJECT</small><b>Embedded child transcript</b><span>Composer stays hidden; the interactive resume hook is gated off.</span></article></div>`}
@@ -1008,6 +1150,7 @@ function selectEmbeddedProbeStep(value) {
 
 function renderInspector() {
   const task = taskById(selectedTaskId);
+  renderMechanismExplorer();
   $('#inspector-empty').hidden = Boolean(task);
   $('#agent-detail').hidden = !task;
   if (!task) { $('#agent-detail').innerHTML = ''; return; }
@@ -1083,7 +1226,7 @@ function renderInspector() {
       <p class="source-map-search-status" data-map-search-status aria-live="polite">Showing all 24 source-linked diagrams.</p>
     </details>
     <section class="mechanism-overview" aria-labelledby="mechanism-overview-title">
-      <div class="mechanism-overview-heading"><div><span>MECHANISM MAP · SOURCE SYNTHESIS</span><h4 id="mechanism-overview-title">How a child agent fits into the parent thread</h4></div><a href="https://github.com/openai/codex/blob/a45b8ccb016fb74f63a6bc29e701568e387cbe38/codex-rs/core/src/session/turn_suspension.rs" target="_blank" rel="noreferrer">root handoff check · a45b8cc</a></div>
+      <div class="mechanism-overview-heading"><div><span>MECHANISM MAP · SOURCE SYNTHESIS</span><h4 id="mechanism-overview-title">How a child agent fits into the parent thread</h4></div><a href="https://github.com/openai/codex/blob/6ae8b8aa7c608730d4315d59c5c081897ae02780/codex-rs/core/src/session/turn_suspension.rs" target="_blank" rel="noreferrer">root handoff check · 6ae8b8a</a></div>
       <div class="mechanism-overview-flow" aria-label="Source-backed subagent lifecycle overview">
         <button type="button" data-inspector-target="context"><span>01 · PREPARE</span><strong>Context + policy</strong><small>Resolve the child snapshot, model, role and runtime authority.</small><b>Inspect input</b></button>
         <i aria-hidden="true">→</i>
@@ -1092,6 +1235,27 @@ function renderInspector() {
         <button type="button" data-inspector-target="agent-mailbox"><span>03 · COORDINATE</span><strong>Turns + messages</strong><small>Queueing, waking, waiting and child execution have separate rules.</small><b>Inspect mailbox</b></button>
         <i aria-hidden="true">→</i>
         <button type="button" data-inspector-target="activity"><span>04 · RETURN</span><strong>Status + result</strong><small>Terminal status, activity and parent result are distinct signals.</small><b>Inspect activity</b></button>
+      </div>
+      <div class="parallel-lifecycle" aria-label="Parent and child lifecycle after spawn">
+        <div class="parallel-lifecycle-heading"><span>AFTER SPAWN · PARALLEL THREADS</span><small>Spawn receipt does not wait for child completion</small></div>
+        <div class="parallel-lifecycle-scroll">
+          <svg class="parallel-lifecycle-svg" viewBox="0 0 920 174" role="img" aria-labelledby="parallel-lifecycle-title parallel-lifecycle-description">
+            <title id="parallel-lifecycle-title">Parent and child run on parallel timelines</title>
+            <desc id="parallel-lifecycle-description">The spawn call creates a child thread and returns after its initial input is accepted. The parent may continue or wait while the child runs. At completion, terminal status, activity, and a queued result follow separate paths back toward the parent.</desc>
+            <defs><marker id="parallel-arrow-blue" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L8 4L0 8" fill="none" stroke="#8fb6ff" stroke-width="1.3"/></marker><marker id="parallel-arrow-gold" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L8 4L0 8" fill="none" stroke="#d7b46e" stroke-width="1.3"/></marker></defs>
+            <text class="parallel-lane-label" x="16" y="52">PARENT</text><text class="parallel-lane-label" x="16" y="132">CHILD</text>
+            <path class="parallel-lane-rule" d="M112 48H885M112 128H885"/>
+            <rect class="parallel-event parent-event" x="145" y="29" width="142" height="38" rx="8"/><text class="parallel-event-kicker" x="157" y="44">SPAWN RETURNS</text><text class="parallel-event-name" x="157" y="58">input accepted</text>
+            <rect class="parallel-event parent-event" x="341" y="29" width="197" height="38" rx="8"/><text class="parallel-event-kicker" x="353" y="44">PARENT TURN</text><text class="parallel-event-name" x="353" y="58">continues · or waits</text>
+            <rect class="parallel-event inbox-event" x="728" y="29" width="156" height="38" rx="8"/><text class="parallel-event-kicker" x="740" y="44">PARENT MAILBOX</text><text class="parallel-event-name" x="740" y="58">result queued</text>
+            <rect class="parallel-event child-event" x="341" y="109" width="197" height="38" rx="8"/><text class="parallel-event-kicker" x="353" y="124">CHILD THREAD</text><text class="parallel-event-name" x="353" y="138">independent turn runs</text>
+            <rect class="parallel-event child-event" x="580" y="109" width="124" height="38" rx="8"/><text class="parallel-event-kicker" x="592" y="124">TERMINAL</text><text class="parallel-event-name" x="592" y="138">outcome</text>
+            <path class="parallel-spawn-link" d="M216 67V128H334" marker-end="url(#parallel-arrow-blue)"/><path class="parallel-thread-link" d="M538 128H573" marker-end="url(#parallel-arrow-blue)"/>
+            <path class="parallel-return-link activity-return" d="M642 108C642 83 615 75 586 67" marker-end="url(#parallel-arrow-blue)"/><path class="parallel-return-link result-return" d="M704 128C756 112 806 96 806 67" marker-end="url(#parallel-arrow-gold)"/>
+            <text class="parallel-route-label activity-label" x="566" y="82">activity</text><text class="parallel-route-label result-label" x="776" y="98">AgentMessage · QueueOnly</text>
+          </svg>
+        </div>
+        <div class="parallel-lifecycle-foot"><span><i class="parallel-dot activity-dot"></i>Terminal activity reports lifecycle</span><span><i class="parallel-dot result-dot"></i>Result message enters the parent mailbox</span><button type="button" data-inspector-target="agent-mailbox">Explore delivery states ↓</button></div>
       </div>
       ${embeddedProbeMarkup()}
       <div class="upstream-refresh" aria-label="Latest upstream changes and subagent scope">
@@ -1103,13 +1267,13 @@ function renderInspector() {
         <p>Suspension order: pre-flush → stop root turn without terminal event → fence starts and signal runtime shutdown → stop root producers → flush and close root writer → emit ShutdownComplete. That event does not prove all descendant cleanup has finished; the host-side wait handoff is unresolved. Static source analysis, not a live Desktop trace.</p>
       </div>
       <div class="current-main-audit" aria-label="Current public source root and child shutdown boundaries">
-        <div class="current-main-audit-heading"><span>PUBLIC MAIN · ROOT / TREE HANDOFF</span><b>a45b8cc</b></div>
+        <div class="current-main-audit-heading"><span>PUBLIC MAIN · ROOT / TREE HANDOFF</span><b>6ae8b8a</b></div>
         <div class="current-main-audit-grid">
           <article><span>ROOT THREAD</span><strong>Emits ShutdownComplete</strong><small>The root writer is flushed and closed first. This event reports the root suspension path.</small></article>
           <article><span>DESCENDANT TREE</span><strong>Separate cleanup wait</strong><small><code>request_agent_tree_shutdown</code> returns the host-owned wait boundary; it is not awaited by this handler.</small></article>
           <article><span>HOST HANDOFF</span><strong>Wait + writer fencing</strong><small>Current source assigns descendant cleanup and persistence-writer fencing to the host. The packaged Desktop caller is still unverified.</small></article>
         </div>
-        <a href="https://github.com/openai/codex/blob/a45b8ccb016fb74f63a6bc29e701568e387cbe38/codex-rs/core/src/session/turn_suspension.rs" target="_blank" rel="noreferrer">Open the pinned root-suspension source ↗</a>
+        <a href="https://github.com/openai/codex/blob/6ae8b8aa7c608730d4315d59c5c081897ae02780/codex-rs/core/src/session/turn_suspension.rs" target="_blank" rel="noreferrer">Open the pinned root-suspension source ↗</a>
       </div>
       <section class="capacity-race-map" aria-labelledby="capacity-race-title">
         <div class="capacity-race-heading"><span>CAPACITY · CHECK VS ADMISSION · STATIC SOURCE</span><h5 id="capacity-race-title">A shared limit is checked before it is incremented</h5></div>
@@ -1144,11 +1308,16 @@ function renderInspector() {
         <div class="suspension-map-grid">
           <article class="suspension-lane prior"><div class="suspension-lane-label"><b>OLDER SNAPSHOT</b><small>97ebf2d</small></div><ol><li><i>1</i><span>List loaded descendants</span></li><li><i>2</i><span>If any exist, return <code>HasLiveDescendants</code></span></li><li class="muted-step"><i>↳</i><span>Point-in-time check; not an atomic spawn fence</span></li></ol></article>
           <article class="suspension-lane intermediate"><div class="suspension-lane-label"><b>INTERMEDIATE MAIN</b><small>9c84e89</small></div><ol><li><i>1</i><span>Flush history, cancel root turn</span></li><li><i>2</i><span>Fence starts; request shutdown for shared runtime</span></li><li><i>3</i><span>Stop root runtime, flush and close root writer</span></li><li><i>4</i><span>Emit root <code>ShutdownComplete</code></span></li></ol><div class="suspension-boundary"><span>SEPARATE TREE WAIT</span><strong>Not awaited by this handler</strong><small>Descendant cleanup completion is not established by the root event.</small></div></article>
-          <article class="suspension-lane latest"><div class="suspension-lane-label"><b>LATEST CHECKED MAIN</b><small>341de32 · a45b8cc</small></div><ol><li><i>1</i><span>Stop root turn; no loaded-descendant refusal</span></li><li><i>2</i><span>Fence new starts; request shutdown for all sessions sharing the runtime</span></li><li><i>3</i><span>Stop root producers, flush and close root writer</span></li><li><i>4</i><span>Emit root <code>ShutdownComplete</code></span></li><li><i>5</i><span>Core assigns tree-cleanup wait and persistence-writer fencing to the host; production caller not found in this source tree</span></li></ol><div class="suspension-boundary"><span>RECOVERY BOUNDARY</span><strong>Child is not auto-restarted</strong><small>Upstream integration coverage verifies termination and the separate cleanup handle.</small></div></article>
+            <article class="suspension-lane latest"><div class="suspension-lane-label"><b>LATEST CHECKED MAIN</b><small>6ae8b8a</small></div><ol><li><i>1</i><span>Stop root turn; no loaded-descendant refusal</span></li><li><i>2</i><span>Fence new starts; request shutdown for all sessions sharing the runtime</span></li><li><i>3</i><span>Stop root producers, flush and close root writer</span></li><li><i>4</i><span>Emit root <code>ShutdownComplete</code></span></li><li><i>5</i><span>Core assigns tree-cleanup wait and persistence-writer fencing to the host; production caller not found in this source tree</span></li></ol><div class="suspension-boundary"><span>RECOVERY BOUNDARY</span><strong>Child is not auto-restarted</strong><small>Upstream integration coverage verifies termination and the separate cleanup handle.</small></div></article>
         </div>
-        <p class="suspension-map-proof"><a href="https://github.com/openai/codex/blob/a45b8ccb016fb74f63a6bc29e701568e387cbe38/codex-rs/core/src/session/turn_suspension.rs#L87-L109" target="_blank" rel="noreferrer">Latest suspension handler</a> · <a href="https://github.com/openai/codex/blob/a45b8ccb016fb74f63a6bc29e701568e387cbe38/codex-rs/core/src/thread_manager/shutdown.rs#L113-L167" target="_blank" rel="noreferrer">Host tree-wait contract</a> · <a href="https://github.com/openai/codex/blob/a45b8ccb016fb74f63a6bc29e701568e387cbe38/codex-rs/core/tests/suite/abort_tasks.rs#L77-L79" target="_blank" rel="noreferrer">Integration test setup</a></p>
+        <p class="suspension-map-proof"><a href="https://github.com/openai/codex/blob/6ae8b8aa7c608730d4315d59c5c081897ae02780/codex-rs/core/src/session/turn_suspension.rs#L83-L110" target="_blank" rel="noreferrer">Latest suspension handler</a> · <a href="https://github.com/openai/codex/blob/6ae8b8aa7c608730d4315d59c5c081897ae02780/codex-rs/core/src/thread_manager/shutdown.rs#L106-L168" target="_blank" rel="noreferrer">Host tree-wait contract</a> · <a href="https://github.com/openai/codex/blob/6ae8b8aa7c608730d4315d59c5c081897ae02780/codex-rs/core/tests/suite/abort_tasks.rs#L170-L184" target="_blank" rel="noreferrer">Integration test setup</a></p>
         <div class="host-handoff-map" aria-label="Evidence map for the unresolved host-side tree cleanup wait">
-          <div class="host-handoff-heading"><span>HOST HANDOFF · CURRENT MAIN CALLSITE SEARCH</span><b>A45B8CC</b></div>
+          <div class="host-handoff-heading"><span>HOST HANDOFF · CURRENT MAIN CALLSITE SEARCH</span><b>6AE8B8A</b></div>
+          <div class="host-callsite-census" aria-label="Callsite search results">
+            <span><b>0</b> production callers in tracked <code>codex-rs</code></span>
+            <span><b>5</b> integration-test callers: 1 in <code>abort_tasks</code>, 4 in <code>agent_execution</code></span>
+            <span>Root suspension directly requests <code>LocalAgentRuntime::request_shutdown()</code></span>
+          </div>
         <div class="host-handoff-controls" role="group" aria-label="Inspect root suspension and tree cleanup milestones">
             <button type="button" data-tree-handoff-stage="root-return" aria-pressed="${treeHandoffStage === 'root-return'}">Root returns</button>
             <button type="button" data-tree-handoff-stage="tree-success" aria-pressed="${treeHandoffStage === 'tree-success'}">Tree wait succeeds</button>
@@ -1157,15 +1326,17 @@ function renderInspector() {
           </div>
           <p class="host-handoff-detail" data-handoff-detail aria-live="polite">${treeHandoffStage === 'root-return' ? 'Root ShutdownComplete confirms root shutdown and writer closure. Descendant cleanup may still be running; this event alone is not the tree completion receipt.' : treeHandoffStage === 'tree-success' ? 'A successful tree wait means admitted operations and sessions finished, including persistence-writer termination. Registry removal and the caller-owned persistence handoff still remain.' : treeHandoffStage === 'tree-failure' ? 'A failed detailed wait reports cleanup or writer-termination failures. The caller must retain ownership and handle those failures before transferring persistence ownership.' : 'The checked codex-rs tree has no production callsite joining these steps. This leaves the packaged Desktop host path unknown; absence in this source scan is not proof of absence outside the tree.'}</p>
           <div class="host-handoff-steps" data-stage="${treeHandoffStage}">
-            <article class="handoff-node signal ${treeHandoffStage === 'root-return' ? 'is-active' : ''}" data-tree-handoff-node="signal"><span>01 · CORE EVENT</span><strong>Root emits <code>ShutdownComplete</code></strong><small>Root runtime stopped; root writer closed.</small><a href="https://github.com/openai/codex/blob/a45b8ccb016fb74f63a6bc29e701568e387cbe38/codex-rs/core/src/session/turn_suspension.rs#L87-L109" target="_blank" rel="noreferrer">Current source ↗</a></article>
+            <article class="handoff-node signal ${treeHandoffStage === 'root-return' ? 'is-active' : ''}" data-tree-handoff-node="signal"><span>01 · CORE EVENT</span><strong>Root emits <code>ShutdownComplete</code></strong><small>Root runtime stopped; root writer closed.</small><a href="https://github.com/openai/codex/blob/6ae8b8aa7c608730d4315d59c5c081897ae02780/codex-rs/core/src/session/turn_suspension.rs#L83-L110" target="_blank" rel="noreferrer">Current source ↗</a></article>
             <i aria-hidden="true">→</i>
-            <article class="handoff-node api ${treeHandoffStage === 'tree-success' || treeHandoffStage === 'tree-failure' ? 'is-active' : ''}" data-tree-handoff-node="api"><span>02 · EXPORTED API</span><strong><code>wait_detailed()</code></strong><small>Waits for admitted tree work and reports cleanup failures.</small><a href="https://github.com/openai/codex/blob/a45b8ccb016fb74f63a6bc29e701568e387cbe38/codex-rs/core/src/thread_manager/shutdown.rs#L113-L167" target="_blank" rel="noreferrer">Handle contract ↗</a></article>
+            <article class="handoff-node api ${treeHandoffStage === 'tree-success' || treeHandoffStage === 'tree-failure' ? 'is-active' : ''}" data-tree-handoff-node="api"><span>02 · EXPORTED API</span><strong><code>wait_detailed()</code></strong><small>Waits for admitted tree work and reports cleanup failures.</small><a href="https://github.com/openai/codex/blob/6ae8b8aa7c608730d4315d59c5c081897ae02780/codex-rs/core/src/thread_manager/shutdown.rs#L106-L168" target="_blank" rel="noreferrer">Handle contract ↗</a></article>
             <i class="handoff-gap" aria-label="No production caller found in this repository snapshot">?</i>
-            <article class="handoff-node boundary ${treeHandoffStage === 'host-unknown' ? 'is-active' : ''}" data-tree-handoff-node="boundary"><span>03 · CALLER</span><strong>No tracked production caller found</strong><small>At a45b8cc, core explicitly assigns the tree wait and writer fence to the host; the exported request API still has test callers only. Desktop host remains unknown.</small><a href="https://github.com/openai/codex/blob/a45b8ccb016fb74f63a6bc29e701568e387cbe38/codex-rs/core/src/thread_manager/shutdown.rs#L150-L167" target="_blank" rel="noreferrer">API definition ↗</a></article>
+            <article class="handoff-node boundary ${treeHandoffStage === 'host-unknown' ? 'is-active' : ''}" data-tree-handoff-node="boundary"><span>03 · CALLER</span><strong>No tracked production caller found</strong><small>At 6ae8b8a, core explicitly assigns the tree wait and writer fence to the host; the exported request API still has test callers only. Desktop host remains unknown.</small><a href="https://github.com/openai/codex/blob/6ae8b8aa7c608730d4315d59c5c081897ae02780/codex-rs/core/src/thread_manager/shutdown.rs#L150-L168" target="_blank" rel="noreferrer">API definition ↗</a></article>
           </div>
-          <p class="host-handoff-footnote"><b>Separate mechanism:</b> app-server's <code>shutdown_drain_waiter</code> synchronizes listener replacement after <code>ShutdownComplete</code>; it is not the tree-wait handle. <a href="https://github.com/openai/codex/blob/a45b8ccb016fb74f63a6bc29e701568e387cbe38/codex-rs/app-server/src/request_processors/thread_lifecycle.rs#L389-L396" target="_blank" rel="noreferrer">Listener event path ↗</a> · <a href="https://github.com/openai/codex/blob/a45b8ccb016fb74f63a6bc29e701568e387cbe38/codex-rs/app-server/src/thread_state.rs#L109-L111" target="_blank" rel="noreferrer">Waiter ownership ↗</a></p>
+          <p class="host-handoff-footnote"><b>Separate mechanism:</b> app-server's <code>shutdown_drain_waiter</code> synchronizes listener replacement after <code>ShutdownComplete</code>; it is not the tree-wait handle. <a href="https://github.com/openai/codex/blob/6ae8b8aa7c608730d4315d59c5c081897ae02780/codex-rs/app-server/src/request_processors/thread_lifecycle.rs#L389-L396" target="_blank" rel="noreferrer">Listener event path ↗</a> · <a href="https://github.com/openai/codex/blob/6ae8b8aa7c608730d4315d59c5c081897ae02780/codex-rs/app-server/src/thread_state.rs#L109-L111" target="_blank" rel="noreferrer">Waiter ownership ↗</a></p>
         </div>
         ${shutdownPathCompareMarkup()}
+        ${shutdownScopeMarkup()}
+        ${stopAllDispatchMarkup()}
 ${desktopExitFlushMarkup()}
         ${stopCleanupMarkup()}
       </section>
@@ -1190,6 +1361,34 @@ ${desktopExitFlushMarkup()}
     <section id="activity" class="detail-section activity-section"><div class="section-title"><h4>Recent activity</h4><span>${(task.events ?? []).length} events</span></div>${events.length ? `<div class="activity-list">${events.map(event => `<div class="activity-item"><time>${escapeHtml(when(event.at))}</time><span class="activity-dot ${escapeHtml(event.kind)}"></span><span class="activity-copy"><strong>${escapeHtml(event.kind.replaceAll('_',' '))}</strong><small>${escapeHtml(String(event.detail ?? '').replace(/\s+/g,' ').slice(0,220))}</small></span></div>`).join('')}</div>` : '<div class="subtle-empty">No activity recorded yet.</div>'}</section>`;
     const deliveryModel = $('#agent-mailbox .delivery-model');
     if (deliveryModel) deliveryModel.insertAdjacentHTML('beforeend', `${mailboxTimingMarkup()}${waitScopeMarkup()}${residencyMarkup()}${completionRouteMarkup()}${admissionMarkup()}${topologyMarkup()}${boardWriteMarkup()}${toolExposureMarkup()}`);
+}
+const mechanismExplorerSteps = [
+  { label: 'Prepare', title: 'Resolve the child request', text: 'Codex builds the spawn tool from the active agent configuration. Context, model choices and tool availability depend on the selected multi-agent version and runtime settings.', source: 'multi_agents_spec.rs', href: 'https://github.com/openai/codex/blob/6ae8b8aa7c608730d4315d59c5c081897ae02780/codex-rs/core/src/tools/handlers/multi_agents_spec.rs' },
+  { label: 'Spawn', title: 'Create a child thread', text: 'spawn_agent dispatches a child task and returns its result handle. The parent can continue; that receipt does not mean the child has finished.', source: 'spawn.rs · V1 / V2', href: 'https://github.com/openai/codex/tree/6ae8b8aa7c608730d4315d59c5c081897ae02780/codex-rs/core/src/tools/handlers/multi_agents_v2' },
+  { label: 'Coordinate', title: 'Run and exchange messages', text: 'Parent and child turns have separate control paths. Messaging, waiting, and starting a follow-up turn are distinct operations; queueing a message alone does not prove the child read it.', source: 'send_message.rs · wait.rs', href: 'https://github.com/openai/codex/tree/6ae8b8aa7c608730d4315d59c5c081897ae02780/codex-rs/core/src/tools/handlers/multi_agents_v2' },
+  { label: 'Return', title: 'Route status and result separately', text: 'Completion status, activity notifications, and the result delivered to the parent are different signals. A queued result becomes usable only through the parent’s input and history path.', source: 'completion.rs · V2', href: 'https://github.com/openai/codex/tree/6ae8b8aa7c608730d4315d59c5c081897ae02780/codex-rs/core/src/agent/control' },
+  { label: 'Shutdown', title: 'Three operations, three scope rules', text: 'The phrase “agent tree shutdown” does not identify a single boundary. Compare a shared-runtime fence, an explicit spawn-subtree close, and unloading one idle thread on the same example tree.', source: 'rust-v0.162.1 · shutdown paths', href: 'https://github.com/openai/codex/tree/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/core/src/thread_manager' },
+  { label: 'Inspect', title: 'Opening a child is not spawning one', text: 'The Desktop panel first exposes known thread summaries. Selecting a child can hydrate its conversation through thread/read and load history pages; that navigation path does not create a new child thread.', source: 'installed app bundle · evidence', href: 'https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#follow-up-desktop-child-selection-hydrates-thread-state-on-demand-2026-10-16' }
+];
+let mechanismExplorerStep = 0;
+let desktopHydrationState = 'summary';
+function desktopHydrationMarkup() {
+  const states = {
+    summary: { label: '仅有摘要', result: '尚未满足详情条件', detail: 'ensureConversationFirstPage 先检查 archive suppression 与缓存；需要时才 hydrate 背景线程。摘要激活本身不保证发出 thread/read。', stage: 2 },
+    archived: { label: '归档抑制', result: 'suppressed · 提前返回', detail: 'ensureConversationFirstPage 在检查本地会话或调用 hydrateBackgroundThreads 之前命中 archive suppression；后续历史页读取不会由这次调用触发。', stage: 3, skipped: true },
+    complete: { label: '历史已完整', result: 'complete · 无需取页', detail: 'loadBackgroundThreadHistoryPage 先检查非 evicted 历史是否已完整；满足时直接返回 complete。', stage: 3 },
+    more: { label: '仍有下一页', result: 'more · continuation remains', detail: '一次取页后若状态前进且仍有 cursor 或未加载 item page，返回 more。调用方是否继续取完所有页，静态证据不能证明。', stage: 3 },
+    stalled: { label: '取页无进展', result: 'error · state did not advance', detail: '若取页后没有状态进展，或历史仍不完整却没有 cursor，加载器会报错；这不是“已完整”的同义状态。', stage: 3 }
+  }[desktopHydrationState] ?? null;
+  const buttons = [['summary', '仅有摘要'], ['archived', '归档抑制'], ['complete', '已有完整历史'], ['more', '还有下一页'], ['stalled', '无进展 / 错误']];
+  const lastNodeState = states.skipped ? 'skipped' : states.stage > 2 ? 'done' : 'active';
+  return `<section class="desktop-hydration" aria-labelledby="desktop-hydration-title"><div class="desktop-hydration-heading"><div><span class="desktop-hydration-kicker">INSTALLED DESKTOP · STATIC TRACE</span><h5 id="desktop-hydration-title">子线程详情是有边界的分页状态</h5></div><span class="desktop-hydration-version">26.1007.71326</span></div><div class="desktop-hydration-controls" role="group" aria-label="选择静态源码中的历史加载分支">${buttons.map(([id, label]) => `<button type="button" data-desktop-hydration="${id}" aria-pressed="${desktopHydrationState === id}">${label}</button>`).join('')}</div><div class="desktop-hydration-map" data-state="${desktopHydrationState}" aria-label="子线程路由、摘要激活与详情历史分页"><article class="desktop-hydration-node ${states.stage > 0 ? 'done' : 'active'}"><small>01 · PANEL ROUTE</small><strong>选中已有 child thread ID</strong><span>写入 parent-keyed route；检查 ancestry 与当前选择</span></article><i aria-hidden="true">→</i><article class="desktop-hydration-node ${states.stage > 1 ? 'done' : 'active'}"><small>02 · LOCAL SUMMARY</small><strong>activateThreadSummary</strong><span>投影已知摘要；按需确保首个 conversation page</span></article><i aria-hidden="true">→</i><article class="desktop-hydration-node ${lastNodeState}"><small>03 · HISTORY PAGE</small><strong>${states.result}</strong><span>${states.label}：${states.detail}</span></article></div><p class="desktop-hydration-proof">${states.detail} 读取参数会随调用路径变化：thread/read 的 includeTurns 可为 false；首次本地历史初始化则会包含 turns，并在分页历史下限制初始窗口。</p><p class="desktop-hydration-caveat">Source inspection only · branch selector is illustrative · no live RPC or UI paint observed</p></section>`;
+}
+function renderMechanismExplorer() {
+  const root = $('#mechanism-explorer');
+  if (!root) return;
+  const step = mechanismExplorerSteps[mechanismExplorerStep];
+  root.innerHTML = `<div class="mechanism-explorer-steps" role="group" aria-label="Subagent lifecycle steps">${mechanismExplorerSteps.map((item, index) => `<button type="button" data-mechanism-step="${index}" aria-pressed="${index === mechanismExplorerStep}" aria-label="Step ${index + 1}: ${item.label}"><span>0${index + 1}</span>${item.label}</button>`).join('')}</div><article class="mechanism-explorer-detail" aria-live="polite"><div><span>STEP 0${mechanismExplorerStep + 1} · ${step.label.toUpperCase()}</span><a href="${step.href}" target="_blank" rel="noreferrer">${step.source} ↗</a></div><h4>${step.title}</h4><p>${step.text}</p></article>${mechanismExplorerStep === 4 ? shutdownScopeMarkup() : ''}${mechanismExplorerStep === 5 ? desktopHydrationMarkup() : ''}<p class="mechanism-explorer-version">Each visualization links to its pinned source snapshot. Static source analysis; no live lifecycle action is implied.</p>`;
 }
 function mailboxTimingMarkup() {
   const beforeFinal = mailboxScenario === 'before-final';
@@ -1959,6 +2158,20 @@ $('#tree').addEventListener('keydown', event => {
   }
 });
 document.addEventListener('click', async event => {
+  const desktopHydrationButton = event.target.closest('[data-desktop-hydration]');
+  if (desktopHydrationButton) {
+    desktopHydrationState = ['summary', 'archived', 'complete', 'more', 'stalled'].includes(desktopHydrationButton.dataset.desktopHydration) ? desktopHydrationButton.dataset.desktopHydration : 'summary';
+    renderMechanismExplorer();
+    document.querySelector(`[data-desktop-hydration="${desktopHydrationState}"]`)?.focus();
+    return;
+  }
+  const mechanismStepButton = event.target.closest('[data-mechanism-step]');
+  if (mechanismStepButton) {
+    mechanismExplorerStep = Math.max(0, Math.min(mechanismExplorerSteps.length - 1, Number(mechanismStepButton.dataset.mechanismStep) || 0));
+    renderMechanismExplorer();
+    document.querySelector(`[data-mechanism-step="${mechanismExplorerStep}"]`)?.focus();
+    return;
+  }
   const probeStep = event.target.closest('[data-probe-step]');
   if (probeStep) {
     selectEmbeddedProbeStep(probeStep.dataset.probeStep);
@@ -2045,10 +2258,28 @@ document.addEventListener('click', async event => {
     stopCleanupModeButton.closest('.stop-cleanup').outerHTML = stopCleanupMarkup();
     return;
   }
+  const stopAllDiscoveryButton = event.target.closest('[data-stop-all-discovery]');
+  if (stopAllDiscoveryButton) {
+    stopAllDiscovery = stopAllDiscoveryButton.dataset.stopAllDiscovery === 'failure' ? 'failure' : 'success';
+    stopAllDiscoveryButton.closest('.stop-all-dispatch').outerHTML = stopAllDispatchMarkup();
+    return;
+  }
+  const appServerExitButton = event.target.closest('[data-app-server-exit]');
+  if (appServerExitButton) {
+    appServerExitMode = appServerExitButton.dataset.appServerExit;
+    appServerExitButton.closest('.app-server-exit-compare').outerHTML = appServerExitCompareMarkup();
+    return;
+  }
   const shutdownPathButton = event.target.closest('[data-shutdown-path]');
   if (shutdownPathButton) {
     shutdownPathFocus = shutdownPathButton.dataset.shutdownPath === 'root-suspension' ? 'root-suspension' : 'desktop-stop';
     shutdownPathButton.closest('.shutdown-path-compare').outerHTML = shutdownPathCompareMarkup();
+    return;
+  }
+  const shutdownScopeButton = event.target.closest('[data-shutdown-scope]');
+  if (shutdownScopeButton) {
+    shutdownScopeMode = ['shared-runtime', 'spawn-subtree', 'single-thread'].includes(shutdownScopeButton.dataset.shutdownScope) ? shutdownScopeButton.dataset.shutdownScope : 'shared-runtime';
+    shutdownScopeButton.closest('.shutdown-scope').outerHTML = shutdownScopeMarkup();
     return;
   }
   const nativePanelResume = event.target.closest('[data-native-panel-resume]');
@@ -2080,6 +2311,18 @@ document.addEventListener('click', async event => {
     desktopPanelStatus = nativePanelStatus.dataset.nativePanelStatus === 'done' ? 'done' : 'active';
     desktopPanelSelected = null;
     nativePanelStatus.closest('.desktop-subagents').outerHTML = desktopSubagentsMarkup();
+    return;
+  }
+  const collapseInline = event.target.closest('[data-collapse-inline]');
+  if (collapseInline) {
+    desktopCollapseHasInline = collapseInline.dataset.collapseInline === 'true';
+    collapseInline.closest('.desktop-subagents').outerHTML = desktopSubagentsMarkup();
+    return;
+  }
+  const collapseDone = event.target.closest('[data-collapse-done]');
+  if (collapseDone) {
+    desktopCollapseAllDone = collapseDone.dataset.collapseDone === 'true';
+    collapseDone.closest('.desktop-subagents').outerHTML = desktopSubagentsMarkup();
     return;
   }
   const nativePanelSelect = event.target.closest('[data-native-panel-select]');
