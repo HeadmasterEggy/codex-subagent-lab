@@ -64,6 +64,7 @@ let desktopBuild20586CanInteract = true;
 let desktopBuild20586WriterConflict = false;
 let desktopBuild20586ShouldResume = true;
 let desktopBuild20586ThreadScope = 'local-eligible';
+let desktop20770Surface = 'work';
 let treeHandoffStage = 'root-return';
 let desktopPanelShouldResume = true;
 let desktopPanelWriterConflict = false;
@@ -351,16 +352,32 @@ function nativeLifecycleMarkup() {
       ],
       tone: 'died',
       boundary: 'The failure path releases in-memory ownership. The inspected handler does not establish durable edge closure or parent-result delivery.'
+    },
+    closedResume: {
+      label: 'Closed child after cold resume',
+      eyebrow: 'PERSISTED GRAPH · RUNTIME RESTORE GAP',
+      nodes: [
+        ['CLOSE', 'Edge → Closed', 'close_agent records the target edge as Closed, then shuts down its runtime and releases its registry metadata.'],
+        ['ROOT RESUME', 'Restore only Open edges', 'The root restore query filters descendants by Open and restores identity metadata without reopening runtimes.'],
+        ['QUERY', 'Still in thread tree', 'Tree/list queries without an Open filter can still expose the historical child relationship.'],
+        ['DIRECT RESUME', 'Owner loader lacks metadata', 'The V2 loader requires parent ownership and registered child metadata; this closed child has not been restored into that registry.'],
+        ['APP-SERVER', 'Resume path returns error', 'The request guidance says resume the parent first or use thread/read, but this snapshot’s Open-only restore does not re-register the Closed child.'],
+        ['INSPECT', 'thread/read remains available', 'The observed route is historical inspection. No source path in this trace reopens the Closed edge or reloads the child runtime.']
+      ],
+      tone: 'closed',
+      boundary: 'Static source inference for public Codex commit e89b7c4. It links close cleanup, root metadata restoration, the owner-controlled loader, and app-server error mapping; no live resume attempt was captured.'
     }
   };
   const selected = scenarios[nativeLifecycleScenario] ? nativeLifecycleScenario : 'complete';
   nativeLifecycleScenario = selected;
   const scenario = scenarios[selected];
-  return `<div class="native-lifecycle-trace" data-tone="${scenario.tone}">
-    <div class="native-lifecycle-controls" role="group" aria-label="Compare child terminal lifecycle paths">${Object.entries(scenarios).map(([key,value]) => `<button type="button" data-native-lifecycle="${key}" aria-pressed="${selected === key}">${value.label}</button>`).join('')}</div>
+  const recoverySources = selected === 'closedResume' ? '<p class="native-lifecycle-sources"><a href="https://github.com/openai/codex/blob/e89b7c442c0433ad5167e72a5a25bb6d0712766a/codex-rs/core/src/agent/control/spawn.rs#L195-L279" target="_blank" rel="noreferrer">Open-only restore</a><a href="https://github.com/openai/codex/blob/e89b7c442c0433ad5167e72a5a25bb6d0712766a/codex-rs/core/src/thread_manager.rs#L1284-L1316" target="_blank" rel="noreferrer">parent-owned loader</a><a href="https://github.com/openai/codex/blob/e89b7c442c0433ad5167e72a5a25bb6d0712766a/codex-rs/app-server/src/request_processors/thread_processor.rs#L3991-L4012" target="_blank" rel="noreferrer">resume error mapping</a><a href="https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#follow-up-closed-v2-child-cold-resume-restores-tree-visibility-but-not-runtime-identity-2026-10-19" target="_blank" rel="noreferrer">evidence ledger</a></p>' : '';
+  return `<div class="native-lifecycle-trace" data-tone="${scenario.tone}" data-scenario="${selected}">
+    <div class="native-lifecycle-controls" role="group" aria-label="Compare child lifecycle and recovery paths">${Object.entries(scenarios).map(([key,value]) => `<button type="button" data-native-lifecycle="${key}" aria-pressed="${selected === key}">${value.label}</button>`).join('')}</div>
     <div class="native-lifecycle-heading"><span>${scenario.eyebrow}</span><b>${scenario.label}</b></div>
-    <ol class="native-lifecycle-flow" aria-live="polite">${scenario.nodes.map(([tag,title,detail],index) => `<li><span class="native-lifecycle-index">${String(index + 1).padStart(2,'0')}</span><div><small>${tag}</small><b>${title}</b><p>${detail}</p></div></li>`).join('')}</ol>
+    <ol class="native-lifecycle-flow" aria-live="polite">${scenario.nodes.map(([tag,title,detail],index) => `<li data-tone="${scenario.tone}"><span class="native-lifecycle-index">${String(index + 1).padStart(2,'0')}</span><div><small>${tag}</small><b>${title}</b><p>${detail}</p></div></li>`).join('')}</ol>
     <p class="native-lifecycle-boundary"><b>Interpretation</b>${scenario.boundary}</p>
+    ${recoverySources}
     <p class="native-lifecycle-sources"><a href="https://github.com/openai/codex/blob/89461ea6833832b0551ce24ee32205824d5c108d/codex-rs/core/src/session/mod.rs#L2504-L2572" target="_blank" rel="noreferrer">terminal callback</a><a href="https://github.com/openai/codex/blob/89461ea6833832b0551ce24ee32205824d/codex-rs/core/src/agent/control/completion.rs#L25-L153" target="_blank" rel="noreferrer">result routing</a><a href="https://github.com/openai/codex/blob/89461ea6833832b0551ce24ee32205824d/codex-rs/core/src/agent/control/legacy.rs#L7-L124" target="_blank" rel="noreferrer">explicit close</a><a href="https://github.com/openai/codex/blob/89461ea6833832b0551ce24ee32205824d/codex-rs/core/src/agent/control.rs#L347-L361" target="_blank" rel="noreferrer">death cleanup</a></p>
   </div>`;
 }
@@ -1641,8 +1658,19 @@ function desktopBuild20586Markup() {
     <header class="desktop-20586-head"><div><span>INSTALLED DESKTOP · BUILD 20586</span><h5 id="desktop-20586-title">Two subagent surfaces, two detail routes</h5></div><span class="desktop-20586-tag">STATIC BUNDLE</span></header>
     <div class="desktop-20586-switch" role="group" aria-label="Choose the installed panel surface"><button type="button" data-20586-surface="work" aria-pressed="${isWork}">ChatGPT Work</button><button type="button" data-20586-surface="local" aria-pressed="${!isWork}">Local conversation</button></div>
     ${isWork ? `<div class="desktop-20586-flow"><div class="desktop-20586-status-groups" role="group" aria-label="Explore Work subagent status"><section class="desktop-20586-status-group active-group"><header><b>ACTIVE</b><small>Waiting and Working</small></header><div>${stages.filter(stage => ['waiting','working'].includes(stage.id)).map(stage => `<button type="button" data-20586-status="${stage.id}" aria-pressed="${desktopBuild20586Status === stage.id}"><span>${stage.label}</span></button>`).join('')}</div></section><section class="desktop-20586-status-group done-group"><header><b>DONE</b><small>Terminal outcomes</small></header><div>${stages.filter(stage => ['done','failed'].includes(stage.id)).map(stage => `<button type="button" data-20586-status="${stage.id}" aria-pressed="${desktopBuild20586Status === stage.id}"><span>${stage.id === 'done' ? 'Completed' : 'Failed'}</span></button>`).join('')}</div></section></div><article class="desktop-20586-detail ${desktopBuild20586Status === 'done' ? 'has-query-map' : ''}" data-status="${selected.id}"><span class="desktop-20586-kicker">SELECTED CHILD · ${selected.label.toUpperCase()}</span><strong>${selected.copy}</strong>${desktopBuild20586Status === 'done' ? desktop20586FinalQueryMarkup() : ''}<small>Group membership follows the inspected Work panel: Waiting and Working are Active; completed and failed are separate terminal outcomes in Done.</small></article></div>` : `<div class="desktop-20586-local"><div class="desktop-20586-local-flow"><article><span>01 · DESCENDANT SNAPSHOT</span><b>Parent conversation</b><small>Local thumbnail resolves known descendant threads and shows a child count.</small></article><i aria-hidden="true">→</i><article><span>02 · SUBAGENTS PANEL</span><b>Active · Done</b><small>Active list is capped at four visible items in the inspected projection.</small></article><i aria-hidden="true">→</i><article><span>03 · CHILD DETAIL</span><b>Embedded transcript</b><small>The panel passes interaction only when the selected child's <code>canInteract</code> is exactly true.</small></article></div><section class="desktop-20586-gate" aria-labelledby="desktop-20586-gate-title"><div class="desktop-20586-gate-heading"><div><span class="desktop-20586-kicker">LOCAL CHILD · INDEPENDENT RENDERER GATES</span><b id="desktop-20586-gate-title">Change inputs to trace each UI outcome</b></div><button class="desktop-20586-conflict" type="button" data-20586-conflict aria-pressed="${desktopBuild20586WriterConflict}">Writer conflict · ${desktopBuild20586WriterConflict ? 'on' : 'off'}</button></div><div class="desktop-20586-expression" aria-label="Resume lookup requires shouldResume and canInteract and either an eligible local thread or a shared thread"><span class="${desktopBuild20586ShouldResume ? 'is-true' : 'is-false'}">shouldResume <b>${desktopBuild20586ShouldResume ? 'true' : 'false'}</b></span><i>AND</i><span class="${desktopBuild20586CanInteract ? 'is-true' : 'is-false'}">canInteract <b>${desktopBuild20586CanInteract ? 'true' : 'false'}</b></span><i>AND</i><span class="${threadScope !== 'local-ineligible' ? 'is-true' : 'is-false'}">thread scope <b>${scopeLabels[threadScope]}</b></span><i>→</i><strong class="${resumeAllowed ? 'gate-pass' : 'gate-block'}">${resumeAllowed ? 'thread id supplied' : 'lookup skipped'}</strong></div><div class="desktop-20586-gate-inputs"><fieldset><legend>Resume requested</legend><div class="desktop-20586-switch"><button type="button" data-20586-resume="yes" aria-pressed="${desktopBuild20586ShouldResume}">Yes</button><button type="button" data-20586-resume="no" aria-pressed="${!desktopBuild20586ShouldResume}">No</button></div></fieldset><fieldset><legend>canInteract prop</legend><div class="desktop-20586-switch"><button type="button" data-20586-interact="yes" aria-pressed="${desktopBuild20586CanInteract}">True</button><button type="button" data-20586-interact="no" aria-pressed="${!desktopBuild20586CanInteract}">False</button></div></fieldset><fieldset><legend>Thread scope</legend><div class="desktop-20586-switch"><button type="button" data-20586-scope="local-eligible" aria-pressed="${threadScope === 'local-eligible'}">Eligible local</button><button type="button" data-20586-scope="shared" aria-pressed="${threadScope === 'shared'}">Shared</button><button type="button" data-20586-scope="local-ineligible" aria-pressed="${threadScope === 'local-ineligible'}">Ineligible local</button></div></fieldset></div><div class="desktop-20586-gate-results"><article><span>RESUME LOOKUP</span><b class="${resumeAllowed ? 'gate-pass' : 'gate-block'}">${resumeAllowed ? 'Attempted with child thread id' : 'Not attempted'}</b><small>${resumeReason}</small></article><article><span>TRANSCRIPT</span><b>${!desktopBuild20586CanInteract || desktopBuild20586WriterConflict ? 'Read only' : 'Interactive view'}</b><small>${desktopBuild20586WriterConflict ? 'Writer conflict independently forces read-only.' : 'Read-only when canInteract is false.'}</small></article><article><span>COMPOSER</span><b>${desktopBuild20586CanInteract && !desktopBuild20586WriterConflict ? 'Shown' : 'Hidden'}</b><small>${desktopBuild20586WriterConflict ? 'Hidden by writer conflict.' : 'Shown only when canInteract is true.'}</small></article></div><p class="desktop-20586-note">These controls illustrate inspected client conditions; they do not control a live conversation or prove server authorization.</p>${desktop20586SelectionMarkup(route)}</div>`}
+    ${desktopBuild20770Markup()}
     <p class="desktop-20586-source">Checked members: <code>chatgpt-subagents-panel-ad8b93c61a12.js</code> · <code>local-conversation-subagents-panel-tab-70cb3c70c0c0.js</code> · <code>verify-descendant-2646968c60d7.js</code> · <code>subagents-8eb0ab1e1e0d.js</code> · <a href="https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#follow-up-local-child-selection-validates-ancestry-and-rejects-stale-panel-updates-build-20586-2026-10-17" target="_blank" rel="noreferrer">evidence ledger ↗</a></p>
     <p class="desktop-20586-boundary">Module hashes match this build’s ASAR manifest. Static UI logic only: this diagram does not show a live session, network response, or rendered Desktop screenshot.</p>
+  </section>`;
+}
+
+function desktopBuild20770Markup() {
+  const isWork = desktop20770Surface === 'work';
+  return `<section class="desktop-20770" aria-labelledby="desktop-20770-title">
+    <header><div><span>INSTALLED DESKTOP · 26.1013.40934 / BUILD 20770</span><strong id="desktop-20770-title">Current bundle cross-check</strong></div><span>STATIC · PARTIAL COVERAGE</span></header>
+    <div class="desktop-20770-tabs" role="group" aria-label="Choose build 20770 panel projection"><button type="button" data-20770-surface="work" aria-pressed="${isWork}">ChatGPT Work</button><button type="button" data-20770-surface="local" aria-pressed="${!isWork}">Local conversation</button></div>
+    ${isWork ? `<ol class="desktop-20770-flow"><li><small>STATUS PROJECTION</small><b>Waiting / Working → Active</b><span>Done / Failed → Done</span></li><li><small>SELECTED DONE CHILD</small><b>Activation-scoped cache</b><code>conversationId · threadId · activationId</code><span>GET sends conversationId, threadId, limit=1</span></li><li><small>RESPONSE CHOICE</small><b>Prefer final_answer</b><span>Else latest non-empty agent message; unavailable response retries up to 2 times.</span></li></ol><p>Work panel and thumbnail share the query cache; thumbnail preview is capped at 1,000 characters.</p>` : `<ol class="desktop-20770-flow"><li><small>DESCENDANT SNAPSHOT</small><b>Parent → child list</b><span>Active rows capped at 4; Done rows at 10; waiting count shown separately.</span></li><li><small>SELECTED CHILD</small><b>Validate ancestry + current selection</b><span>Stale async results are discarded before the panel updates.</span></li><li><small>DETAIL SURFACE</small><b>Child transcript</b><span>Model/reasoning appears in the header; interaction is passed only for canInteract === true.</span></li></ol><p>Row preview is objective text truncated to 60 characters, then status summary; active children can fall back to “Working”.</p>`}
+    <small class="desktop-20770-proof">Evidence: app.asar SHA-256 <code>5ddc4e48…09c10916ddb</code> · nine selected JS resources · zero parse failures · semantic graph capped at 18,000 nodes. No live panel or request was captured.</small>
   </section>`;
 }
 
@@ -3512,7 +3540,7 @@ document.addEventListener('click', async event => {
   }
   const nativeLifecycleButton = event.target.closest('[data-native-lifecycle]');
   if (nativeLifecycleButton) {
-    nativeLifecycleScenario = ['close','died'].includes(nativeLifecycleButton.dataset.nativeLifecycle) ? nativeLifecycleButton.dataset.nativeLifecycle : 'complete';
+    nativeLifecycleScenario = ['close','died','closedResume'].includes(nativeLifecycleButton.dataset.nativeLifecycle) ? nativeLifecycleButton.dataset.nativeLifecycle : 'complete';
     nativeLifecycleButton.closest('.native-spawn-trace').outerHTML = nativeSpawnTraceMarkup();
     document.querySelector(`[data-native-lifecycle="${nativeLifecycleScenario}"]`)?.focus();
     return;
@@ -3698,6 +3726,12 @@ document.addEventListener('click', async event => {
   if (desktop20586Surface) {
     desktopBuild20586Surface = desktop20586Surface.dataset['20586Surface'] === 'local' ? 'local' : 'work';
     desktop20586Surface.closest('.desktop-20586').outerHTML = desktopBuild20586Markup();
+    return;
+  }
+  const desktop20770SurfaceButton = event.target.closest('[data-20770-surface]');
+  if (desktop20770SurfaceButton) {
+    desktop20770Surface = desktop20770SurfaceButton.dataset['20770Surface'] === 'local' ? 'local' : 'work';
+    desktop20770SurfaceButton.closest('.desktop-20586').outerHTML = desktopBuild20586Markup();
     return;
   }
   const desktop20586Status = event.target.closest('[data-20586-status]');
