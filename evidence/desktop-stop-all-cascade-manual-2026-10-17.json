@@ -1,0 +1,61 @@
+{
+  "date": "2026-10-17",
+  "kind": "manual_local_lab_ui_check",
+  "surface": "local Subagent Lab page",
+  "url": "http://127.0.0.1:4499/",
+  "scenario": "Desktop build 20586 root user-stop explanation",
+  "viewport": "390x844 mobile layout, reviewed in browser",
+  "steps": [
+    {
+      "checkpoint": 1,
+      "selected": true,
+      "detail": "Parent turn interrupt; manager schedules descendant cleanup in the background.",
+      "boundary": "Parent interrupt and descendant sweep have separate completion timing."
+    },
+    {
+      "checkpoint": 2,
+      "selected": true,
+      "detail": "Sweep active children from the current descendant snapshot; mark handled only after a non-null interrupted turn ID.",
+      "boundary": "Snapshot can be stale; per-child failures are caught and logged."
+    },
+    {
+      "checkpoint": 3,
+      "selected": true,
+      "detail": "Discover the descendant tree again after pass 1.",
+      "boundary": "Failed or incomplete discovery can leave descendants undiscovered."
+    },
+    {
+      "checkpoint": 4,
+      "selected": true,
+      "detail": "Skip already handled children and try the local manager or in-progress turn interrupt for remaining active children.",
+      "boundary": "Best-effort per-child sweep, not an atomic tree operation or completion receipt."
+    },
+    {
+      "checkpoint": 5,
+      "selected": true,
+      "detail": "Panel invokes child interrupt callbacks without awaiting their promises; loading can clear while manager work continues.",
+      "boundary": "No tree-wide acknowledgement proves every child stopped."
+    }
+  ],
+  "observations": {
+    "all_five_controls_became_selected_when_clicked": true,
+    "each_click_updated_its_matching_detail_and_boundary": true,
+    "browser_console_errors": [],
+    "responsive_mobile_layout_reviewed": true
+  },
+  "interpretation": {
+    "establishes": [
+      "The local Lab's five checkpoint controls are interactive and show matching explanatory copy.",
+      "The local Lab's mobile layout and stated evidence boundary were manually reviewed."
+    ],
+    "does_not_establish": [
+      "A live Codex Desktop Stop all interaction or child interrupt result.",
+      "That Codex's native UI or manager stopped every child.",
+      "A runtime acknowledgement for the two descendant passes."
+    ]
+  },
+  "limitations": [
+    "Manual review of a local Lab explanation page, not a test suite.",
+    "The displayed mechanism is based on pinned static installed-bundle evidence; this browser check did not exercise Codex's native interruption path."
+  ]
+}

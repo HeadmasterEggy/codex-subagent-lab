@@ -227,6 +227,7 @@ function enqueueMessage(task, item, { internal = false } = {}) {
 }
 function waitForInboxActivity(task, timeoutMs) {
   if (task.messages.length > 0) return Promise.resolve(true);
+  if (terminal(task)) return Promise.resolve(false);
   return new Promise(resolve => {
     let finished = false;
     const done = value => {
@@ -394,7 +395,7 @@ const server = http.createServer(async (req, res) => {
       if (req.headers['x-lab-task-id'] !== task.id) return sendJson(res, 403, { error: 'A task can read only its own inbox' });
       const rawWait = Number(url.searchParams.get('wait_ms'));
       const waitMs = Number.isFinite(rawWait) ? Math.max(0, Math.min(30_000, rawWait)) : 0;
-      if (task.messages.length === 0 && waitMs > 0) {
+      if (task.messages.length === 0 && waitMs > 0 && !terminal(task)) {
         await new Promise(resolveWait => {
           let done = false;
           const finish = () => { if (done) return; done = true; clearTimeout(timer); task.waiters.delete(checkMessages); resolveWait(); };

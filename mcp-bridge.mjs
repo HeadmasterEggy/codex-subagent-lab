@@ -8,7 +8,7 @@ if (!baseUrl || !token || !taskId) throw new Error('Subagent Lab MCP bridge requ
 const tools = [
   {
     name: 'spawn_agent',
-    description: 'Start a child Codex agent for a bounded subtask. It appears under this task in the Subagent Lab tree. The child shares the fixed read-only workspace and may itself create children.',
+    description: 'Queue a child Codex process for a bounded subtask. The tool returns on local queue admission, not on child-process start or Codex acceptance of its initial input. The returned status is only a current snapshot; check list_agents for later state. The child shares the fixed read-only workspace.',
     annotations: { title: 'Spawn local child agent', destructiveHint: false, openWorldHint: false },
     inputSchema: {
       type: 'object', additionalProperties: false, required: ['prompt'],
@@ -89,7 +89,13 @@ async function callTool(name, args) {
     const value = await request(`/api/coordination/tasks/${taskId}/children`, {
       method: 'POST', body: { prompt: args.prompt, includeParentContext: args.include_parent_context === true, ...(typeof args.keep_session === 'boolean' ? { keepSession: args.keep_session } : {}) },
     });
-    return { task_id: value.id, status: value.status, note: 'Child task created in the shared Subagent Lab tree.' };
+    return {
+      task_id: value.id,
+      status: value.status,
+      queue_admitted: true,
+      process_start_confirmed: false,
+      note: `Task entered the local queue/runner (current status: ${value.status}). This response does not confirm child-process start or Codex acceptance of its initial input; check list_agents for later state and asynchronous launch failure.`,
+    };
   }
   if (name === 'list_agents') return await request(`/api/coordination/tasks/${taskId}/children`);
   if (name === 'wait_agent') {

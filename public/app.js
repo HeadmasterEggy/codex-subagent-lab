@@ -20,21 +20,32 @@ let toolExposureDisableMessages = false;
 let toolExposureWaitEnabled = true;
 let waitScopeScenario = 'nested-relay';
 let waitScopeStep = 0;
+let waitContractEvent = 'target-complete';
 let appServerProjectionTool = 'spawnAgent';
 let appServerHydrationView = 'turn-link';
 let rendererReadRoute = 'selected-thread';
+let rendererUpdateStage = 0;
+let interactionCompareVersion = 'v1-capture';
+let interactionCompareSelection = 'parent-0';
 let residencyScenario = 'completed-followup';
 let interruptCloseScenario = 'interrupt-resident';
 let interruptCloseLifecycleStep = 2;
+let desktopStopCascadeStep = 0;
 let admissionScenario = 'sequential';
 let topologyScenario = 'panel-open';
+let topologyEligibilityState = 'visible';
 let fullFidelityScenario = 'background';
-let rendererDeltaScenario = 'conversation-missing';
+let rendererDeltaScenario = 'item-matched';
+let rendererDeltaType = 'agent-message';
+let desktopRuntimeStep = 2;
+let desktopTopologyStep = 0;
+let persistenceCheckpointStep = 2;
 let completionPayloadScenario = 'parent-input';
 let parentResultState = 'active';
 let completionRouteMode = 'v2';
 let completionRouteStep = 0;
 let embeddedProbeStep = 0;
+let cliV1ProbeStep = 0;
 let requestWireTransport = 'http';
 let requestWireContent = 'plaintext';
 let desktopPanelStatus = 'active';
@@ -47,6 +58,7 @@ let desktopCollapseAllDone = false;
 let desktopResourceFocus = 'local';
 let desktopBuild20586Surface = 'work';
 let desktopBuild20586Status = 'working';
+let desktopBuild20586TurnLive = true;
 let desktopBuild20586Route = 'accepted';
 let desktopBuild20586CanInteract = true;
 let desktopBuild20586WriterConflict = false;
@@ -67,6 +79,8 @@ let spawnConfigRole = false;
 let spawnProtocolVersion = 'v2';
 let spawnProtocolOutcome = 'success';
 let nativeSpawnFocus = 0;
+let nativeEvidenceView = 'v2Run';
+let nativeLifecycleScenario = 'complete';
 let standaloneStaticSpawnFocus = 0;
 let standaloneEvidenceLens = 0;
 let standaloneVtableArtifact = 'desktop';
@@ -74,6 +88,7 @@ let agentControlEntry = 'new-root';
 let agentControlFactoryEnabled = false;
 let agentControlSource = 'installed';
 let agentControlVersion = 'v2';
+let versionResolutionScenario = 'feature-fallback';
 let terminalScenario = 'completed';
 let activeFilter = 'all';
 let taskSearch = '';
@@ -299,6 +314,162 @@ function spawnProtocolMarkup() {
   </section>`;
 }
 
+function nativeLifecycleMarkup() {
+  const scenarios = {
+    complete: {
+      label: 'Turn completes',
+      eyebrow: 'FINAL TURN · ROUTED RESULT',
+      nodes: [
+        ['SESSION', 'TurnComplete', 'V2 spawned child reaches a final status.'],
+        ['PARENT ACTIVITY', 'Completed item', 'Emitted when a parent-turn reference is available.'],
+        ['MAILBOX', 'Result queued', 'Inter-agent result uses trigger_turn = false.'],
+        ['CHILD LIFETIME', 'Still resident', 'This path does not release registry ownership or mark the persisted edge Closed.']
+      ],
+      tone: 'complete',
+      boundary: 'A completed turn and a closed child are different states. The source path routes the result; it does not perform explicit close cleanup.'
+    },
+    close: {
+      label: 'Parent calls close_agent',
+      eyebrow: 'EXPLICIT OPERATION · TREE SHUTDOWN',
+      nodes: [
+        ['REQUEST', 'close_agent(child)', 'Caller explicitly selects the child to close.'],
+        ['PERSISTENCE', 'Edge → Closed', 'Written for non-ephemeral child sessions before shutdown.'],
+        ['TREE SCOPE', 'Child + live descendants', 'The runtime snapshots descendants and shuts down each live thread.'],
+        ['CLEANUP', 'Remove owned state', 'Flush rollout, then remove thread, residency, registry entry, and mailbox.']
+      ],
+      tone: 'close',
+      boundary: 'Explicit close is the path that records Closed and performs tree cleanup. It is separate from receiving a final turn event.'
+    },
+    died: {
+      label: 'InternalAgentDied',
+      eyebrow: 'ABNORMAL FAILURE · OWNERSHIP RELEASE',
+      nodes: [
+        ['REQUEST', 'Thread operation fails', 'The controller receives InternalAgentDied for this child.'],
+        ['IN-MEMORY', 'Release local ownership', 'Remove thread, V2 residency, and spawned-thread registry entry.'],
+        ['PERSISTENCE', 'Edge status unknown', 'This error handler does not write the spawn edge as Closed.'],
+        ['PARENT RESULT', 'Separate route', 'This cleanup handler alone does not prove a completion message reached the parent.']
+      ],
+      tone: 'died',
+      boundary: 'The failure path releases in-memory ownership. The inspected handler does not establish durable edge closure or parent-result delivery.'
+    }
+  };
+  const selected = scenarios[nativeLifecycleScenario] ? nativeLifecycleScenario : 'complete';
+  nativeLifecycleScenario = selected;
+  const scenario = scenarios[selected];
+  return `<div class="native-lifecycle-trace" data-tone="${scenario.tone}">
+    <div class="native-lifecycle-controls" role="group" aria-label="Compare child terminal lifecycle paths">${Object.entries(scenarios).map(([key,value]) => `<button type="button" data-native-lifecycle="${key}" aria-pressed="${selected === key}">${value.label}</button>`).join('')}</div>
+    <div class="native-lifecycle-heading"><span>${scenario.eyebrow}</span><b>${scenario.label}</b></div>
+    <ol class="native-lifecycle-flow" aria-live="polite">${scenario.nodes.map(([tag,title,detail],index) => `<li><span class="native-lifecycle-index">${String(index + 1).padStart(2,'0')}</span><div><small>${tag}</small><b>${title}</b><p>${detail}</p></div></li>`).join('')}</ol>
+    <p class="native-lifecycle-boundary"><b>Interpretation</b>${scenario.boundary}</p>
+    <p class="native-lifecycle-sources"><a href="https://github.com/openai/codex/blob/89461ea6833832b0551ce24ee32205824d5c108d/codex-rs/core/src/session/mod.rs#L2504-L2572" target="_blank" rel="noreferrer">terminal callback</a><a href="https://github.com/openai/codex/blob/89461ea6833832b0551ce24ee32205824d/codex-rs/core/src/agent/control/completion.rs#L25-L153" target="_blank" rel="noreferrer">result routing</a><a href="https://github.com/openai/codex/blob/89461ea6833832b0551ce24ee32205824d/codex-rs/core/src/agent/control/legacy.rs#L7-L124" target="_blank" rel="noreferrer">explicit close</a><a href="https://github.com/openai/codex/blob/89461ea6833832b0551ce24ee32205824d/codex-rs/core/src/agent/control.rs#L347-L361" target="_blank" rel="noreferrer">death cleanup</a></p>
+  </div>`;
+}
+
+function nativeEvidenceJourneyMarkup() {
+  const views = {
+    source: {
+      eyebrow: 'PUBLIC SOURCE + INSTALLED BINARY · STATIC RECONSTRUCTION',
+      label: 'Native V2 handler path',
+      steps: [
+        ['SOURCE', 'V2 spawn_agent handler', 'Version-matched handler prepares the request and calls the shared AgentControl interface.'],
+        ['BINARY + SOURCE', 'Candidate controller tables', 'Both installed tables contain LocalAgentControl::spawn at +0x28; no evidence ties the handler receiver to either table.'],
+        ['SOURCE ORDER', 'Started follows acceptance', 'The handler emits Started after AgentControl::spawn returns. This is the source contract, not a captured Desktop event.']
+      ],
+      boundary: 'Static V2 explanation. The installed Desktop UI was not the source of the captured CLI run below.'
+    },
+    cli: {
+      eyebrow: 'CAPTURED ROLLOUTS · INSTALLED CLI 0.163.0-ALPHA.10.2',
+      label: 'Observed V1 CLI run',
+      steps: [
+        ['PARENT TURN · V1', 'codex exec', 'The parent turn context records multi_agent_version = v1; the invocation explicitly enabled multi_agent in read-only mode.'],
+        ['SPAWN EVENT', 'spawn_agent → child thread', 'The parent event stream records child 01a145e7-03fd-7cb2-b0f6-d6acbe0d8caa, linked back to parent 01a145e6-d7ff-7793-9b37-1f1b50fc57ed.'],
+        ['WAIT COMPLETE', 'Child returns marker', 'The child rollout records parent_thread_id and V1; the parent receives CODEX-SUBAGENT-PROBE-1017 and completes.']
+      ],
+      boundary: 'Runtime evidence for this CLI exec only. It does not identify a Desktop conversation’s controller, vtable, or panel updates.'
+    },
+    lab: {
+      eyebrow: 'THIS LAB · LOCAL IMPLEMENTATION FLOW',
+      label: 'CLI-backed Lab coordinator',
+      steps: [
+        ['REQUEST', 'spawn_agent handler', 'The bridge validates the request and creates a local in-memory task record.'],
+        ['QUEUE RECEIPT', 'queue_admitted = true', 'The response confirms scheduler admission; process_start_confirmed remains false at this point.'],
+        ['SCHEDULER', 'Launch codex exec later', 'The scheduler starts the child process and reports its result through task state and the parent inbox.']
+      ],
+      boundary: 'Implementation semantics from this Lab’s code. Queue admission and child-process start are different events.'
+    },
+    v2Attempt: {
+      eyebrow: 'CAPTURED CLI ATTEMPT · NO CHILD EVIDENCE',
+      label: 'Marker claim rejected by the event trace',
+      steps: [
+        ['MODEL TEXT', '“I’ll spawn one child”', 'The parent announces an intention. No spawn_agent item follows in the captured stream.'],
+        ['TOOL EVENT', 'wait → 0 recipients', 'The only collaboration call is wait; receiver_thread_ids and agents_states are empty.'],
+        ['FINAL TEXT', 'Marker appears without a child', 'The parent repeats the requested marker, but there is no child rollout or child result to support it.']
+      ],
+      boundary: 'Classified as an invalid subagent probe. The feature flag was enabled in a separate CLI listing, but this ephemeral turn has no saved multi_agent_version metadata; the resolved version and reason for the missing spawn remain unknown.'
+    },
+    v2Run: {
+      eyebrow: 'PERSISTED V2 RUN · PARENT AND CHILD LINKED',
+      label: 'Spawn is present in the rollout, missing from the CLI JSON projection',
+      steps: [
+        ['PARENT TURN · V2', 'Resolved version = v2', 'CLI 0.163.0-alpha.10.2 ran with a per-invocation V2 override. The persisted turn_context records V2.'],
+        ['PERSISTED RESPONSE ITEMS', 'spawn_agent → child_ok', 'The parent rollout records the completed spawn_agent function call and its matching output. The CLI --json event stream omitted this spawn item.'],
+        ['LINKED CHILD ROLLOUT', 'Parent ID matches · CHILD_OK', 'A separate child rollout records thread_spawn.parent_thread_id matching the parent and completes with the requested result.']
+      ],
+      boundary: 'This proves a persisted V2 child run for this CLI invocation. The CLI event projection showed wait with empty recipient/state fields, so that projection alone cannot establish absence. Why the projections differ, which controller served the run, and whether Desktop rendered the native panel remain unknown.'
+    },
+    jsonGap: {
+      eyebrow: 'VERSION-MATCHED SOURCE · CLI 0.163.0-ALPHA.10.2 · 4EBC485',
+      label: 'V2 child activity reaches app-server, then falls out of exec JSON',
+      steps: [
+        ['CORE · V2 SPAWN', 'Creates child, emits SubAgentActivity', 'After AgentControl::spawn succeeds, the V2 handler emits a Started activity item carrying the child thread ID and task path.'],
+        ['APP-SERVER', 'Canonical item notifications', 'Core emits ItemStarted and ItemCompleted. The app-server forwards these notifications, preserving the SubAgentActivity item.'],
+        ['CLI · exec --json', 'No matching output variant', 'The JSON mapper handles CollabAgentToolCall, but its fallback returns None for SubAgentActivity. Both lifecycle notifications are omitted.'],
+        ['INDEPENDENT RECORD', 'Rollout still links the child', 'The same run’s persisted parent function call and child parent_thread_id prove execution despite the missing JSON item.']
+      ],
+      boundary: 'The 0.163.0-alpha.10.2 source matches the installed CLI version and explains the observed JSON omission. This establishes the CLI projection boundary only; Desktop renderer delivery and native panel paint are separate and remain unverified.'
+    },
+    wake: {
+      eyebrow: 'LATEST PUBLIC MAIN · 89461EA · SOURCE ONLY',
+      label: 'Queued child mail can wake an eligible idle root',
+      steps: [
+        ['DELIVERY', 'Queue the inter-agent message', 'The handler enqueues mailbox communication before asking the shared scheduler to consider pending work.'],
+        ['FEATURE GATE', 'WakeOnAgentMessages enabled', 'Mailbox updates also consult the scheduler from the session submission loop; a message does not bypass scheduling.'],
+        ['ELIGIBILITY', 'Idle, uninterrupted root in an automatic mode', 'No active turn may exist; pending mail, root-session identity, non-interrupted state, and a mode that permits automatic turns are required.'],
+        ['BOUNDARY', 'Plan mode and child sessions stay queued', 'Source tests cover interrupted root, Plan mode, and a subagent session: no turn is reserved and the communication remains in the mailbox.']
+      ],
+      boundary: 'This behavior is present in public main at 89461ea. It is not established for the installed 0.163.0-alpha.10.2 CLI or Desktop; this is a source path, not a live runtime capture.'
+    },
+    lifecycle: {
+      eyebrow: 'LATEST PUBLIC MAIN · 89461EA · SOURCE ONLY',
+      label: 'A final turn is not a close operation',
+      steps: [],
+      boundary: 'Compare the separate source paths for normal completion, explicit close, and abnormal thread death.'
+    }
+  };
+  const view = views[nativeEvidenceView] ? nativeEvidenceView : 'v2Run';
+  nativeEvidenceView = view;
+  const item = views[view];
+  const evidenceUrl = view === 'jsonGap'
+    ? 'https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#follow-up-version-matched-source-explains-the-v2-cli-json-projection-gap-2026-10-19'
+    : view === 'wake'
+    ? 'https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#follow-up-latest-public-main-can-wake-an-idle-root-on-queued-agent-mail-2026-10-19'
+    : view === 'lifecycle'
+    ? 'https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#follow-up-terminal-child-result-delivery-does-not-close-or-release-the-child-2026-10-19'
+    : view === 'v2Run'
+    ? 'https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#follow-up-persisted-v2-child-run-is-absent-from-the-cli-json-spawn-projection-2026-10-19'
+    : view === 'v2Attempt'
+    ? 'https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#follow-up-v2-cli-attempt-did-not-create-a-child-2026-10-17'
+    : 'https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#follow-up-successful-installed-cli-subagent-probe-2026-10-17';
+  return `<section class="native-evidence-journey" aria-labelledby="native-evidence-journey-title">
+    <header><div><span>EIGHT EVIDENCE VIEWS</span><h5 id="native-evidence-journey-title">Separate the claimed action from the recorded child</h5></div><a href="${evidenceUrl}" target="_blank" rel="noreferrer">Open evidence record ↗</a></header>
+    <div class="native-evidence-tabs" role="group" aria-label="Choose an evidence view">${[['v2Run','V2 run · child linked'],['jsonGap','Why JSON omits spawn'],['wake','Queued mail wake · latest main'],['lifecycle','Complete vs close'],['source','Native source'],['cli','Captured V1 run'],['v2Attempt','V2 attempt · no child'],['lab','This Lab']].map(([key,label]) => `<button type="button" data-native-evidence-view="${key}" aria-pressed="${view === key}">${label}</button>`).join('')}</div>
+    <div class="native-evidence-panel" aria-live="polite" data-layer="${view}">
+      <div class="native-evidence-panel-heading"><b>${item.label}</b><span>${item.eyebrow}</span></div>
+      ${view === 'lifecycle' ? nativeLifecycleMarkup() : `<ol class="native-evidence-steps">${item.steps.map(([tag,title,detail],index) => `<li><span>${String(index + 1).padStart(2,'0')}</span><div><small>${tag}</small><b>${title}</b><p>${detail}</p></div></li>`).join('')}</ol><p class="native-evidence-boundary"><b>Boundary</b> ${item.boundary}</p>`}
+    </div>
+  </section>`;
+}
+
 function nativeSpawnTraceMarkup() {
   const sourceRoot = 'https://github.com/openai/codex/blob/4ebc485ca321243727539187169425fcf972f2c4/codex-rs/core/src';
   const steps = [
@@ -319,10 +490,26 @@ function nativeSpawnTraceMarkup() {
       href: `${sourceRoot}/thread_spawn.rs`
     },
     {
+      label: 'Build controller',
+      tag: 'INSTALLED BINARY + SOURCE CORRELATION',
+      title: 'The local controller has a construction path',
+      text: 'The installed binary places ThreadManager::agent_control_for_config at 0x1055d9870; it calls an internal routine at 0x10561cac0. That routine generates a UUID v7 and stores it at object offset +0x60. The matched public source maps this boundary to LocalAgentControl::new(...), without proving package build provenance.',
+      file: 'controller construction · static disassembly',
+      href: 'https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#follow-up-local-controller-construction-path-in-the-installed-binary-2026-10-17'
+    },
+    {
+      label: 'Decode vtables',
+      tag: 'STATIC SLOT DISPATCH · LIVE TABLE UNKNOWN',
+      title: 'Both candidate tables dispatch through identity',
+      text: 'Disassembly shows a static indirect call through slot +0x18 (identity) for each candidate table: A at 0x104bf5ddc and B at 0x10574466c. Both tables also contain resolve at +0x20 and spawn at +0x28. This proves static callsites use these slots; it does not identify the table selected by the constructor or the V2 handler receiver.',
+      file: 'candidate method-table slot dispatch',
+      href: 'https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#follow-up-candidate-table-references-dispatch-through-the-first-method-slot'
+    },
+    {
       label: 'Create child',
-      tag: 'SOURCE + UNRESOLVED INDIRECT EDGE',
-      title: 'AgentControl accepts the child turn',
-      text: 'The pinned source calls AgentControl::spawn with MessageDeliveryMode::TriggerTurn. The installed binary exports LocalAgentControl::spawn at 0x105623b3c, but this disassembly has not resolved the handler’s indirect dispatch to that address.',
+      tag: 'SOURCE CONTRACT · BINARY DISPATCH UNKNOWN',
+      title: 'The handler calls through AgentControl::spawn',
+      text: 'The pinned source calls AgentControl::spawn with MessageDeliveryMode::TriggerTurn. The installed binary exports LocalAgentControl::spawn at 0x105623b3c, but the handler’s indirect receiver has not been connected to either candidate table. The concrete controller used by a particular spawn remains unknown.',
       file: 'agent/control/spawn.rs',
       href: `${sourceRoot}/agent/control/spawn.rs`
     },
@@ -345,11 +532,26 @@ function nativeSpawnTraceMarkup() {
   ];
   nativeSpawnFocus = Math.max(0, Math.min(steps.length - 1, Number(nativeSpawnFocus) || 0));
   const step = steps[nativeSpawnFocus];
+  const constructionEvidence = 'https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#follow-up-local-controller-construction-path-in-the-installed-binary-2026-10-17';
   return `<section class="native-spawn-trace" aria-labelledby="native-spawn-trace-title">
-    <div class="native-spawn-heading"><div><span>INSTALLED ARM64 · V2 SPAWN CROSS-CHECK</span><h5 id="native-spawn-trace-title">Follow the request across source and binary evidence</h5></div><small>Codex 0.163.0-alpha.10.2 · tag 4ebc485</small></div>
+    <div class="native-spawn-heading"><div><span>INSTALLED ARM64 · STATIC V2 CROSS-CHECK</span><h5 id="native-spawn-trace-title">Follow the request across source and binary evidence</h5></div><small>Codex 0.163.0-alpha.10.2 · tag 4ebc485</small></div>
+    ${nativeEvidenceJourneyMarkup()}
+    <div class="controller-map" aria-label="Controller construction and spawn dispatch evidence map">
+      <div class="controller-map-lane"><span class="controller-lane-label">SESSION SETUP</span><button type="button" data-native-spawn-step="2"><b>ThreadManager</b><small>agent_control_for_config</small><code>0x1055d9870</code></button><i aria-hidden="true">→</i><button type="button" data-native-spawn-step="2"><b>LocalAgentControl</b><small>constructor boundary</small><code>0x10561cac0</code></button><i class="controller-unknown-edge" aria-hidden="true">⇢ ?</i><button type="button" data-native-spawn-step="3" class="controller-unknown-node"><b>vtable selection</b><small>not resolved</small></button></div>
+      <div class="controller-candidates"><span>STATIC METHOD TABLES</span><button type="button" data-native-spawn-step="3"><b>TABLE A</b><small>0x10e3978a0 · ref 0x104bf5dcc</small><small>+18 identity · +20 resolve · +28 spawn</small></button><button type="button" data-native-spawn-step="3"><b>TABLE B</b><small>0x10e3bbca0 · refs 0x10561bdbc / 0x10574465c</small><small>+18 identity · +20 resolve · +28 spawn</small></button></div>
+      <div class="controller-slot-flow" aria-label="Static indirect calls and equivalent identity method bodies in candidate tables"><span>STATIC CALLSITES</span><div><b>TABLE A</b><code>+0x18</code><i aria-hidden="true">→</i><strong>identity()</strong><small>blr at 0x104bf5ddc</small></div><div><b>TABLE B</b><code>+0x18</code><i aria-hidden="true">→</i><strong>identity()</strong><small>blr at 0x10574466c</small></div><p>Both identity entries read the same 16-byte UUID at object +0x60. Their equivalent code does not reveal which vtable a live task selected.</p><div class="controller-identity-body"><span>ENTRY A · 0x104afe99c</span><span>ENTRY B · 0x105624944</span><div><code>ldr q0, [x0, #0x60]</code><i aria-hidden="true">→</i><code>str q0, [x8]</code><i aria-hidden="true">→</i><code>ret</code></div></div></div>
+      <div class="controller-map-lane controller-turn-lane"><span class="controller-lane-label">TURN / SPAWN</span><button type="button" data-native-spawn-step="0"><b>V2 handler</b><small>spawn_agent</small></button><i aria-hidden="true">→</i><button type="button" data-native-spawn-step="4"><b>AgentControl::spawn</b><small>indirect target unknown</small></button><i aria-hidden="true">→</i><button type="button" data-native-spawn-step="5"><b>Started</b><small>after spawn returns</small></button></div>
+      <p><b>Solid:</b> symbol/source-correlated locations and static references. <b>Dashed:</b> the selected runtime controller is not recovered.</p>
+      <a href="${constructionEvidence}" target="_blank" rel="noreferrer">Open construction and vtable evidence ↗</a>
+    </div>
     <div class="native-spawn-rail" role="group" aria-label="V2 spawn evidence checkpoints">${steps.map((item, index) => `<button type="button" data-native-spawn-step="${index}" aria-pressed="${index === nativeSpawnFocus}"><span>0${index + 1}</span><b>${item.label}</b></button>`).join('')}</div>
-    <article class="native-spawn-detail" aria-live="polite"><div><span>${step.tag}</span><a href="${step.href}" target="_blank" rel="noreferrer">${step.file} ↗</a></div><h6>${step.title}</h6><p>${step.text}</p></article>
-    <p class="native-spawn-boundary"><b>Evidence boundary</b> Same-version source improves comparison confidence, but there is no signed build provenance. The desktop app was not launched and no spawn transition was induced.</p>
+    <article class="native-spawn-detail" aria-live="polite"><div><span>${step.tag}</span><a href="${step.href}" target="_blank" rel="noreferrer">${step.file} ↗</a></div><h6>${step.title}</h6><p>${step.text}</p>
+      <div class="spawn-admission-compare" aria-label="Compare native spawn acceptance with local Lab queue admission">
+        <section><small>CODEX NATIVE · ACCEPTANCE RECEIPT</small><b>AgentControl::spawn returns</b><p>The handler can then emit <code>Started</code>. The receipt means the child turn was accepted, not completed.</p></section>
+        <section><small>THIS LAB · QUEUE ADMISSION</small><b><code>spawn_agent</code> returns queued</b><p>The local task exists in memory; its CLI process may not have started. Launch failure is reported later through task state and the parent inbox.</p></section>
+      </div>
+    </article>
+    <p class="native-spawn-boundary"><b>Evidence boundary</b> Same-version source improves comparison confidence, but there is no signed build provenance. The captured runtime path above is standalone CLI V1; no Desktop conversation spawn or panel update was captured.</p>
   </section>`;
 }
 function standaloneStaticSpawnTraceMarkup() {
@@ -639,6 +841,66 @@ function updateSequenceStep(container, value) {
   if (output) output.textContent = `${step} / ${max} · ${label}`;
   if (range) range.setAttribute('aria-valuetext', `${step} of ${max}: ${label}`);
 }
+const desktopRuntimeStages = [
+  { title:'Parent rollout links two completed spawns', evidence:'One parent turn contains two completed CollabAgentToolCall records. Each record lists a receiver thread ID.', boundary:'This establishes recorded parent-to-child references; it does not show what the desktop renderer displayed.' },
+  { title:'Both child rollouts resolve back to that parent', evidence:'Two child session records identify Codex Desktop, thread_source=subagent, depth 1, V1, and the same parent thread. Their IDs match the parent receivers.', boundary:'The identifiers were compared locally and omitted from this shareable summary.' },
+  { title:'Desktop app-server reads those child threads', evidence:'The GUI-associated Desktop log contains thread/read, turn/started, and thread/name/set requests for the same child IDs near their rollout creation time.', boundary:'This is direct Desktop-side request handling evidence, not a panel-render callback.' },
+  { title:'Native panel paint remains unobserved', evidence:'No inspected event names a panel component, acknowledges a renderer commit, or records a visible child card.', boundary:'The final UI state is unknown; do not infer a successful render from app-server reads.' }
+];
+const desktopTopologyStages = [
+  { lane:'PARENT TURN', title:'A parent item names a child', kind:'STATIC SOURCE', detail:'The reducer calls discoverForSpawn for collabAgentToolCall with tool=spawnAgent, or subAgentActivity with kind=started. The renderer projector also collects receiverThreadIds and non-interacted activity items.', proof:'app-initial reducer + app-primary Mat', limit:'A matching item is a candidate relationship; it does not by itself prove discovery completed.' },
+  { lane:'RUNTIME REDUCER', title:'Topology discovery is requested', kind:'STATIC SOURCE', detail:'discoverForSpawn accepts those two item forms. For a single receiver already cached with the expected parent, it refreshes that child; otherwise it starts discovery from the parent.', proof:'app-initial SubagentTopology.discoverForSpawn', limit:'This is the code path defined by the bundle; the inspected live run was not instrumented to prove this method fired.' },
+  { lane:'THREAD STORE', title:'Child metadata is hydrated', kind:'STATIC SOURCE', detail:'The known-child path calls thread/read with includeTurns=false, background priority and collab_hydration source, then upserts the returned thread before discovering descendants.', proof:'app-initial refreshAndDiscoverSubtree', limit:'Thread metadata hydration is separate from reading child transcript history.' },
+  { lane:'DESCENDANT SNAPSHOT', title:'Relationships are reconciled', kind:'STATIC SOURCE', detail:'Discovery lists descendant threads with pagination and source-kind filtering where supported. Fallback paths can inspect cloud item history or paginated turn history, read missing threads, validate parent identity and reconcile a completeness-aware snapshot.', proof:'app-initial listDescendantThreads + history readers', limit:'Which fallback runs depends on protocol support, history mode and cache state; the diagram does not claim every route runs every reader.' },
+  { lane:'PARENT ROW PROJECTOR', title:'Candidate rows are built and filtered', kind:'STATIC SOURCE', detail:'app-primary combines parent-turn memberships with cached, summary and descendant-snapshot candidates, deduplicates them, then applies latest-reference and runtime/terminal suppression rules.', proof:'app-primary Mat / Nat / Fat / Lat', limit:'Static predicates do not identify which source supplied a specific live row.' },
+  { lane:'REACT / SCREEN', title:'Commit and visible paint', kind:'UNKNOWN', detail:'The inspected evidence has no React commit acknowledgement, mounted component event, screenshot or visible-card confirmation tied to these children.', proof:'Open evidence boundary', limit:'Do not infer a rendered panel row from app-server reads or static renderer code.' }
+];
+function desktopTopologyMarkup() {
+  const step = Math.max(0, Math.min(desktopTopologyStages.length - 1, desktopTopologyStep));
+  const stage = desktopTopologyStages[step];
+  return `<section class="desktop-topology" aria-labelledby="desktop-topology-title">
+    <header class="desktop-topology-head"><div><span>INSTALLED DESKTOP · BUILD 20586 · STATIC SOURCE TRACE</span><h5 id="desktop-topology-title">How a parent spawn can become a child row</h5><p>Follow the code path stage by stage. Amber marks an unobserved runtime boundary.</p></div><b>26.1013.31256</b></header>
+    <div class="desktop-topology-rail" role="group" aria-label="Select a stage in the Desktop subagent topology path">${desktopTopologyStages.map((item,index)=>`<button type="button" class="${index===step?'is-selected':''} ${item.kind==='UNKNOWN'?'is-unknown':''}" data-desktop-topology-step="${index}" aria-pressed="${index===step}"><span>${String(index+1).padStart(2,'0')}</span><small>${escapeHtml(item.lane)}</small><strong>${escapeHtml(item.title)}</strong><i aria-hidden="true">${index===desktopTopologyStages.length-1?'?':'→'}</i></button>`).join('')}</div>
+    <div class="desktop-topology-readout" aria-live="polite" data-kind="${stage.kind==='UNKNOWN'?'unknown':'source'}"><div><span>${escapeHtml(stage.kind)}</span><h6>${escapeHtml(stage.title)}</h6><p>${escapeHtml(stage.detail)}</p><small><b>Source:</b> ${escapeHtml(stage.proof)}</small></div><aside><strong>Evidence boundary</strong><p>${escapeHtml(stage.limit)}</p></aside></div>
+    <footer class="desktop-topology-foot"><span>Bundle SHA-256 prefixes</span><code>app-initial d6278b41…bab78fe</code><code>app-primary a4e892d5…fe6dd78</code><a href="https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#installed-desktop-panel-row-candidate-and-suppression-rules-build-20586-2026-10-17" target="_blank" rel="noreferrer">Open evidence ledger ↗</a></footer>
+  </section>`;
+}
+function selectDesktopTopologyStep(value) {
+  const next = Number.parseInt(value, 10);
+  desktopTopologyStep = Number.isFinite(next) ? Math.max(0, Math.min(desktopTopologyStages.length - 1, next)) : 0;
+  const card = $('.desktop-topology');
+  if (card) card.outerHTML = desktopTopologyMarkup();
+}
+function desktopRuntimeMarkup() {
+  const step = Math.max(0, Math.min(desktopRuntimeStages.length - 1, desktopRuntimeStep));
+  const stage = desktopRuntimeStages[step];
+  const runtimeNodes = [
+    ['PARENT ROLLOUT', 'Parent receiver recorded', 'runtime-observed'],
+    ['CHILD ROLLOUT', 'Depth 1 · same parent', 'runtime-observed'],
+    ['DESKTOP LOG', 'thread/read · turn/started · thread/name/set', 'runtime-observed'],
+    ['VISIBLE UI', 'Visible card unknown', 'runtime-unknown'],
+  ];
+  const childTracks = ['Child A', 'Child B'].map((child, index) => `<div class="desktop-runtime-child-track"><strong>${child}<small>masked child ID ${index + 1}</small></strong>${runtimeNodes.map(([label, detail, status], stageIndex) => `<span class="${status}" data-runtime-stage="${stageIndex}"><small>${label}</small><b>${detail}</b></span>`).join('')}</div>`).join('');
+  return `<section class="desktop-runtime-proof" aria-labelledby="desktop-runtime-proof-title" data-step="${step}">
+    <header class="desktop-runtime-proof-head"><div><span>CAPTURED DESKTOP RUNTIME · REDACTED LINKAGE</span><h5 id="desktop-runtime-proof-title">From parent spawn to Desktop reads — then an open render boundary</h5></div><b>26.1013.31256 · 20586</b></header>
+    <p class="desktop-runtime-proof-intro">Two real V1 child threads were linked across parent/child rollouts and the running Desktop log. Select a checkpoint to inspect what each source proves.</p>
+    <div class="desktop-runtime-proof-tabs" role="group" aria-label="Select a Desktop runtime evidence checkpoint">${desktopRuntimeStages.map((item,index)=>`<button type="button" data-desktop-runtime-step="${index}" aria-pressed="${step===index}"><span>0${index+1}</span>${escapeHtml(['Parent calls','Child linkage','Desktop reads','Panel boundary'][index])}</button>`).join('')}</div>
+    <div class="desktop-runtime-proof-map" data-step="${step}" aria-label="Two masked child IDs aligned across parent rollout, child rollout, Desktop app-server log, and unknown visible rendering">
+      <div class="desktop-runtime-child-head"><span>CHILD ID</span><span>PARENT ROLLOUT</span><span>CHILD ROLLOUT</span><span>DESKTOP LOG</span><span>VISIBLE UI</span></div>
+      ${childTracks}
+      <div class="desktop-runtime-static-route"><strong>STATIC RENDERER PATH <small>same build · source inspection only</small></strong><span>Subagent panel selection</span><i>→</i><span>Thread/history projection</span><i>→</i><span>Virtualized rows</span><i>→</i><b>React commit / paint unknown</b></div>
+      <p class="desktop-runtime-separation">The runtime rows above are correlated by matching child IDs. The renderer path below is static source analysis; no captured evidence joins it to either child’s live UI.</p>
+    </div>
+    <div class="desktop-runtime-proof-readout" aria-live="polite"><span>${String(step+1).padStart(2,'0')} / 04</span><div><strong>${escapeHtml(stage.title)}</strong><p>${escapeHtml(stage.evidence)}</p><small>${escapeHtml(stage.boundary)}</small></div></div>
+    <footer class="desktop-runtime-proof-foot"><span>Evidence:</span><a href="https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#follow-up-live-desktop-app-server-reads-for-parent-linked-child-threads-2026-10-17" target="_blank" rel="noreferrer">research ledger</a><a href="https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/desktop-child-runtime-2026-10-17.json" target="_blank" rel="noreferrer">redacted evidence summary</a></footer>
+  </section>`;
+}
+function selectDesktopRuntimeStep(value) {
+  const next = Number.parseInt(value, 10);
+  desktopRuntimeStep = Number.isFinite(next) ? Math.max(0, Math.min(desktopRuntimeStages.length - 1, next)) : 0;
+  const card = $('.desktop-runtime-proof');
+  if (card) card.outerHTML = desktopRuntimeMarkup();
+}
 function renderDesktopGate() {
   return `<section class="desktop-gate" aria-label="Static Codex Desktop subagent interaction gate"><div class="desktop-gate-heading"><div><span class="desktop-gate-eyebrow">DESKTOP BUNDLE · STATIC TRACE</span><h5>Why a child row can open an interactive thread</h5></div><span>26.1007.71326</span></div><p class="desktop-gate-intro">Select the parent-thread evidence. The local selector folds these items into a <code>canInteract</code> hint before the Subagents panel opens a child.</p><div class="desktop-gate-cases" role="group" aria-label="Select parent-thread evidence scenario"><button type="button" data-desktop-case="same-turn" aria-pressed="true">spawnAgent in this turn</button><button type="button" data-desktop-case="activity-only" aria-pressed="false">Activity only</button><button type="button" data-desktop-case="prior-turn" aria-pressed="false">Spawn was in prior turn</button></div><div class="desktop-gate-flow" data-case="same-turn" aria-live="polite"><article class="desktop-gate-node"><small>PARENT TURN EVIDENCE</small><strong data-gate-evidence>collabAgentToolCall · spawnAgent</strong><span data-gate-scope>matching child reference in this parent turn</span></article><i aria-hidden="true">→</i><article class="desktop-gate-node gate-selector"><small>LOCAL ROW SELECTOR</small><strong>Dat → kat</strong><span>fold evidence into child row</span></article><i aria-hidden="true">→</i><article class="desktop-gate-node gate-outcome"><small data-gate-flag>canInteract = true</small><strong data-gate-outcome>interactive thread route</strong><span data-gate-effect>composer may be available; resume hook can be eligible</span></article></div><p class="desktop-gate-boundary" data-gate-boundary>UI routing hint only. It does not establish server authorization, a live child process, or that a resume actually occurs.</p><p class="desktop-gate-source">Inspected asset SHA-256: <code>c002f1b37cb1…ca528f</code> · <a href="https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md" target="_blank" rel="noreferrer">research ledger and evidence notes</a></p></section>`;
 }
@@ -676,34 +938,56 @@ function selectFullFidelityScenario(scenarioName) {
   container.outerHTML = fullFidelityMarkup();
 }
 function rendererDeltaMarkup() {
+  const deltaTypes = {
+    'agent-message': { label:'Agent message', methods:'item/agentMessage/delta', queue:'frame text queue', target:'matching turn + agent-message item ID/type' },
+    plan: { label:'Plan', methods:'item/plan/delta', queue:'frame text queue', target:'matching turn + plan item ID/type' },
+    reasoning: { label:'Reasoning', methods:'item/reasoning/summaryTextDelta · item/reasoning/textDelta', queue:'frame text queue', target:'matching turn + reasoning item ID/type' },
+    'command-output': { label:'Command output', methods:'item/commandExecution/outputDelta', queue:'separate output queue · 50 ms flush', target:'matching commandExecution item ID' }
+  };
   const scenarios = {
-    'conversation-missing': { conversation:'NOT IN THIS RENDERER', item:'NOT LOOKED UP', result:'DROP GROUP', tone:'dropped', detail:'Flush cannot resolve the conversation (or it has no canonical history/turns), so this renderer skips the queued delta group.' },
-    'item-missing': { conversation:'FOUND · HISTORY PRESENT', item:'NO MATCHING ITEM ID + TYPE', result:'NO ITEM PATCH', tone:'filtered', detail:'The conversation passes the first lookup, but the delta still needs a matching turn/item/type. Command output with no matching commandExecution item is dropped.' },
-    'item-matched': { conversation:'FOUND · HISTORY PRESENT', item:'TURN + ITEM ID/TYPE MATCH', result:'STORE UPDATED', tone:'applied', detail:'The matching local item is patched. This proves a store update path, not a React commit or visible paint.' }
+    'child-unregistered': { child:'BLOCKED · unknown child or no registered surface', conversation:'NOT REACHED', item:'NOT REACHED', result:'NO IPC BROADCAST', tone:'dropped', detail:'The Desktop connection gate rejects this child delta before renderer delivery.' },
+    'conversation-missing': { child:'PASSED · child has an eligible surface', conversation:'MISSING OR ZERO TURNS', item:'NOT LOOKED UP', result:'DROP CONVERSATION GROUP', tone:'dropped', detail:'The receiving renderer cannot resolve the conversation, or its canonical history/turn list is empty.' },
+    'item-missing': { child:'PASSED · child has an eligible surface', conversation:'FOUND · HISTORY PRESENT', item:'NO MATCHING TARGET ID/TYPE', result:'NO ITEM PATCH', tone:'filtered', detail:'This delta family still needs the matching turn and item. Command output requires an existing commandExecution item.' },
+    'item-matched': { child:'PASSED · child has an eligible surface', conversation:'FOUND · HISTORY PRESENT', item:'TARGET ID/TYPE MATCHES', result:'STORE UPDATED', tone:'applied', detail:'The local transcript store can be patched. This does not prove a React commit or visible paint.' }
   };
   const scenario = scenarios[rendererDeltaScenario] ?? scenarios['conversation-missing'];
+  const delta = deltaTypes[rendererDeltaType] ?? deltaTypes['agent-message'];
   return `<section class="renderer-delta" aria-labelledby="renderer-delta-title">
-    <div class="renderer-delta-heading"><div><span class="renderer-delta-eyebrow">RENDERER BUNDLE · STATIC MERGE TRACE</span><h5 id="renderer-delta-title">A broadcast can still disappear before the transcript updates</h5></div><span>26.1007.30912</span></div>
-    <p class="renderer-delta-intro">This is the receiving renderer's second gate, after the Desktop connection has allowed and broadcast a delta. Choose what its local conversation store contains.</p>
-    <div class="renderer-delta-controls" role="group" aria-label="Choose renderer delta merge scenario">
-      <button type="button" data-renderer-delta="conversation-missing" aria-pressed="${rendererDeltaScenario === 'conversation-missing'}">Conversation missing</button>
-      <button type="button" data-renderer-delta="item-missing" aria-pressed="${rendererDeltaScenario === 'item-missing'}">Item missing</button>
-      <button type="button" data-renderer-delta="item-matched" aria-pressed="${rendererDeltaScenario === 'item-matched'}">Item matches</button>
+    <div class="renderer-delta-heading"><div><span class="renderer-delta-eyebrow">DESKTOP + RENDERER BUNDLES · STATIC GATE TRACE</span><h5 id="renderer-delta-title">Inspect where a child delta can stop</h5></div><span>FORWARDING 26.1007.71326 · MERGE 26.1007.30912</span></div>
+    <p class="renderer-delta-intro">Choose a delta family, then a receiver condition. The stages distinguish the Desktop child/surface gate, the renderer queue, conversation readiness, and the final item match.</p>
+    <div class="renderer-delta-controls" role="group" aria-label="Choose delta family">
+      <button type="button" data-renderer-delta-type="agent-message" aria-pressed="${rendererDeltaType === 'agent-message'}">Agent message</button>
+      <button type="button" data-renderer-delta-type="plan" aria-pressed="${rendererDeltaType === 'plan'}">Plan</button>
+      <button type="button" data-renderer-delta-type="reasoning" aria-pressed="${rendererDeltaType === 'reasoning'}">Reasoning</button>
+      <button type="button" data-renderer-delta-type="command-output" aria-pressed="${rendererDeltaType === 'command-output'}">Command output</button>
+    </div>
+    <div class="renderer-delta-controls renderer-delta-gates" role="group" aria-label="Choose receiving state">
+      <button type="button" data-renderer-delta="child-unregistered" aria-pressed="${rendererDeltaScenario === 'child-unregistered'}">Child gate closed</button>
+      <button type="button" data-renderer-delta="conversation-missing" aria-pressed="${rendererDeltaScenario === 'conversation-missing'}">Conversation unavailable</button>
+      <button type="button" data-renderer-delta="item-missing" aria-pressed="${rendererDeltaScenario === 'item-missing'}">Target item missing</button>
+      <button type="button" data-renderer-delta="item-matched" aria-pressed="${rendererDeltaScenario === 'item-matched'}">Target item matches</button>
     </div>
     <div class="renderer-delta-flow" data-case="${scenario.tone}" aria-live="polite">
-      <article class="renderer-delta-node"><span>IPC BROADCAST</span><strong>delta arrives</strong><small>Every live window listener receives the allowed notification</small></article><i aria-hidden="true">→</i>
-      <article class="renderer-delta-node"><span>CONVERSATION LOOKUP</span><strong>${scenario.conversation}</strong><small>Grouped by conversation ID; history/turn presence is checked</small></article><i aria-hidden="true">→</i>
-      <article class="renderer-delta-node"><span>ITEM MERGE</span><strong>${scenario.item}</strong><small>Text/output deltas target existing local turn items</small></article><i aria-hidden="true">→</i>
+      <article class="renderer-delta-node"><span>DESKTOP FORWARD GATE</span><strong>${scenario.child}</strong><small>Child ID known + at least one registered full-fidelity surface</small></article><i aria-hidden="true">→</i>
+      <article class="renderer-delta-node"><span>${escapeHtml(delta.label.toUpperCase())} · EVENT</span><strong>${escapeHtml(delta.methods)}</strong><small>Accepted family enters the ${escapeHtml(delta.queue)}</small></article><i aria-hidden="true">→</i>
+      <article class="renderer-delta-node"><span>CONVERSATION STORE</span><strong>${scenario.conversation}</strong><small>Queued deltas are grouped by conversation ID; history/turn presence is checked</small></article><i aria-hidden="true">→</i>
+      <article class="renderer-delta-node"><span>ITEM TARGET</span><strong>${scenario.item}</strong><small>Expected target: ${escapeHtml(delta.target)}</small></article><i aria-hidden="true">→</i>
       <article class="renderer-delta-node renderer-delta-result"><span>LOCAL OUTCOME</span><strong>${scenario.result}</strong><small>${scenario.detail}</small></article>
     </div>
-    <p class="renderer-delta-boundary">Per-window broadcast is not per-window readiness. Missing conversation/history skips the group; missing item/type prevents a patch. Even “STORE UPDATED” is not proof of a React commit or visible paint. Static bundle analysis only.</p>
-    <p class="renderer-delta-source"><a href="https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#renderer-handling-after-full-fidelity-ipc-broadcast" target="_blank" rel="noreferrer">hashed renderer trace, queue flush and item merge evidence</a></p>
+    <p class="renderer-delta-boundary">The Desktop forwarding gate, event queue, and receiving-store merge come from separate bundle builds; this diagram combines static paths and is not one captured session. An accepted update still does not prove a React commit or visible paint.</p>
+    <p class="renderer-delta-source"><a href="https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#renderer-handling-after-full-fidelity-ipc-broadcast" target="_blank" rel="noreferrer">renderer queue and item merge evidence</a> · <a href="https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#follow-up-parent-activity-discovery-and-full-fidelity-forwarding-use-separate-client-gates" target="_blank" rel="noreferrer">Desktop forwarding gate evidence</a></p>
   </section>`;
 }
 function selectRendererDeltaScenario(scenarioName) {
   const container = $('.renderer-delta');
   if (!container) return;
-  rendererDeltaScenario = ['conversation-missing','item-missing','item-matched'].includes(scenarioName) ? scenarioName : 'conversation-missing';
+  rendererDeltaScenario = ['child-unregistered','conversation-missing','item-missing','item-matched'].includes(scenarioName) ? scenarioName : 'item-matched';
+  container.outerHTML = rendererDeltaMarkup();
+}
+function selectRendererDeltaType(typeName) {
+  const container = $('.renderer-delta');
+  if (!container) return;
+  rendererDeltaType = ['agent-message','plan','reasoning','command-output'].includes(typeName) ? typeName : 'agent-message';
   container.outerHTML = rendererDeltaMarkup();
 }
 function completionPayloadMarkup() {
@@ -1123,30 +1407,82 @@ function topologyMarkup() {
         ['RESULT', 'Complete or partial', 'Read failures, cursor anomalies, or identity mismatch keep isComplete false.']
       ],
       outcome: 'A partial descendant set can still contain useful rows. Keep the unknown portion visible as unknown instead of presenting it as an empty tree.'
+    },
+    'select-child': {
+      label: 'SELECTED CHILD · TWO DATA PATHS',
+      stages: [
+        ['PARENT PROJECTION', 'Build known list rows', 'The panel reads its subagent rows from the parent conversation selector.'],
+        ['SELECTION', 'Find row by child ID', 'The selected child is resolved against those projected rows for its display name and canInteract value.'],
+        ['CHILD METADATA', 'Verify and hydrate', 'The opener checks ancestry and may fetch missing parent or child summaries.'],
+        ['CHILD HISTORY', 'Load transcript pages', 'The embedded child view uses its own thread identity and history path.']
+      ],
+      outcome: 'The parent projection supplies the list and selected-row facts. Child metadata and transcript hydration are follow-up reads; reading history does not itself create a parent list row.'
+    },
+    'row-eligibility': {
+      label: 'PARENT ROW · CANDIDATE AND FILTER GATES',
+      stages: [
+        ['CANDIDATE INPUTS', 'Merge known relationships', 'Parent turn items, cached child conversations, active summaries, and descendant snapshots can contribute candidates.'],
+        ['LINEAGE + MEMBERSHIP', 'Associate with parent turn', 'The projection checks parent identity and derives a latest parent-turn reference for each candidate.'],
+        ['ROW DERIVATION', 'Need a usable reference', 'If no matching parent reference is derived, the row builder returns no list row even when a child transcript exists.'],
+        ['STATUS FILTERS', 'Some rows are suppressed', 'Closed agents, hidden terminal agents, and system errors can be omitted; incomplete discovery can leave status unresolved.']
+      ],
+      outcome: 'Child history belongs to the child detail path. The parent list is a separate projection over relationship candidates, parent-turn references, discovery completeness, and runtime state.'
     }
   };
   const scenario = scenarios[topologyScenario] ?? scenarios['panel-open'];
+  const rowEligibility = topologyScenario === 'row-eligibility' ? rowEligibilityMarkup() : '';
   return `<section class="topology-map" data-topology-map="${topologyScenario}" aria-labelledby="topology-map-title">
-    <div class="topology-heading"><div><span class="topology-eyebrow">DESKTOP UI · STATIC TOPOLOGY TRACE</span><h5 id="topology-map-title">Does opening the panel discover every child?</h5></div><span class="topology-version">installed build · 26.1007.30912</span></div>
-    <p class="topology-intro">Mounting the panel subscription can both render a snapshot and start discovery. Typed item events and later store notifications provide additional refresh paths.</p>
+    <div class="topology-heading"><div><span class="topology-eyebrow">DESKTOP UI · STATIC TOPOLOGY TRACE</span><h5 id="topology-map-title">How does the Subagents panel get its rows?</h5></div><span class="topology-version">installed build · 26.1013.31256 · 20586</span></div>
+    <p class="topology-intro">Separate discovery, parent-row projection, and selected-child hydration. These are connected client paths with different inputs and outputs.</p>
     <div class="topology-controls" role="group" aria-label="Choose a Desktop topology path">
       <button type="button" data-topology-case="panel-open" aria-pressed="${topologyScenario === 'panel-open'}">Open panel</button>
       <button type="button" data-topology-case="spawn-event" aria-pressed="${topologyScenario === 'spawn-event'}">Spawn event</button>
       <button type="button" data-topology-case="partial-discovery" aria-pressed="${topologyScenario === 'partial-discovery'}">Partial discovery</button>
+      <button type="button" data-topology-case="select-child" aria-pressed="${topologyScenario === 'select-child'}">Select child</button>
+      <button type="button" data-topology-case="row-eligibility" aria-pressed="${topologyScenario === 'row-eligibility'}">Row eligibility</button>
     </div>
     <div class="topology-flow" data-case="${topologyScenario}" aria-live="polite">
       ${scenario.stages.map(([label,title,detail],index) => `<article class="topology-node" data-stage="${index}"><span>${label}</span><strong>${title}</strong><small>${detail}</small></article>${index < scenario.stages.length-1 ? '<i aria-hidden="true">→</i>' : ''}`).join('')}
     </div>
+    ${rowEligibility}
     ${scenario.branches ? `<div class="topology-branches" aria-label="Two effects of mounting the panel subscription">${scenario.branches.map(([label,title,detail]) => `<article class="topology-node"><span>${label}</span><strong>${title}</strong><small>${detail}</small></article>`).join('')}</div>` : ''}
     <p class="topology-outcome" aria-live="polite"><b>${scenario.label}</b><span>${scenario.outcome}</span></p>
-    <p class="topology-boundary">Static inspection of the installed app-shared bundle only. No live panel opening, discovery request, or missing-child failure was observed. Incomplete discovery is not proof that a child does not exist.</p>
-    <p class="topology-sources"><a href="https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#subagenttopology-static-path" target="_blank" rel="noreferrer">topology evidence ledger</a> · <a href="https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#activity-item-path-into-desktop-state" target="_blank" rel="noreferrer">typed item event path</a></p>
+    <p class="topology-boundary">Static inspection of the installed build 20586 bundles only. No live panel opening, discovery request, child metadata response, or transcript paint was observed. Incomplete discovery is not proof that a child does not exist.</p>
+    <p class="topology-sources"><a href="https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#installed-desktop-panel-row-projection-and-child-hydration-are-separate-paths-build-20586-2026-10-17" target="_blank" rel="noreferrer">panel projection and child hydration evidence</a> · <a href="https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#installed-desktop-panel-row-candidate-and-suppression-rules-build-20586-2026-10-17" target="_blank" rel="noreferrer">row candidate and suppression rules</a></p>
+  </section>`;
+}
+function rowEligibilityMarkup() {
+  const cases = {
+    visible: {label:'Eligible child', ref:'spawnAgent · parent turn 8', runtime:'running', hidden:false, result:'ROW PROJECTED', reason:'A candidate has a usable parent-turn reference and none of the listed suppression conditions applies.'},
+    noReference: {label:'No parent-turn reference', ref:'none', runtime:'running', hidden:false, result:'NO ROW', reason:'The row builder returns no row when it cannot derive a latest parent-turn reference, even if a child transcript exists.'},
+    closeAgent: {label:'Closed by parent', ref:'closeAgent · parent turn 8', runtime:'completed', hidden:false, result:'SUPPRESSED', reason:'A closeAgent reference is excluded from the parent list projection.'},
+    hiddenTerminal: {label:'Hidden terminal child', ref:'spawnAgent · parent turn 8', runtime:'completed', hidden:true, result:'SUPPRESSED', reason:'A hidden terminal agent is omitted when runtime no longer reports it as active.'},
+    hiddenActive: {label:'Hidden, still active', ref:'spawnAgent · parent turn 8', runtime:'running', hidden:true, result:'ROW PROJECTED', reason:'The hidden-terminal suppression has an exception while runtime still says active.'},
+    systemError: {label:'System-error runtime', ref:'spawnAgent · parent turn 8', runtime:'system error', hidden:false, result:'SUPPRESSED', reason:'A system-error runtime is suppressed by the row builder.'},
+    failedIdle: {label:'Failed child, inactive', ref:'spawnAgent · parent turn 8', runtime:'failed', hidden:false, result:'SUPPRESSED', reason:'Failed or interrupted child turns are omitted unless runtime still reports the agent as active.'},
+    failedActive: {label:'Failed turn, runtime active', ref:'spawnAgent · parent turn 8', runtime:'active', hidden:false, result:'ROW PROJECTED', reason:'A failed or interrupted turn is not suppressed by this predicate while runtime still says active.'},
+  };
+  const selected = cases[topologyEligibilityState] ?? cases.visible;
+  const keys = Object.keys(cases);
+  const status = selected.result === 'ROW PROJECTED' ? 'pass' : selected.result === 'NO ROW' ? 'missing' : 'filtered';
+  return `<section class="row-eligibility-lab" data-row-outcome="${status}" aria-labelledby="row-eligibility-title">
+    <div class="row-eligibility-heading"><div><span>STATIC PREDICATE EXPLORER</span><h6 id="row-eligibility-title">为什么候选 child 最后有行 / 没有行？</h6></div><span>BUILD 20586</span></div>
+    <p>固定一个已进入候选集的 child，只切换已从该 build 读出的 parent-turn / runtime 条件。</p>
+    <div class="row-eligibility-controls" role="group" aria-label="选择静态行投影条件">${keys.map(key => `<button type="button" data-row-eligibility="${key}" aria-pressed="${key === topologyEligibilityState}">${cases[key].label}</button>`).join('')}</div>
+    <div class="row-eligibility-flow" aria-live="polite">
+      <article><span>01 · CANDIDATE</span><strong>Child C</strong><small>Found in a parent-related candidate input</small></article><i aria-hidden="true">→</i>
+      <article class="${selected.ref === 'none' ? 'gate-fail' : ''}"><span>02 · PARENT REFERENCE</span><strong>${selected.ref}</strong><small>latest parent-turn membership</small></article><i aria-hidden="true">→</i>
+      <article class="${status === 'filtered' ? 'gate-fail' : ''}"><span>03 · ROW GATES</span><strong>${selected.hidden ? 'hidden · ' : ''}${selected.runtime}</strong><small>close / hidden terminal / system error / failed-turn predicates</small></article><i aria-hidden="true">→</i>
+      <article class="row-eligibility-result ${status}"><span>04 · PARENT LIST</span><strong>${selected.result}</strong><small>${selected.reason}</small></article>
+    </div>
+    <div class="row-eligibility-inputs"><span>Candidate sources in this build</span><b>parent turn items</b><b>cached conversations</b><b>active thread summaries</b><b>descendant snapshot</b></div>
+    <small class="row-eligibility-boundary">This is a source-backed predicate walkthrough, not a live selector replay. A displayed row is not proof of a React commit or visible paint.</small>
   </section>`;
 }
 function selectTopologyScenario(scenarioName) {
   const container = $('.topology-map');
   if (!container) return;
-  topologyScenario = ['panel-open','spawn-event','partial-discovery'].includes(scenarioName) ? scenarioName : 'panel-open';
+  topologyScenario = ['panel-open','spawn-event','partial-discovery','select-child','row-eligibility'].includes(scenarioName) ? scenarioName : 'panel-open';
   container.outerHTML = topologyMarkup();
 }
 function historyProjectionMarkup(complete = false) {
@@ -1176,6 +1512,55 @@ function selectHistoryGate(value) {
   if (!container) return;
   container.outerHTML = historyProjectionMarkup(value === 'complete');
 }
+function panelPersistenceMarkup() {
+  const steps = [
+    { title: 'Open panel', detail: 'Both surfaces can be opened for a parent conversation; persistence is decided by each registered tab type.' },
+    { title: 'Describe route', detail: 'The Work registration has no durableRoute/restore contract. The Local registration declares durableRoute version 1 and a restore callback.' },
+    { title: 'Refresh checkpoint', detail: 'For ordinary panel tabs, the snapshot keeps route descriptors; workspace-home tabs are a separate exception. This Work panel is filtered from routes and tabIds, while Local contributes its route descriptor.' },
+    { title: 'Draft handoff', detail: 'A separate conditional path carries draft checkpoint state across workspace transitions: savedDraftTabs$ or setDraft, then draft read and conversation-ID handoff. It is not the storage engine for every checkpoint.' },
+    { title: 'Restore', detail: 'Startup reads the conversation-scoped checkpoint and restores its routes. On the Local persistence branch, the panel overview returns with selectedConversationId set to null.' },
+  ];
+  const step = Math.max(0, Math.min(steps.length - 1, persistenceCheckpointStep));
+  const workStates = ['Panel can be open', 'No durableRoute', 'Filtered from routes + tabIds', 'No tab descriptor to hand off', 'No route-specific restore'];
+  const localStates = ['Panel can be open', 'durableRoute v1 + restore', 'Route included in YP checkpoint', 'Conditional draft checkpoint handoff', 'Overview restored · child selection cleared'];
+  const phaseLabels = ['OPEN', 'ROUTE', 'SNAPSHOT', 'DRAFT', 'RESTORE'];
+  const workDescriptions = [
+    'The panel may be open in the current session.',
+    'The Work tab registration has no durable route in this inspected build.',
+    'This ordinary panel tab is filtered out of routes and tabIds. Workspace-home tabs follow a separate exception.',
+    'There is no Work route descriptor to carry through the inspected draft handoff.',
+    'The inspected restore path has no route-specific Work restorer.',
+  ];
+  const localDescriptions = [
+    'The selected child can be part of the current panel state.',
+    'The Local tab declares a versioned durable route and a restore callback.',
+    'The Local route descriptor is included in the conversation checkpoint.',
+    'When a draft transition applies, the checkpoint can be saved and handed to the conversation ID.',
+    'The parent overview is restored; the previously selected child is cleared.',
+  ];
+  const lane = (surface, states, tone) => `<article class="panel-persist-lane ${tone}" data-active-step="${step}">
+    <header><span>${surface === 'work' ? 'CHATGPT WORK' : 'LOCAL CONVERSATION'}</span><b>${surface === 'work' ? 'NO DURABLE ROUTE' : 'DURABLE ROUTE V1'}</b></header>
+    <div class="panel-persist-track" aria-label="${surface === 'work' ? 'Work' : 'Local'} panel persistence path">${states.map((label, index) => `<div class="panel-persist-node ${index === step ? 'current' : index < step ? 'passed' : ''} ${surface === 'work' && index >= 1 ? 'excluded' : surface === 'local' && index >= 1 ? 'kept' : ''} ${surface === 'local' && index === 3 ? 'conditional' : ''}"><i>${index < step ? (surface === 'work' && index >= 1 ? '×' : '✓') : `0${index + 1}`}</i><small>${phaseLabels[index]}</small><strong>${label}</strong></div>${index < states.length - 1 ? `<span class="panel-persist-link ${index < step ? (surface === 'work' && index >= 1 ? 'cut' : 'live') : ''}" aria-hidden="true">${surface === 'work' && index >= 1 && step > index ? '⊘' : '→'}</span>` : ''}`).join('')}</div>
+    <p>${surface === 'work' ? workDescriptions[step] : localDescriptions[step]}</p>
+  </article>`;
+  return `<section class="panel-persistence" aria-labelledby="panel-persistence-title" data-step="${step}">
+    <header class="panel-persistence-heading"><div><span>INSTALLED DESKTOP · CHECKPOINT PATH</span><h5 id="panel-persistence-title">What happens to the Subagents panel after restore?</h5></div><b>STATIC BUNDLE TRACE</b></header>
+    <p class="panel-persistence-intro">Follow registration, checkpoint refresh, the optional workspace-draft handoff, and route restoration. The dashed draft step applies only to that transition path.</p>
+    <div class="panel-persistence-steps" role="group" aria-label="Select panel persistence checkpoint">${steps.map((item, index) => `<button type="button" data-panel-persist-step="${index}" aria-label="Checkpoint ${index + 1} of ${steps.length}: ${item.title}" aria-pressed="${step === index}"><i>0${index + 1}</i><span>${item.title}</span></button>`).join('')}</div>
+    <div class="panel-persistence-legend" aria-label="Diagram legend"><span><i class="legend-kept" aria-hidden="true"></i>route retained</span><span><i class="legend-cut" aria-hidden="true"></i>filtered from route snapshot</span><span><i class="legend-conditional" aria-hidden="true"></i>conditional draft handoff</span></div>
+    <div class="panel-persistence-lanes">${lane('work', workStates, 'work-lane')}${lane('local', localStates, 'local-lane')}</div>
+    <div class="panel-persistence-readout" aria-live="polite"><span>CHECKPOINT ${step + 1} / ${steps.length}</span><strong>${steps[step].title}</strong><p>${steps[step].detail}</p></div>
+    <p class="panel-persistence-boundary">Static installed-bundle evidence only. The draft handoff is conditional, and the underlying storage engine remains unidentified. No app restart or live restore event was observed; this does not prove every cold-launch branch. Local persistence restores the parent panel route, not its prior child selection.</p>
+    <p class="panel-persistence-sources"><a href="https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#the-work-subagents-panel-is-omitted-from-the-inspected-durable-tab-route-snapshot" target="_blank" rel="noreferrer">Open the checkpoint save/restore evidence ↗</a> · Matching installed bundle SHA-256: <code>604b5d2de4fb…</code></p>
+  </section>`;
+}
+function selectPanelPersistenceStep(value) {
+  const container = $('.panel-persistence');
+  if (!container) return;
+  const parsed = Number(value);
+  persistenceCheckpointStep = Number.isInteger(parsed) ? Math.max(0, Math.min(4, parsed)) : 0;
+  container.outerHTML = panelPersistenceMarkup();
+}
 function taskTree(parentId = null, depth = 0, visible = visibleTaskIds(), matches = matchingTaskIds(), matchingAncestors = matchingAncestorIds(matches)) {
   return state.tasks.filter(task => task.parentId === parentId && visible.has(task.id)).map(task => {
     const selected = task.id === selectedTaskId;
@@ -1203,7 +1588,7 @@ function desktopBuild20586Markup() {
   const stages = [
     { id:'waiting', label:'Waiting', copy:'The child is registered in the parent’s subagent list and appears in the Active section.' },
     { id:'working', label:'Working', copy:'The child remains Active. The panel can show its status message while work is underway.' },
-    { id:'done', label:'Done', copy:'Selecting a completed child triggers a final-response query keyed by parent conversation, child thread, activation ID, and turn liveness.' },
+    { id:'done', label:'Done', copy:'Selecting a completed child loads its final response. Cache identity, request parameters, and mount retry behavior use different inputs.' },
     { id:'failed', label:'Failed', copy:'The child appears in the terminal section. The detail path can show an unavailable response state.' },
   ];
   const selected = stages.find(stage => stage.id === desktopBuild20586Status) ?? stages[1];
@@ -1255,7 +1640,7 @@ function desktopBuild20586Markup() {
   return `<section class="desktop-20586" aria-labelledby="desktop-20586-title">
     <header class="desktop-20586-head"><div><span>INSTALLED DESKTOP · BUILD 20586</span><h5 id="desktop-20586-title">Two subagent surfaces, two detail routes</h5></div><span class="desktop-20586-tag">STATIC BUNDLE</span></header>
     <div class="desktop-20586-switch" role="group" aria-label="Choose the installed panel surface"><button type="button" data-20586-surface="work" aria-pressed="${isWork}">ChatGPT Work</button><button type="button" data-20586-surface="local" aria-pressed="${!isWork}">Local conversation</button></div>
-    ${isWork ? `<div class="desktop-20586-flow"><div class="desktop-20586-stages" role="group" aria-label="Explore Work subagent status"><div class="desktop-20586-rail" aria-hidden="true"><i class="${desktopBuild20586Status === 'waiting' ? 'current' : ''}"></i><i class="${desktopBuild20586Status === 'working' ? 'current' : ''}"></i><i class="${desktopBuild20586Status === 'done' ? 'current' : ''}"></i><i class="${desktopBuild20586Status === 'failed' ? 'current failed' : ''}"></i></div>${stages.map(stage => `<button type="button" data-20586-status="${stage.id}" aria-pressed="${desktopBuild20586Status === stage.id}"><span>${stage.label}</span></button>`).join('')}</div><article class="desktop-20586-detail" data-status="${selected.id}"><span class="desktop-20586-kicker">SELECTED CHILD · ${selected.label.toUpperCase()}</span><strong>${selected.copy}</strong>${desktopBuild20586Status === 'done' ? `<div class="desktop-20586-query"><span>FINAL RESPONSE QUERY</span><code>parent + child thread + activation + live-turn state</code><small>Loading → response, fallback status message, or unavailable on error</small></div>` : ''}<small>Active contains Waiting and Working. Done contains completed and failed children.</small></article></div>` : `<div class="desktop-20586-local"><div class="desktop-20586-local-flow"><article><span>01 · DESCENDANT SNAPSHOT</span><b>Parent conversation</b><small>Local thumbnail resolves known descendant threads and shows a child count.</small></article><i aria-hidden="true">→</i><article><span>02 · SUBAGENTS PANEL</span><b>Active · Done</b><small>Active list is capped at four visible items in the inspected projection.</small></article><i aria-hidden="true">→</i><article><span>03 · CHILD DETAIL</span><b>Embedded transcript</b><small>The panel passes interaction only when the selected child's <code>canInteract</code> is exactly true.</small></article></div><section class="desktop-20586-gate" aria-labelledby="desktop-20586-gate-title"><div class="desktop-20586-gate-heading"><div><span class="desktop-20586-kicker">LOCAL CHILD · INDEPENDENT RENDERER GATES</span><b id="desktop-20586-gate-title">Change inputs to trace each UI outcome</b></div><button class="desktop-20586-conflict" type="button" data-20586-conflict aria-pressed="${desktopBuild20586WriterConflict}">Writer conflict · ${desktopBuild20586WriterConflict ? 'on' : 'off'}</button></div><div class="desktop-20586-expression" aria-label="Resume lookup requires shouldResume and canInteract and either an eligible local thread or a shared thread"><span class="${desktopBuild20586ShouldResume ? 'is-true' : 'is-false'}">shouldResume <b>${desktopBuild20586ShouldResume ? 'true' : 'false'}</b></span><i>AND</i><span class="${desktopBuild20586CanInteract ? 'is-true' : 'is-false'}">canInteract <b>${desktopBuild20586CanInteract ? 'true' : 'false'}</b></span><i>AND</i><span class="${threadScope !== 'local-ineligible' ? 'is-true' : 'is-false'}">thread scope <b>${scopeLabels[threadScope]}</b></span><i>→</i><strong class="${resumeAllowed ? 'gate-pass' : 'gate-block'}">${resumeAllowed ? 'thread id supplied' : 'lookup skipped'}</strong></div><div class="desktop-20586-gate-inputs"><fieldset><legend>Resume requested</legend><div class="desktop-20586-switch"><button type="button" data-20586-resume="yes" aria-pressed="${desktopBuild20586ShouldResume}">Yes</button><button type="button" data-20586-resume="no" aria-pressed="${!desktopBuild20586ShouldResume}">No</button></div></fieldset><fieldset><legend>canInteract prop</legend><div class="desktop-20586-switch"><button type="button" data-20586-interact="yes" aria-pressed="${desktopBuild20586CanInteract}">True</button><button type="button" data-20586-interact="no" aria-pressed="${!desktopBuild20586CanInteract}">False</button></div></fieldset><fieldset><legend>Thread scope</legend><div class="desktop-20586-switch"><button type="button" data-20586-scope="local-eligible" aria-pressed="${threadScope === 'local-eligible'}">Eligible local</button><button type="button" data-20586-scope="shared" aria-pressed="${threadScope === 'shared'}">Shared</button><button type="button" data-20586-scope="local-ineligible" aria-pressed="${threadScope === 'local-ineligible'}">Ineligible local</button></div></fieldset></div><div class="desktop-20586-gate-results"><article><span>RESUME LOOKUP</span><b class="${resumeAllowed ? 'gate-pass' : 'gate-block'}">${resumeAllowed ? 'Attempted with child thread id' : 'Not attempted'}</b><small>${resumeReason}</small></article><article><span>TRANSCRIPT</span><b>${!desktopBuild20586CanInteract || desktopBuild20586WriterConflict ? 'Read only' : 'Interactive view'}</b><small>${desktopBuild20586WriterConflict ? 'Writer conflict independently forces read-only.' : 'Read-only when canInteract is false.'}</small></article><article><span>COMPOSER</span><b>${desktopBuild20586CanInteract && !desktopBuild20586WriterConflict ? 'Shown' : 'Hidden'}</b><small>${desktopBuild20586WriterConflict ? 'Hidden by writer conflict.' : 'Shown only when canInteract is true.'}</small></article></div><p class="desktop-20586-note">These controls illustrate inspected client conditions; they do not control a live conversation or prove server authorization.</p>${desktop20586SelectionMarkup(route)}</div>`}
+    ${isWork ? `<div class="desktop-20586-flow"><div class="desktop-20586-status-groups" role="group" aria-label="Explore Work subagent status"><section class="desktop-20586-status-group active-group"><header><b>ACTIVE</b><small>Waiting and Working</small></header><div>${stages.filter(stage => ['waiting','working'].includes(stage.id)).map(stage => `<button type="button" data-20586-status="${stage.id}" aria-pressed="${desktopBuild20586Status === stage.id}"><span>${stage.label}</span></button>`).join('')}</div></section><section class="desktop-20586-status-group done-group"><header><b>DONE</b><small>Terminal outcomes</small></header><div>${stages.filter(stage => ['done','failed'].includes(stage.id)).map(stage => `<button type="button" data-20586-status="${stage.id}" aria-pressed="${desktopBuild20586Status === stage.id}"><span>${stage.id === 'done' ? 'Completed' : 'Failed'}</span></button>`).join('')}</div></section></div><article class="desktop-20586-detail ${desktopBuild20586Status === 'done' ? 'has-query-map' : ''}" data-status="${selected.id}"><span class="desktop-20586-kicker">SELECTED CHILD · ${selected.label.toUpperCase()}</span><strong>${selected.copy}</strong>${desktopBuild20586Status === 'done' ? desktop20586FinalQueryMarkup() : ''}<small>Group membership follows the inspected Work panel: Waiting and Working are Active; completed and failed are separate terminal outcomes in Done.</small></article></div>` : `<div class="desktop-20586-local"><div class="desktop-20586-local-flow"><article><span>01 · DESCENDANT SNAPSHOT</span><b>Parent conversation</b><small>Local thumbnail resolves known descendant threads and shows a child count.</small></article><i aria-hidden="true">→</i><article><span>02 · SUBAGENTS PANEL</span><b>Active · Done</b><small>Active list is capped at four visible items in the inspected projection.</small></article><i aria-hidden="true">→</i><article><span>03 · CHILD DETAIL</span><b>Embedded transcript</b><small>The panel passes interaction only when the selected child's <code>canInteract</code> is exactly true.</small></article></div><section class="desktop-20586-gate" aria-labelledby="desktop-20586-gate-title"><div class="desktop-20586-gate-heading"><div><span class="desktop-20586-kicker">LOCAL CHILD · INDEPENDENT RENDERER GATES</span><b id="desktop-20586-gate-title">Change inputs to trace each UI outcome</b></div><button class="desktop-20586-conflict" type="button" data-20586-conflict aria-pressed="${desktopBuild20586WriterConflict}">Writer conflict · ${desktopBuild20586WriterConflict ? 'on' : 'off'}</button></div><div class="desktop-20586-expression" aria-label="Resume lookup requires shouldResume and canInteract and either an eligible local thread or a shared thread"><span class="${desktopBuild20586ShouldResume ? 'is-true' : 'is-false'}">shouldResume <b>${desktopBuild20586ShouldResume ? 'true' : 'false'}</b></span><i>AND</i><span class="${desktopBuild20586CanInteract ? 'is-true' : 'is-false'}">canInteract <b>${desktopBuild20586CanInteract ? 'true' : 'false'}</b></span><i>AND</i><span class="${threadScope !== 'local-ineligible' ? 'is-true' : 'is-false'}">thread scope <b>${scopeLabels[threadScope]}</b></span><i>→</i><strong class="${resumeAllowed ? 'gate-pass' : 'gate-block'}">${resumeAllowed ? 'thread id supplied' : 'lookup skipped'}</strong></div><div class="desktop-20586-gate-inputs"><fieldset><legend>Resume requested</legend><div class="desktop-20586-switch"><button type="button" data-20586-resume="yes" aria-pressed="${desktopBuild20586ShouldResume}">Yes</button><button type="button" data-20586-resume="no" aria-pressed="${!desktopBuild20586ShouldResume}">No</button></div></fieldset><fieldset><legend>canInteract prop</legend><div class="desktop-20586-switch"><button type="button" data-20586-interact="yes" aria-pressed="${desktopBuild20586CanInteract}">True</button><button type="button" data-20586-interact="no" aria-pressed="${!desktopBuild20586CanInteract}">False</button></div></fieldset><fieldset><legend>Thread scope</legend><div class="desktop-20586-switch"><button type="button" data-20586-scope="local-eligible" aria-pressed="${threadScope === 'local-eligible'}">Eligible local</button><button type="button" data-20586-scope="shared" aria-pressed="${threadScope === 'shared'}">Shared</button><button type="button" data-20586-scope="local-ineligible" aria-pressed="${threadScope === 'local-ineligible'}">Ineligible local</button></div></fieldset></div><div class="desktop-20586-gate-results"><article><span>RESUME LOOKUP</span><b class="${resumeAllowed ? 'gate-pass' : 'gate-block'}">${resumeAllowed ? 'Attempted with child thread id' : 'Not attempted'}</b><small>${resumeReason}</small></article><article><span>TRANSCRIPT</span><b>${!desktopBuild20586CanInteract || desktopBuild20586WriterConflict ? 'Read only' : 'Interactive view'}</b><small>${desktopBuild20586WriterConflict ? 'Writer conflict independently forces read-only.' : 'Read-only when canInteract is false.'}</small></article><article><span>COMPOSER</span><b>${desktopBuild20586CanInteract && !desktopBuild20586WriterConflict ? 'Shown' : 'Hidden'}</b><small>${desktopBuild20586WriterConflict ? 'Hidden by writer conflict.' : 'Shown only when canInteract is true.'}</small></article></div><p class="desktop-20586-note">These controls illustrate inspected client conditions; they do not control a live conversation or prove server authorization.</p>${desktop20586SelectionMarkup(route)}</div>`}
     <p class="desktop-20586-source">Checked members: <code>chatgpt-subagents-panel-ad8b93c61a12.js</code> · <code>local-conversation-subagents-panel-tab-70cb3c70c0c0.js</code> · <code>verify-descendant-2646968c60d7.js</code> · <code>subagents-8eb0ab1e1e0d.js</code> · <a href="https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#follow-up-local-child-selection-validates-ancestry-and-rejects-stale-panel-updates-build-20586-2026-10-17" target="_blank" rel="noreferrer">evidence ledger ↗</a></p>
     <p class="desktop-20586-boundary">Module hashes match this build’s ASAR manifest. Static UI logic only: this diagram does not show a live session, network response, or rendered Desktop screenshot.</p>
   </section>`;
@@ -1268,6 +1653,16 @@ function desktop20586SelectionMarkup(route) {
     <div class="desktop-20586-route-choices" role="group" aria-label="Select a child navigation scenario">${[['accepted','Valid parent chain'],['wrongHost','Wrong host'],['missingAncestor','Missing ancestor'],['staleSelection','Selection changed']].map(([id,label]) => `<button type="button" data-20586-route="${id}" aria-pressed="${desktopBuild20586Route === id}">${label}</button>`).join('')}</div>
     <div class="desktop-20586-route-rail" role="img" aria-label="${steps.map((step,i)=>`${step}: ${route.states[i]}`).join('; ')}">${steps.map((step,i)=>`<article class="${i === 0 || (desktopBuild20586Route === 'missingAncestor' && i === 1) || i === 3 ? 'route-emphasis' : ''}"><span>0${i+1}</span><b>${step}</b><small>${route.states[i]}</small></article>`).join('')}</div>
     <p class="desktop-20586-route-detail">${route.detail}</p><p class="desktop-20586-route-footnote">The lineage check walks parent IDs, rejects cycles and known host mismatches, and may hydrate missing ancestors without turns. Async results are applied only while the panel still requests that child.</p>
+  </section>`;
+}
+
+function desktop20586FinalQueryMarkup() {
+  return `<section class="desktop-20586-query-map" aria-label="Final response query identity, request, and retry behavior">
+    <header><span>FINAL RESPONSE · THREE SEPARATE INPUT PATHS</span><small>Static query logic</small></header>
+    <div class="desktop-20586-query-identity"><b>Cache key</b><code>final-response + conversationId + threadId + activationId</code><small>Activation-specific cache identity</small></div>
+    <div class="desktop-20586-query-request"><b>GET request</b><code>/flora/subagent/thread/turns</code><small>conversationId · threadId · limit: 1</small><em>activationId is not sent</em></div>
+    <div class="desktop-20586-query-retry"><div><b>Mount retry rule</b><small>Turn liveness changes this option only</small></div><div class="desktop-20586-switch" role="group" aria-label="Set current turn liveness"><button type="button" data-20586-turn-live="yes" aria-pressed="${desktopBuild20586TurnLive}">Turn active</button><button type="button" data-20586-turn-live="no" aria-pressed="${!desktopBuild20586TurnLive}">Turn ended</button></div><code>retryOnMount: ${!desktopBuild20586TurnLive}</code></div>
+    <p>Changing turn liveness leaves the cache key and request unchanged. It only flips whether the query retries when mounted.</p>
   </section>`;
 }
 
@@ -1369,6 +1764,7 @@ function desktopSubagentsMarkup() {
       <p class="desktop-import-source"><a href="https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#follow-up-current-installed-bundle-import-graph-from-rea-2026-10-16" target="_blank" rel="noreferrer">REA import evidence · Desktop 26.1007.71326</a></p>
     </section>
     ${desktopBuild20586Markup()}
+    ${panelPersistenceMarkup()}
     <p class="desktop-subagents-boundary">Static extraction from the installed app bundle; example records and controls are illustrative. <code>canInteract</code> describes client routing and composer/resume UI gates, not server authorization or current runtime status. This does not capture a live Desktop session, prove a React commit or visible paint, or represent the Lab’s CLI process tree.</p>
     <p class="desktop-subagents-source-link"><a href="https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#local-desktop-panel-entry-point" target="_blank" rel="noreferrer">Panel entry and child routing</a> · <a href="https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#installed-desktop-26100771326-selected-child-panel-path" target="_blank" rel="noreferrer">canInteract derivation and UI gates</a> · <code>local-conversation-thread-269c4ee9ddf0.js</code> · chars 30,957–40,247 · REA Evidence <code>ev_9a2e1d42897d8f73d61bea38956116d402057de54c34849710d94e1956ca3dde</code></p>
   </section>`;
@@ -1426,6 +1822,33 @@ function selectEmbeddedProbeStep(value) {
   embeddedProbeStep = Number.isFinite(next) ? Math.max(0, Math.min(4, next)) : 0;
   const probe = $('.embedded-probe');
   if (probe) probe.outerHTML = embeddedProbeMarkup();
+}
+
+const cliV1ProbeStages = [
+  { title: 'Parent creates one child', lane: 'PARENT · rollout ordinal 17', event: 'spawn_agent completed', detail: 'The receiver identifies child thread 01a145e7-03fd-7cb2-b0f6-d6acbe0d8caa.', evidence: 'The parent rollout records a completed spawn_agent call and returns the child thread ID.', boundary: 'A successful spawn receipt establishes child admission for this call; the linked child rollout confirms the child session.' },
+  { title: 'Child runs under V1', lane: 'CHILD · session metadata', event: 'multi_agent_version: v1', detail: 'The child records its parent and thread_spawn source, then completes.', evidence: 'The child rollout links back to the parent and records multi_agent_version: v1 in session metadata and turn context.', boundary: 'This resolves the protocol version for this CLI run; it does not reveal the Desktop host controller or its UI path.' },
+  { title: 'Parent waits for that child', lane: 'PARENT · rollout ordinal 23', event: 'wait completed', detail: 'The wait targets the same child thread and returns completed.', evidence: 'The parent rollout records a successful wait for the same child ID after the spawn call.', boundary: 'The event sequence shows the wait result; it does not identify the scheduler wake cause.' },
+  { title: 'Parent returns the result', lane: 'PARENT · final response', event: 'marker + completed', detail: 'CODEX-SUBAGENT-PROBE-1017', evidence: 'The parent final response includes the unique marker from the controlled child task and the parent turn completes.', boundary: 'This is a standalone embedded CLI exec run, not a captured Desktop conversation or rendered Subagents panel.' }
+];
+
+function cliV1ProbeMarkup() {
+  const step = Math.max(0, Math.min(cliV1ProbeStages.length - 1, cliV1ProbeStep));
+  const stage = cliV1ProbeStages[step];
+  return `<section class="cli-v1-probe" aria-labelledby="cli-v1-probe-title" data-step="${step}">
+    <header><div><span>CAPTURED CLI RUN · V1 CONFIRMED FROM BOTH ROLLOUTS</span><h5 id="cli-v1-probe-title">One child, linked from spawn through parent result</h5></div><b>0.163.0-alpha.10.2</b></header>
+    <p class="cli-v1-probe-intro">Replay the verified event chain. The parent and child rollout records agree on thread identity and the resolved protocol version.</p>
+    <div class="cli-v1-probe-track" role="group" aria-label="Parent and child rollout evidence checkpoints">${cliV1ProbeStages.map((item, index) => `<button type="button" class="cli-v1-probe-node ${index === step ? 'current' : index < step ? 'past' : 'future'}" data-cli-v1-step="${index}" aria-current="${index === step ? 'step' : 'false'}"><span class="cli-v1-probe-index">0${index + 1}</span><small>${escapeHtml(item.lane)}</small><strong>${escapeHtml(item.event)}</strong><span>${escapeHtml(item.detail)}</span></button>${index < cliV1ProbeStages.length - 1 ? '<i aria-hidden="true">→</i>' : ''}`).join('')}</div>
+    <div class="cli-v1-probe-readout" aria-live="polite"><span>${String(step + 1).padStart(2, '0')} / 04</span><div><strong>${escapeHtml(stage.title)}</strong><p>${escapeHtml(stage.evidence)}</p><small>${escapeHtml(stage.boundary)}</small></div></div>
+    <div class="cli-v1-probe-controls"><button type="button" data-cli-v1-step="${Math.max(0, step - 1)}" ${step === 0 ? 'disabled' : ''} aria-label="Previous V1 evidence checkpoint">←</button><input type="range" min="0" max="3" step="1" value="${step}" aria-label="Select V1 probe checkpoint" data-cli-v1-range><button type="button" data-cli-v1-step="${Math.min(3, step + 1)}" ${step === 3 ? 'disabled' : ''} aria-label="Next V1 evidence checkpoint">→</button><a href="https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#follow-up-cli-probe-rollouts-confirm-the-resolved-v1-session-2026-10-17" target="_blank" rel="noreferrer">Open rollout evidence ↗</a></div>
+    <p class="cli-v1-probe-boundary"><b>Evidence boundary:</b> standalone CLI runtime with local parent/child rollout correlation. It does not capture Desktop host controller selection, panel events, or visible rendering.</p>
+  </section>`;
+}
+
+function selectCliV1ProbeStep(value) {
+  const next = Number.parseInt(value, 10);
+  cliV1ProbeStep = Number.isFinite(next) ? Math.max(0, Math.min(cliV1ProbeStages.length - 1, next)) : 0;
+  const probe = $('.cli-v1-probe');
+  if (probe) probe.outerHTML = cliV1ProbeMarkup();
 }
 
 function renderInspector() {
@@ -1542,6 +1965,7 @@ function renderInspector() {
         <div class="parallel-lifecycle-foot"><span><i class="parallel-dot activity-dot"></i>Terminal activity reports lifecycle</span><span><i class="parallel-dot result-dot"></i>Result message enters the parent mailbox</span><button type="button" data-inspector-target="agent-mailbox">Explore delivery states ↓</button></div>
       </div>
       ${embeddedProbeMarkup()}
+      ${cliV1ProbeMarkup()}
       <div class="upstream-refresh" aria-label="Latest upstream changes and subagent scope">
         <div class="upstream-refresh-heading"><span>UPSTREAM DELTA · 97EBF2D → 9C84E89</span><b>BOUNDED SOURCE DIFF</b></div>
         <div class="upstream-refresh-grid">
@@ -1640,12 +2064,12 @@ ${desktopExitFlushMarkup()}
     ${terminalLifecycleMarkup()}
     ${interruptCloseMarkup()}
     ${isSample ? '<div class="sample-note">Illustrative data only. No Codex process was started.</div>' : ''}${task.timeoutReason ? `<section class="error-panel timeout-panel"><span class="error-icon">⌛</span><div><strong>Task timed out</strong><p>${escapeHtml(task.timeoutReason)}. The task is marked timed out after its process exits.</p></div></section>` : ''}${task.error ? `<section class="error-panel"><span class="error-icon">!</span><div><strong>Agent error</strong><p>${escapeHtml(task.error)}</p></div></section>` : ''}
-    <section id="links" class="detail-section"><div class="section-title"><h4>Task links</h4><span>${children.length} child${children.length === 1 ? '' : 'ren'}</span></div>${activeChildren.length && ['completed','failed','cancelled','timed_out'].includes(task.status) ? `<div class="lifecycle-note"><span>↗</span><p>This task has ended. ${activeChildren.length} direct child agent${activeChildren.length === 1 ? '' : 's'} ${activeChildren.length === 1 ? 'is' : 'are'} still active and will continue independently.</p></div>` : ''}<div class="task-relation-map" role="group" aria-label="Task parent and child relationships">${parent ? `<button class="relation-node parent-node" type="button" data-jump="${escapeHtml(parent.id)}"><span class="relation-role">PARENT · ${escapeHtml(parent.status.replaceAll('_',' ').toUpperCase())}</span><strong>${escapeHtml(parent.prompt)}</strong></button><div class="relation-edge"><span aria-hidden="true">↓</span><small>spawned by</small></div>` : ''}<div class="relation-node current-node" aria-current="true"><span class="relation-role">${parent ? 'SELECTED CHILD' : 'ROOT TASK'} · ${escapeHtml(task.status.replaceAll('_',' ').toUpperCase())}</span><strong>${escapeHtml(task.prompt)}</strong></div>${children.length ? `<div class="relation-branch"><div class="relation-edge"><span aria-hidden="true">↓</span><small>spawns ${children.length} child${children.length === 1 ? '' : 'ren'}</small></div><div class="relation-children">${children.map(child => `<button class="relation-node child-node" type="button" data-jump="${escapeHtml(child.id)}"><span class="relation-role">CHILD · ${escapeHtml(child.status.replaceAll('_',' ').toUpperCase())}</span><strong>${escapeHtml(child.prompt)}</strong><span class="relation-open" aria-hidden="true">↗</span></button>`).join('')}</div></div>` : '<div class="relation-empty">No child agents yet</div>'}</div><p class="relation-note">This map shows task ancestry. Messages and child results appear in the mailbox.</p>${renderConcurrencyTimeline(task, parent, children)}${renderInteractionSequence(task, parent, children, interactionItems)}${renderDesktopGate()}${fullFidelityMarkup()}${rendererDeltaMarkup()}${completionPayloadMarkup()}${parentResultStateMarkup()}${requestWireMarkup()}${historyProjectionMarkup()}<div class="interaction-trace"><div class="section-title"><h4>Direct interaction trace</h4><span>${interactionItems.length} item${interactionItems.length === 1 ? '' : 's'}</span></div>${interactionItems.length ? `<div class="interaction-list">${interactionItems.map(({ recipient, message }) => { const sender = taskById(message.from); const isResult = message.kind === 'task_result'; const isReturned = message.deliveryState === 'read'; return `<article class="interaction-item ${isResult ? 'result' : ''} ${isReturned ? 'returned' : 'pending'}"><div class="interaction-meta"><span class="interaction-kind">${isResult ? 'CHILD RESULT' : 'MESSAGE'}</span><span class="interaction-state ${isReturned ? 'returned' : 'pending'}">${isReturned ? 'SUPPLIED TO TASK TOOL' : 'PENDING IN INBOX'}</span><time>${escapeHtml(when(message.at))}</time></div><div class="interaction-pipeline" role="img" aria-label="${escapeHtml(relationRole(sender?.id))} sends to coordinator inbox, then ${isReturned ? 'the coordinator supplies it to' : 'it waits for'} the ${escapeHtml(relationRole(recipient.id))} task tool"><span class="pipeline-stage sent"><small>FROM · ${relationRole(sender?.id)}</small><strong>${escapeHtml(sender?.prompt ?? message.from)}</strong><b>SENT</b></span><i class="pipeline-link complete" aria-hidden="true">→</i><span class="pipeline-stage queued"><small>COORDINATOR INBOX</small><strong>${escapeHtml(relationRole(recipient.id))} mailbox</strong><b>QUEUED</b></span><i class="pipeline-link ${isReturned ? 'complete' : ''}" aria-hidden="true">→</i><span class="pipeline-stage ${isReturned ? 'supplied' : 'waiting'}"><small>TASK TOOL · ${relationRole(recipient.id)}</small><strong>${escapeHtml(recipient.prompt)}</strong><b>${isReturned ? 'SUPPLIED' : 'WAITING'}</b></span></div><p>${escapeHtml(message.text)}</p></article>`; }).join('')}</div><p class="interaction-proof">“Supplied” means the coordinator included the message in that task tool call. It does not prove the model interpreted it.</p>` : '<div class="interaction-empty">No direct parent/child messages or results in the available snapshot.</div>'}</div></section>
-    <section id="agent-mailbox" class="detail-section mailbox-section"><div class="section-title"><h4><span class="section-icon">↳</span> Mailbox</h4><div class="mailbox-heading-actions"><span class="mail-count">${Number(task.pendingMessageCount) || 0} pending · ${Number(task.pendingTaskResultCount) || 0} child results</span><button class="mailbox-route-link" type="button" data-inspector-target="completion-route"><span aria-hidden="true">↳</span> Trace result path</button></div></div><p class="mailbox-proof">Returned means the coordinator supplied this message to the task tool; it does not prove the model interpreted it.</p><details class="delivery-model" ${deliveryModelOpen ? 'open' : ''}><summary><span>How Codex V2 chooses whether to wake a child</span><small>source model · 0.162.0-alpha.17.2</small></summary>${deliveryFlowMarkup()}<div class="delivery-mode-grid"><article class="delivery-mode queue-only"><div class="delivery-mode-title"><span class="mode-icon" aria-hidden="true">Ⅱ</span><div><h5>send_message</h5><span>QueueOnly</span></div><b>QUEUE</b></div><div class="mode-flow"><span>Caller</span><i aria-hidden="true">→</i><span>Child mailbox</span><i aria-hidden="true">→</i><span class="mode-outcome">Waits for an eligible turn</span></div><p>The target is ensured loaded before delivery. QueueOnly skips the ordinary turn-start request; durable sleep has a separate wake path, and a child waiting in <code>wait_agent</code> can return on mailbox activity.</p></article><article class="delivery-mode trigger-turn"><div class="delivery-mode-title"><span class="mode-icon" aria-hidden="true">▶</span><div><h5>followup_task</h5><span>TriggerTurn</span></div><b>WAKE</b></div><div class="mode-flow"><span>Caller</span><i aria-hidden="true">→</i><span>Load child + mailbox</span><i aria-hidden="true">→</i><span class="mode-outcome">Start a turn if idle</span></div><p>The target is ensured loaded, then turn capacity is checked and pending-work scheduling is requested. It targets an existing V2 child; triggering the root is rejected.</p></article></div><p class="delivery-model-proof">Accepted delivery and an “Interacted” activity do not prove the child model has read the message. <a href="https://github.com/openai/codex/blob/740e5af33c71225640e0c1c1555c514c2c93ab74/codex-rs/core/src/tools/handlers/multi_agents_v2/message_tool.rs" target="_blank" rel="noreferrer">Message handler</a> · <a href="https://github.com/openai/codex/blob/740e5af33c71225640e0c1c1555c514c2c93ab74/codex-rs/core/src/agent/control/delivery.rs" target="_blank" rel="noreferrer">Delivery policy</a></p></details>${inboxItems.length ? `<div class="inbox-list">${inboxItems.map(message => `<article class="inbox-item ${message.deliveryState === 'read' ? 'read' : 'pending'}"><div class="inbox-meta"><span class="mail-kind ${message.kind === 'task_result' ? 'result' : ''}">${message.kind === 'task_result' ? 'CHILD RESULT' : 'MESSAGE'}</span><span class="delivery-state ${message.deliveryState === 'read' ? 'read' : 'pending'}">${message.deliveryState === 'read' ? 'RETURNED' : 'PENDING'}</span><span>from ${escapeHtml(message.from)}</span><time>${escapeHtml(when(message.deliveryState === 'read' ? message.readAt : message.at))}</time></div><p>${escapeHtml(message.text)}</p></article>`).join('')}</div>` : `<div class="mailbox-empty"><span>✉</span><div><strong>Inbox is clear</strong><small>Messages and child results will show up here.</small></div></div>`}${canMessage ? `<button class="inbox-compose" type="button" data-message="${escapeHtml(task.id)}">＋ Send this agent a message</button>` : ''}</section>
+    <section id="links" class="detail-section"><div class="section-title"><h4>Task links</h4><span>${children.length} child${children.length === 1 ? '' : 'ren'}</span></div>${activeChildren.length && ['completed','failed','cancelled','timed_out'].includes(task.status) ? `<div class="lifecycle-note"><span>↗</span><p>This task has ended. ${activeChildren.length} direct child agent${activeChildren.length === 1 ? '' : 's'} ${activeChildren.length === 1 ? 'is' : 'are'} still active and will continue independently.</p></div>` : ''}<div class="task-relation-map" role="group" aria-label="Task parent and child relationships">${parent ? `<button class="relation-node parent-node" type="button" data-jump="${escapeHtml(parent.id)}"><span class="relation-role">PARENT · ${escapeHtml(parent.status.replaceAll('_',' ').toUpperCase())}</span><strong>${escapeHtml(parent.prompt)}</strong></button><div class="relation-edge"><span aria-hidden="true">↓</span><small>spawned by</small></div>` : ''}<div class="relation-node current-node" aria-current="true"><span class="relation-role">${parent ? 'SELECTED CHILD' : 'ROOT TASK'} · ${escapeHtml(task.status.replaceAll('_',' ').toUpperCase())}</span><strong>${escapeHtml(task.prompt)}</strong></div>${children.length ? `<div class="relation-branch"><div class="relation-edge"><span aria-hidden="true">↓</span><small>spawns ${children.length} child${children.length === 1 ? '' : 'ren'}</small></div><div class="relation-children">${children.map(child => `<button class="relation-node child-node" type="button" data-jump="${escapeHtml(child.id)}"><span class="relation-role">CHILD · ${escapeHtml(child.status.replaceAll('_',' ').toUpperCase())}</span><strong>${escapeHtml(child.prompt)}</strong><span class="relation-open" aria-hidden="true">↗</span></button>`).join('')}</div></div>` : '<div class="relation-empty">No child agents yet</div>'}</div><p class="relation-note">This map shows task ancestry. Messages and child results appear in the mailbox.</p>${renderConcurrencyTimeline(task, parent, children)}${renderInteractionSequence(task, parent, children, interactionItems)}${renderDesktopGate()}${desktopRuntimeMarkup()}${desktopTopologyMarkup()}${fullFidelityMarkup()}${rendererDeltaMarkup()}${completionPayloadMarkup()}${parentResultStateMarkup()}${requestWireMarkup()}${historyProjectionMarkup()}<div class="interaction-trace"><div class="section-title"><h4>Direct interaction trace</h4><span>${interactionItems.length} item${interactionItems.length === 1 ? '' : 's'}</span></div>${interactionItems.length ? `<div class="interaction-list">${interactionItems.map(({ recipient, message }) => { const sender = taskById(message.from); const isResult = message.kind === 'task_result'; const isReturned = message.deliveryState === 'read'; return `<article class="interaction-item ${isResult ? 'result' : ''} ${isReturned ? 'returned' : 'pending'}"><div class="interaction-meta"><span class="interaction-kind">${isResult ? 'CHILD RESULT' : 'MESSAGE'}</span><span class="interaction-state ${isReturned ? 'returned' : 'pending'}">${isReturned ? 'SUPPLIED TO TASK TOOL' : 'PENDING IN INBOX'}</span><time>${escapeHtml(when(message.at))}</time></div><div class="interaction-pipeline" role="img" aria-label="${escapeHtml(relationRole(sender?.id))} sends to coordinator inbox, then ${isReturned ? 'the coordinator supplies it to' : 'it waits for'} the ${escapeHtml(relationRole(recipient.id))} task tool"><span class="pipeline-stage sent"><small>FROM · ${relationRole(sender?.id)}</small><strong>${escapeHtml(sender?.prompt ?? message.from)}</strong><b>SENT</b></span><i class="pipeline-link complete" aria-hidden="true">→</i><span class="pipeline-stage queued"><small>COORDINATOR INBOX</small><strong>${escapeHtml(relationRole(recipient.id))} mailbox</strong><b>QUEUED</b></span><i class="pipeline-link ${isReturned ? 'complete' : ''}" aria-hidden="true">→</i><span class="pipeline-stage ${isReturned ? 'supplied' : 'waiting'}"><small>TASK TOOL · ${relationRole(recipient.id)}</small><strong>${escapeHtml(recipient.prompt)}</strong><b>${isReturned ? 'SUPPLIED' : 'WAITING'}</b></span></div><p>${escapeHtml(message.text)}</p></article>`; }).join('')}</div><p class="interaction-proof">“Supplied” means the coordinator included the message in that task tool call. It does not prove the model interpreted it.</p>` : '<div class="interaction-empty">No direct parent/child messages or results in the available snapshot.</div>'}</div></section>
+    <section id="agent-mailbox" class="detail-section mailbox-section"><div class="section-title"><h4><span class="section-icon">↳</span> Mailbox</h4><div class="mailbox-heading-actions"><span class="mail-count">${Number(task.pendingMessageCount) || 0} pending · ${Number(task.pendingTaskResultCount) || 0} child results</span><button class="mailbox-route-link" type="button" data-inspector-target="topology-row-eligibility"><span aria-hidden="true">▤</span> Explain parent list rows</button><button class="mailbox-route-link" type="button" data-inspector-target="completion-route"><span aria-hidden="true">↳</span> Trace result path</button></div></div><p class="mailbox-proof">Returned means the coordinator supplied this message to the task tool; it does not prove the model interpreted it.</p><details class="delivery-model" ${deliveryModelOpen ? 'open' : ''}><summary><span>How Codex V2 chooses whether to wake a child</span><small>source model · 0.162.0-alpha.17.2</small></summary>${deliveryFlowMarkup()}<div class="delivery-mode-grid"><article class="delivery-mode queue-only"><div class="delivery-mode-title"><span class="mode-icon" aria-hidden="true">Ⅱ</span><div><h5>send_message</h5><span>QueueOnly</span></div><b>QUEUE</b></div><div class="mode-flow"><span>Caller</span><i aria-hidden="true">→</i><span>Child mailbox</span><i aria-hidden="true">→</i><span class="mode-outcome">Waits for an eligible turn</span></div><p>The target is ensured loaded before delivery. QueueOnly skips the ordinary turn-start request; durable sleep has a separate wake path, and a child waiting in <code>wait_agent</code> can return on mailbox activity.</p></article><article class="delivery-mode trigger-turn"><div class="delivery-mode-title"><span class="mode-icon" aria-hidden="true">▶</span><div><h5>followup_task</h5><span>TriggerTurn</span></div><b>WAKE</b></div><div class="mode-flow"><span>Caller</span><i aria-hidden="true">→</i><span>Load child + mailbox</span><i aria-hidden="true">→</i><span class="mode-outcome">Start a turn if idle</span></div><p>The target is ensured loaded, then turn capacity is checked and pending-work scheduling is requested. It targets an existing V2 child; triggering the root is rejected.</p></article></div><p class="delivery-model-proof">Accepted delivery and an “Interacted” activity do not prove the child model has read the message. <a href="https://github.com/openai/codex/blob/740e5af33c71225640e0c1c1555c514c2c93ab74/codex-rs/core/src/tools/handlers/multi_agents_v2/message_tool.rs" target="_blank" rel="noreferrer">Message handler</a> · <a href="https://github.com/openai/codex/blob/740e5af33c71225640e0c1c1555c514c2c93ab74/codex-rs/core/src/agent/control/delivery.rs" target="_blank" rel="noreferrer">Delivery policy</a></p></details>${inboxItems.length ? `<div class="inbox-list">${inboxItems.map(message => `<article class="inbox-item ${message.deliveryState === 'read' ? 'read' : 'pending'}"><div class="inbox-meta"><span class="mail-kind ${message.kind === 'task_result' ? 'result' : ''}">${message.kind === 'task_result' ? 'CHILD RESULT' : 'MESSAGE'}</span><span class="delivery-state ${message.deliveryState === 'read' ? 'read' : 'pending'}">${message.deliveryState === 'read' ? 'RETURNED' : 'PENDING'}</span><span>from ${escapeHtml(message.from)}</span><time>${escapeHtml(when(message.deliveryState === 'read' ? message.readAt : message.at))}</time></div><p>${escapeHtml(message.text)}</p></article>`).join('')}</div>` : `<div class="mailbox-empty"><span>✉</span><div><strong>Inbox is clear</strong><small>Messages and child results will show up here.</small></div></div>`}${canMessage ? `<button class="inbox-compose" type="button" data-message="${escapeHtml(task.id)}">＋ Send this agent a message</button>` : ''}</section>
     <section id="output" class="detail-section output-section"><div class="section-title"><h4>Latest output</h4><span>${task.output ? `${String(task.output).length.toLocaleString()} chars` : 'Awaiting output'}</span></div>${task.output ? `<pre class="output-text">${escapeHtml(task.output)}</pre>` : `<div class="output-empty"><span class="output-spinner ${task.status === 'running' ? 'active' : ''}">${task.status === 'running' ? '◌' : '·'}</span><span>${task.status === 'running' ? 'Agent is working. Output will stream in here.' : task.status === 'queued' ? 'Output will appear when this agent starts.' : 'This agent did not produce captured text output.'}</span></div>`}</section>
     <section id="activity" class="detail-section activity-section"><div class="section-title"><h4>Recent activity</h4><span>${(task.events ?? []).length} events</span></div>${events.length ? `<div class="activity-list">${events.map(event => `<div class="activity-item"><time>${escapeHtml(when(event.at))}</time><span class="activity-dot ${escapeHtml(event.kind)}"></span><span class="activity-copy"><strong>${escapeHtml(event.kind.replaceAll('_',' '))}</strong><small>${escapeHtml(String(event.detail ?? '').replace(/\s+/g,' ').slice(0,220))}</small></span></div>`).join('')}</div>` : '<div class="subtle-empty">No activity recorded yet.</div>'}</section>`;
     const deliveryModel = $('#agent-mailbox .delivery-model');
-    if (deliveryModel) deliveryModel.insertAdjacentHTML('beforeend', `${mailboxTimingMarkup()}${waitScopeMarkup()}${residencyMarkup()}${completionRouteMarkup()}${admissionMarkup()}${topologyMarkup()}${boardWriteMarkup()}${toolExposureMarkup()}`);
+    if (deliveryModel) deliveryModel.insertAdjacentHTML('beforeend', `${mailboxTimingMarkup()}${waitScopeMarkup()}${waitContractMarkup()}${residencyMarkup()}${completionRouteMarkup()}${admissionMarkup()}${topologyMarkup()}${boardWriteMarkup()}${toolExposureMarkup()}`);
 }
 const mechanismExplorerSteps = [
   { label: 'Prepare', title: 'Resolve the child request', text: 'Codex builds the spawn tool from the active agent configuration. Context, model choices and tool availability depend on the selected multi-agent version and runtime settings.', source: 'multi_agents_spec.rs', href: 'https://github.com/openai/codex/blob/6ae8b8aa7c608730d4315d59c5c081897ae02780/codex-rs/core/src/tools/handlers/multi_agents_spec.rs' },
@@ -1656,6 +2080,7 @@ const mechanismExplorerSteps = [
   { label: 'Inspect', title: 'Opening a child is not spawning one', text: 'The Desktop panel first exposes known thread summaries. Selecting a child can hydrate its conversation through thread/read and load history pages; that navigation path does not create a new child thread.', source: 'installed app bundle · evidence', href: 'https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#follow-up-desktop-child-selection-hydrates-thread-state-on-demand-2026-10-16' }
 ];
 let mechanismExplorerStep = 0;
+let mechanismExplorerShowAll = false;
 let desktopHydrationState = 'summary';
 function desktopHydrationMarkup() {
   const states = {
@@ -1790,6 +2215,67 @@ function selectRendererReadRoute(routeId) {
   document.querySelector(`[data-renderer-read-route="${rendererReadRoute}"]`)?.focus();
 }
 
+function rendererUpdatePipelineMarkup() {
+  const stages = [
+    {
+      title: 'App-server notification',
+      owner: 'main process → shared manager',
+      detail: 'Recognized item events pass host filtering and dispatch into the conversation reducer.',
+      evidence: 'Notification ingress',
+      href: 'https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#app-server-notifications-enter-the-shared-conversation-reducer',
+      kind: 'static',
+    },
+    {
+      title: 'Conversation state + delta',
+      owner: 'item reducer → thread store',
+      detail: 'A mutation may update the thread store and produce a transcript delta; filtering, no-op updates, or a null delta can stop this path.',
+      evidence: 'Reducer to transcript publisher',
+      href: 'https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#item-notification-updates-feed-the-conversation-transcript-subscription',
+      kind: 'conditional',
+    },
+    {
+      title: 'Conversation subscription',
+      owner: 'host RPC ↔ MessagePort ↔ renderer',
+      detail: 'The callback transport can carry transcript snapshots and deltas across the bridge. The static trace does not capture a live frame.',
+      evidence: 'Callback transport',
+      href: 'https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#conversation-subscription-callbacks-cross-the-messageport-rpc-bridge',
+      kind: 'static',
+    },
+    {
+      title: 'Local transcript projection',
+      owner: 'renderer listener → selectors → list props',
+      detail: 'Accepted reset/change data updates local reactive stores and derived transcript projections; the selected-child path supplies entries to a virtualized list.',
+      evidence: 'Renderer projection',
+      href: 'https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#renderer-conversation-deltas-update-the-local-transcript-projection',
+      kind: 'static',
+    },
+    {
+      title: 'React commit / visible paint',
+      owner: 'runtime observation required',
+      detail: 'No component commit, DOM change, or paint acknowledgement was captured. The current evidence stops at static state/list wiring.',
+      evidence: 'Current boundary',
+      href: 'https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/desktop-child-runtime-2026-10-17.json',
+      kind: 'unknown',
+    },
+  ];
+  const selected = stages[rendererUpdateStage] ?? stages[0];
+  return `<section class="renderer-update-pipeline" aria-labelledby="renderer-update-pipeline-title">
+    <header class="renderer-update-head"><div><span>INSTALLED DESKTOP · EVIDENCE PATH</span><h4 id="renderer-update-pipeline-title">How a child update could reach the screen</h4></div><span class="renderer-update-build">STATIC · BUILD-SCOPED</span></header>
+    <div class="renderer-update-legend" aria-label="Evidence legend"><span><i data-kind="static"></i> traced in source</span><span><i data-kind="conditional"></i> conditional path</span><span><i data-kind="unknown"></i> not observed</span></div>
+    <ol class="renderer-update-steps" aria-label="Select a stage in the renderer update path">${stages.map((stage,index) => `<li><button type="button" data-renderer-update-stage="${index}" data-kind="${stage.kind}" aria-pressed="${index === rendererUpdateStage}" aria-label="Stage ${index + 1}: ${stage.title}"><span class="renderer-update-index">0${index+1}</span><strong>${stage.title}</strong><small>${stage.owner}</small></button>${index < stages.length - 1 ? `<i aria-hidden="true" class="renderer-update-arrow" data-to-kind="${stages[index+1].kind}">→</i>` : ''}</li>`).join('')}</ol>
+    <article class="renderer-update-detail" data-kind="${selected.kind}" aria-live="polite"><div><span>${selected.kind === 'unknown' ? 'OPEN RUNTIME QUESTION' : `STAGE 0${rendererUpdateStage+1} · ${selected.kind.toUpperCase()}`}</span><a href="${selected.href}" target="_blank" rel="noreferrer">${selected.evidence} ↗</a></div><h5>${selected.title}</h5><p>${selected.detail}</p></article>
+    <p class="renderer-update-boundary"><b>Evidence boundary</b> These source links span pinned installed-bundle records; they are not a single-build runtime trace. The separate build 20586 runtime summary confirms linked child reads, but no live delta-to-render sequence, React commit, or visible paint.</p>
+  </section>`;
+}
+
+function selectRendererUpdateStage(stage) {
+  rendererUpdateStage = Math.max(0, Math.min(4, Number(stage) || 0));
+  const section = $('.renderer-update-pipeline');
+  if (!section) return;
+  section.outerHTML = rendererUpdatePipelineMarkup();
+  document.querySelector(`[data-renderer-update-stage="${rendererUpdateStage}"]`)?.focus();
+}
+
 function agentControlExplorerMarkup() {
   const entries = [
     ['new-root', 'New root', 'InitialHistory::New'],
@@ -1825,16 +2311,33 @@ function agentControlExplorerMarkup() {
 
 function currentMainDeltaMarkup() {
   return `<section class="main-delta" aria-labelledby="main-delta-title">
-    <div class="main-delta-heading"><div><span>UPSTREAM SOURCE · BOUNDED DIFF</span><h4 id="main-delta-title">What changed after the last subagent census?</h4></div><a href="https://github.com/openai/codex/commit/96eb400d1231f0199e96f640c740096087cf3e9b" target="_blank" rel="noreferrer">main · 96eb400 ↗</a></div>
-    <div class="main-delta-rail" role="img" aria-label="Codex main source revisions b5115cdd through 96eb400. Earlier commits changed the Noise handshake, thread-history projection, and MCP dynamic-tool handling. The latest commit adds retryable and unknown-outcome persistence error classes and safe shutdown labels; inspected subagent spawn paths remain unchanged">
-      <div class="main-delta-commit"><span>LAST CENSUS</span><strong>b5115cdd</strong><small>factory callsite map</small></div><i aria-hidden="true">→</i><div class="main-delta-change-stack"><article class="main-delta-change"><span>34420d4 · EXEC-SERVER</span><strong>Noise handshake</strong><small>disconnect reason + tests</small></article><i aria-hidden="true">→</i><article class="main-delta-change"><span>4491caf · THREAD STORE</span><strong>Thread-history projection</strong><small>line stream bounded rollout suffix</small></article><i aria-hidden="true">→</i><article class="main-delta-change"><span>0df4aa6 · MCP / CODE MODE</span><strong>Dynamic tool updates</strong><small>tool-list notifications + parallel calls</small></article><i aria-hidden="true">→</i><article class="main-delta-change"><span>96eb400 · PERSISTENCE</span><strong>Retryable vs outcome unknown</strong><small>safe tree-shutdown error labels; no automatic retry</small></article></div><i aria-hidden="true">→</i><div class="main-delta-commit latest"><span>FETCHED MAIN</span><strong>96eb400</strong><small>2026-10-17</small></div>
-    </div>
-    <div class="main-delta-scope"><span class="main-delta-check" aria-hidden="true">✓</span><p><b>Subagent spawn paths unchanged; shutdown failure labels refined through 96eb400</b><span>AgentControl · child spawn · app-server collaboration projection · TUI unchanged. Thread-store retryability is a separate persistence concern.</span></p><a href="https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#follow-up-upstream-main-recheck-through-96eb400-2026-10-17" target="_blank" rel="noreferrer">Evidence ledger ↗</a></div>
-    <p class="main-delta-boundary">The new error categories do not automatically retry a child operation. This bounded public-source diff is not a trace of the packaged Desktop runtime.</p>
+    <div class="main-delta-heading"><div><span>UPSTREAM SOURCE · BOUNDED DIFF</span><h4 id="main-delta-title">What changed after the last subagent census?</h4></div><a href="https://github.com/openai/codex/commit/3076caafdf674e0237866a22b647cd9c6931891c" target="_blank" rel="noreferrer">main · 3076caa ↗</a></div>
+    <ol class="main-delta-rail" aria-label="Codex source revisions checked after the subagent census">
+      <li><article class="main-delta-node"><span>LAST CENSUS</span><strong>b5115cdd</strong><small>AgentControl factory callsite map</small></article><i aria-hidden="true">→</i></li>
+      <li><article class="main-delta-node"><span>EXEC-SERVER</span><strong>34420d4</strong><small>Noise handshake disconnect reason</small></article><i aria-hidden="true">→</i></li>
+      <li><article class="main-delta-node"><span>THREAD STORE</span><strong>4491caf</strong><small>Bounded thread-history projection</small></article><i aria-hidden="true">→</i></li>
+      <li><article class="main-delta-node"><span>MCP / CODE MODE</span><strong>0df4aa6</strong><small>Dynamic tool updates and parallel calls</small></article><i aria-hidden="true">→</i></li>
+      <li><article class="main-delta-node"><span>PERSISTENCE</span><strong>96eb400</strong><small>Retryable vs unknown write outcome</small></article><i aria-hidden="true">→</i></li>
+      <li><article class="main-delta-node"><span>MULTI-ENV EXTENSION</span><strong>e7de1f4</strong><small>Opt-in file-copy tool; child-turn availability unknown</small></article><i aria-hidden="true">→</i></li>
+      <li><article class="main-delta-node"><span>MCP APPROVAL</span><strong>a083a1e</strong><small>Distinguish user, interrupted, and non-interactive cancellation</small></article><i aria-hidden="true">→</i></li>
+      <li><article class="main-delta-node"><span>TUI BACKEND OWNERSHIP</span><strong>440312f</strong><small>Keep session selection bound to its backend</small></article><i aria-hidden="true">→</i></li>
+      <li><article class="main-delta-node"><span>MCP STATUS METADATA</span><strong>0e675021</strong><small>Preserve tool-list metadata in server status</small></article><i aria-hidden="true">→</i></li>
+      <li><article class="main-delta-node"><span>WINDOWS UNINSTALL</span><strong>b9775a0</strong><small>Honor home deletion preferences</small></article><i aria-hidden="true">→</i></li>
+      <li><article class="main-delta-node latest"><span>V8 / ICU BUILD</span><strong>3076caa</strong><small>Move Bazel rules into the workspace</small></article></li>
+    </ol>
+    <div class="main-delta-scope"><span class="main-delta-check" aria-hidden="true">✓</span><p><b>Inspected subagent paths unchanged through 3076caa</b><span>The latest commit only moves V8/ICU Bazel rules. The bounded review found no change in the inspected AgentControl, multi-agent handlers, collaboration protocol, app-server, or TUI paths. This is a path-scoped result, not proof that indirect effects elsewhere are impossible.</span></p><a href="https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#follow-up-upstream-main-recheck-through-3076caa-2026-10-17" target="_blank" rel="noreferrer">Evidence ledger ↗</a></div>
+    <p class="main-delta-boundary">This bounded public-source diff does not capture the packaged Desktop runtime or prove which turn receives an optional extension tool.</p>
   </section>`;
 }
 
 function packagedCliFeatureRegistryMarkup() {
+  const scenarios = {
+    'feature-fallback': { title: 'Feature fallback → V1', override: 'None', metadata: 'None', flags: 'multi_agent=true · multi_agent_v2=false', result: 'V1', detail: 'With no config override or model version, enabled legacy multi_agent selects V1.' },
+    'model-v2': { title: 'Model metadata → V2', override: 'None', metadata: 'Some(V2)', flags: 'multi_agent=true · multi_agent_v2=false', result: 'V2', detail: 'Model metadata can select V2 even when this CLI feature snapshot reports multi_agent_v2 disabled.' },
+    'config-v2': { title: 'Config override → V2', override: 'V2', metadata: 'Some(V1) or None', flags: 'multi_agent=true · multi_agent_v2=true', result: 'V2', detail: 'An explicit V2 configuration override takes precedence over model metadata.' },
+    disabled: { title: 'Agents disabled → Disabled', override: 'Disabled', metadata: 'Some(V2)', flags: 'agents disabled', result: 'Disabled', detail: 'An explicit disabled- agents configuration wins before model metadata and feature fallback.' }
+  };
+  const scenario = scenarios[versionResolutionScenario] ?? scenarios['feature-fallback'];
   return `<section class="cli-feature-map" aria-labelledby="cli-feature-map-title">
     <div class="cli-feature-map-head"><div><span>PACKAGED CLI · FEATURE REGISTRY</span><h4 id="cli-feature-map-title">本机 CLI 暴露了哪些 agent 开关？</h4></div><span class="cli-feature-map-build">Desktop 20586 · CLI 0.163.0-alpha.10.2</span></div>
     <div class="cli-feature-map-tracks" role="list" aria-label="Packaged CLI feature states">
@@ -1846,15 +2349,212 @@ function packagedCliFeatureRegistryMarkup() {
       <article class="cli-feature-map-item experimental" role="listitem"><span class="cli-feature-map-state">UNDER DEVELOPMENT · DISABLED</span><strong><code>subagent_default_context_limits</code></strong><small>子 agent 默认上下文限制</small></article>
     </div>
     <p class="cli-feature-map-boundary">这是在已授权工作区内运行打包 CLI 得到的有效 feature registry；用户配置和匹配环境变量未见覆盖。它不能证明 Desktop 宿主继承了同一组解析值，也不能证明某个任务选用了哪条协议或实际启动了子 agent。</p>
+    <div class="version-resolution" aria-labelledby="version-resolution-title">
+      <div class="version-resolution-head"><b>版本解析 · 固定源码规则</b><span>Codex tag · 4ebc485</span></div>
+      <div class="version-resolution-cases" role="group" aria-label="选择 multi-agent 版本解析场景">
+        <button type="button" data-version-resolution="feature-fallback" aria-pressed="${versionResolutionScenario === 'feature-fallback'}">走 feature 回退</button><button type="button" data-version-resolution="model-v2" aria-pressed="${versionResolutionScenario === 'model-v2'}">模型标记 V2</button><button type="button" data-version-resolution="config-v2" aria-pressed="${versionResolutionScenario === 'config-v2'}">显式配置 V2</button><button type="button" data-version-resolution="disabled" aria-pressed="${versionResolutionScenario === 'disabled'}">显式禁用 agents</button>
+      </div>
+      <div class="version-resolution-flow" aria-live="polite"><article><span>CONFIG</span><strong>${scenario.override}</strong></article><i aria-hidden="true">→</i><article><span>MODEL METADATA</span><strong>${scenario.metadata}</strong></article><i aria-hidden="true">→</i><article><span>FEATURE SNAPSHOT</span><strong>${scenario.flags}</strong></article><i aria-hidden="true">→</i><article class="version-resolution-result"><span>RESOLVED VERSION</span><strong>${scenario.result}</strong></article></div>
+      <p id="version-resolution-title">${scenario.detail} Controller selection is a separate decision; the diagram is a source-backed rule, not a capture of a Desktop task.</p>
+      <div class="version-resolution-links"><a href="https://github.com/openai/codex/blob/4ebc485ca321243727539187169425fcf972f2c4/codex-rs/core/src/config/mod.rs#L1637-L1664" target="_blank" rel="noreferrer">config override + fallback</a><a href="https://github.com/openai/codex/blob/4ebc485ca321243727539187169425fcf972f2c4/codex-rs/core/src/session/mod.rs#L4376-L4388" target="_blank" rel="noreferrer">model metadata resolution</a></div>
+    </div>
     <a class="cli-feature-map-source" href="https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#follow-up-packaged-cli-feature-registry-snapshot-2026-10-17" target="_blank" rel="noreferrer">查看版本、哈希与复核步骤 ↗</a>
+  </section>`;
+}
+
+function selectionBoundariesMarkup() {
+  const versionCases = {
+    'feature-fallback': { result: 'V1', detail: 'No config override or model version; enabled legacy feature fallback selects V1.' },
+    'model-v2': { result: 'V2', detail: 'The selected model metadata supplies V2, even with the V2 feature switch disabled.' },
+    'config-v2': { result: 'V2', detail: 'An explicit V2 config override takes precedence over model metadata.' },
+    disabled: { result: 'Disabled', detail: 'An explicit disabled-agent config wins before model metadata and feature fallback.' },
+  };
+  const entries = [
+    ['new-root', 'New root'],
+    ['cold-resume', 'Cold resume'],
+    ['fork-root', 'Forked root'],
+    ['internal-child', 'Internal child'],
+    ['live-resume', 'Resident resume'],
+  ];
+  const scenario = versionCases[versionResolutionScenario] ?? versionCases['feature-fallback'];
+  const entryName = entries.find(([id]) => id === agentControlEntry)?.[1] ?? 'New root';
+  const localInit = ['new-root', 'cold-resume', 'fork-root'].includes(agentControlEntry);
+  const currentMain = agentControlSource === 'current-main';
+  const controller = agentControlEntry === 'live-resume'
+    ? { title: 'Existing controller reused', kind: 'resident', detail: 'The resident thread returns before a new controller is selected.' }
+    : agentControlEntry === 'internal-child'
+      ? { title: 'Parent-provided AgentControl', kind: 'inherited', detail: 'The internal child inherits the captured parent controller.' }
+      : localInit && agentControlFactoryEnabled && (!currentMain || agentControlVersion === 'v2')
+        ? { title: 'Host factory controller', kind: 'host', detail: 'A V2 host factory may replace LocalAgentControl at thread registration.' }
+        : { title: 'LocalAgentControl', kind: 'local', detail: currentMain && localInit && agentControlFactoryEnabled ? 'V1 requires local control in the current-main API.' : 'The regular app-server composition uses the local controller.' };
+  const handler = scenario.result === 'Disabled' ? 'No collaboration handler' : `${scenario.result} spawn_agent handler`;
+  const protocolHref = 'https://github.com/openai/codex/blob/67a709665ac7b50311b93e32612c9a8281684787/codex-rs/core/src/tools/spec_plan.rs#L1300-L1345';
+  const controlHref = 'https://github.com/openai/codex/blob/67a709665ac7b50311b93e32612c9a8281684787/codex-rs/core/src/session/session.rs#L929-L959';
+  return `<section class="selection-boundaries" aria-labelledby="selection-boundaries-title">
+    <header><div><span>THREE INDEPENDENT SELECTION BOUNDARIES</span><h4 id="selection-boundaries-title">一条 spawn 路径里的三项选择</h4></div><span class="selection-boundaries-badge">4ebc485 + 67a7096 · SOURCE MODEL</span></header>
+    <p class="selection-boundaries-intro">先解析 turn 协议版本，再据此注册工具 handler；handler 共用 AgentControl 接口。线程入口另行决定 controller 如何获得。</p>
+    <div class="selection-boundaries-protocol" role="group" aria-label="选择 turn 协议版本解析情景">${[['feature-fallback','Feature 回退'],['model-v2','模型元数据 V2'],['config-v2','配置覆盖 V2'],['disabled','显式禁用']].map(([id,label]) => `<button type="button" data-boundary-version="${id}" aria-pressed="${id === versionResolutionScenario}">${label}</button>`).join('')}</div>
+    <div class="selection-boundaries-entry" role="group" aria-label="选择 controller 的线程入口">${entries.map(([id,label]) => `<button type="button" data-boundary-entry="${id}" aria-pressed="${id === agentControlEntry}">${label}</button>`).join('')}</div>
+    <div class="selection-boundaries-map" aria-live="polite">
+      <article class="selection-boundary-node version"><span>01 · TURN VERSION</span><strong>${scenario.result}</strong><small>${scenario.detail}</small></article><i aria-hidden="true">→</i>
+      <article class="selection-boundary-node handler"><span>02 · TOOL PLAN</span><strong>${handler}</strong><small>${scenario.result === 'Disabled' ? 'Collaboration tools are not registered for this resolved version.' : 'The resolved version selects the handler implementation.'}</small></article><i aria-hidden="true">→</i>
+      <article class="selection-boundary-node shared"><span>SHARED API</span><strong>AgentControl::spawn</strong><small>${scenario.result === 'Disabled' ? 'Not reached in this scenario.' : 'V1 and V2 handlers call the shared controller interface.'}</small></article><i aria-hidden="true">⇢</i>
+      <article class="selection-boundary-node controller" data-controller-kind="${controller.kind}"><span>03 · ${entryName.toUpperCase()} CONTROLLER</span><strong>${controller.title}</strong><small>${controller.detail}</small></article>
+    </div>
+    <p class="selection-boundaries-note"><b>Read the arrows carefully:</b> protocol version determines the tool handler; thread entry determines controller ownership. The shared API connects them, but selecting V1 or V2 alone does not identify a task's concrete runtime controller.</p>
+    <div class="selection-boundaries-sources"><a href="${protocolHref}" target="_blank" rel="noreferrer">version-specific tool registration ↗</a><a href="${controlHref}" target="_blank" rel="noreferrer">LocalAgentControl binding ↗</a><a href="https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#follow-up-version-resolution-is-turn-scoped-not-necessarily-fixed-at-thread-start-2026-10-17" target="_blank" rel="noreferrer">evidence ledger and limits ↗</a></div>
+  </section>`;
+}
+
+function refreshSelectionBoundaries() {
+  const section = $('.selection-boundaries');
+  if (section) section.outerHTML = selectionBoundariesMarkup();
+}
+
+function refreshAgentControlViews() {
+  document.querySelectorAll('.agent-control-construction').forEach(section => {
+    section.outerHTML = agentControlExplorerMarkup();
+  });
+}
+
+function interactionCompareMarkup() {
+  const phases = [
+    ['spawn', '01', '创建'], ['execute', '02', '子线程执行'], ['control', '03', '父线程控制'], ['return', '04', '状态与结果'], ['surface', '05', '桌面投影'],
+  ];
+  const scenarios = {
+    'v1-capture': {
+      label: 'V1 · 捕获运行', badge: 'DIRECT CLI OBSERVATION · ONE RUN',
+      note: '这是一条独立 CLI 的 V1 实际捕获。运行中可见 spawn、wait 和父级结果；它不证明 Desktop 使用同一控制器，也没有 Desktop UI 轨迹。',
+      cells: {
+        parent: [
+          ['spawn_agent 返回 child ID', 'observed', '运行记录包含 spawn_agent 调用及返回的 child thread ID。', 'native-cli-trace-title'],
+          ['等待 child', 'observed', '同一父级记录随后调用 wait，并收到该 child 的终态和消息。', 'native-cli-trace-title'],
+          ['wait 返回后继续', 'observed', 'wait 已完成后，父级继续执行并报告结果。', 'native-cli-trace-title'],
+          ['父级报告结果', 'observed', '捕获到父级最终输出的指定 marker；这是该次 CLI 探针的结果。', 'native-cli-trace-title'],
+          ['未采集 Desktop UI', 'unknown', '该探针运行在独立 CLI 中，不包含 Desktop 面板或屏幕绘制。', 'desktop-runtime-proof-title'],
+        ],
+        child: [
+          ['创建独立 thread', 'observed', '父级收到 child thread ID，child rollout 与 parent 关联。', 'native-cli-trace-title'],
+          ['执行并完成', 'observed', 'child 返回指定 marker，父级 wait 收到完成状态。', 'native-cli-trace-title'],
+          ['独立于 parent turn', 'observed', '捕获顺序显示父级等待 child；它不表示两个模型请求的精确重叠时长。', 'native-cli-trace-title'],
+          ['状态与消息由 wait 返回', 'observed', '该运行记录了 wait 的状态和 child 消息。', 'native-cli-trace-title'],
+          ['不适用 · CLI 探针', 'unknown', '这份运行没有 Desktop renderer 或 React 绘制证据。', 'desktop-runtime-proof-title'],
+        ],
+        coordinator: [
+          ['V1 spawn handler', 'source', '源代码解释工具处理路径；实际 child ID 和调用来自上方单次 CLI 捕获。', 'spawn-protocol-title'],
+          ['控制器创建 child', 'source', '本格只引用对应机制的源码解释，不补充未记录的运行时内部事件。', 'spawn-protocol-title'],
+          ['wait 汇总已选 agent', 'observed', '父级工具调用记录能证明该次 wait 返回；不能推广到其他运行。', 'native-cli-trace-title'],
+          ['终态与结果同次捕获', 'observed', '显示的是该探针观测到的响应，不把它当作通用时序保证。', 'native-cli-trace-title'],
+          ['没有 UI 协调记录', 'unknown', 'CLI 捕获不能证明 Desktop 对 child 行的筛选或绘制。', 'desktop-runtime-proof-title'],
+        ],
+        desktop: [
+          ['未覆盖', 'unknown', 'V1 CLI 探针不观察 Desktop。', 'desktop-runtime-proof-title'],
+          ['未覆盖', 'unknown', '未运行 Desktop child 生命周期捕获。', 'desktop-runtime-proof-title'],
+          ['未覆盖', 'unknown', '未记录 Desktop panel selection 或历史 hydration。', 'desktop-runtime-proof-title'],
+          ['未覆盖', 'unknown', '没有关联 Desktop app-server 通知的证据。', 'desktop-runtime-proof-title'],
+          ['未知 · 无 Desktop capture', 'unknown', '不能从 CLI 运行推断 Desktop 的 renderer、React commit 或 visible paint。', 'desktop-runtime-proof-title'],
+        ],
+      },
+    },
+    'v2-source': {
+      label: 'V2 · 固定源码', badge: 'PINNED PUBLIC SOURCE · STATIC PATHS',
+      note: '此视图汇总固定 Codex 源码中 V2 的路径。节点是代码所描述的控制流，不是一次运行捕获；源码顺序不代表耗时或保证每个分支都会执行。',
+      cells: {
+        parent: [
+          ['spawn_agent 发起创建', 'source', 'V2 handler 将任务交给共享 AgentControl 接口。', 'spawn-protocol-title'],
+          ['可继续或调用 wait', 'source', 'spawn 接受与 child 完成是分离边界；父级可以继续，也可另行等待。', 'spawn-protocol-title'],
+          ['QueueOnly / TriggerTurn', 'source', '消息模式决定排队和 turn 唤醒语义；提交成功不等于 child 已读取。', 'delivery-flow-title'],
+          ['activity 与 parent result 分路', 'source', '生命周期 activity、wait 结果和消息 mailbox 是不同信号。', 'completion-route-title'],
+          ['不描述 Desktop renderer', 'unknown', '这些 core 源码不能证明 Desktop 如何呈现具体 child。', 'renderer-update-pipeline-title'],
+        ],
+        child: [
+          ['接受后创建 child', 'source', '共享控制器负责生成 child session；V2 调用路径不等于每次都成功。', 'spawn-protocol-title'],
+          ['child turn 运行', 'source', 'child 的 turn 与父级 turn 有独立状态；具体模型行为需运行证据。', 'spawn-protocol-title'],
+          ['消息可入队或触发 turn', 'source', 'QueueOnly 不主动启动 turn；TriggerTurn 会走调度路径，但消费仍需单独确认。', 'delivery-flow-title'],
+          ['完成状态 / 消息交付', 'source', '代码分别建模终态 activity、wait 返回及 parent mailbox 的消息。', 'completion-route-title'],
+          ['不描述 Desktop renderer', 'unknown', 'V2 core 源码没有呈现安装版 Desktop UI 的证据。', 'renderer-update-pipeline-title'],
+        ],
+        coordinator: [
+          ['V2 tool handler → AgentControl', 'source', '协议版本决定工具 handler；controller backend 是独立选择。', 'spawn-protocol-title'],
+          ['执行容量与 runtime 管理', 'source', '容量、会话状态和生命周期由共享 agent runtime 管理。', 'spawn-protocol-title'],
+          ['Mailbox + turn scheduler', 'source', '入队、activity 通知、turn 调度是不同操作。', 'delivery-flow-title'],
+          ['wait / result routes', 'source', '状态聚合与 parent result 路由不应合并理解成一个完成事件。', 'completion-route-title'],
+          ['核心协议未给出 UI commit', 'unknown', '应用层 renderer、React commit 和可见绘制需独立证据。', 'renderer-update-pipeline-title'],
+        ],
+        desktop: [
+          ['不在该源码范围', 'unknown', '本场景只展示固定 V2 core 源码。', 'desktop-runtime-proof-title'],
+          ['不在该源码范围', 'unknown', 'child turn 源码不能证明 Desktop 是否选中该 child。', 'desktop-runtime-proof-title'],
+          ['不在该源码范围', 'unknown', '消息调度源码不能证明 renderer 收到增量。', 'desktop-runtime-proof-title'],
+          ['不在该源码范围', 'unknown', '结果路由源码不能证明面板显示了结果。', 'desktop-runtime-proof-title'],
+          ['未知 · 需同版本运行捕获', 'unknown', 'UI 投影、组件提交和屏幕绘制没有由这组 core 源码建立。', 'desktop-runtime-proof-title'],
+        ],
+      },
+    },
+    desktop20586: {
+      label: 'Desktop · build 20586', badge: 'RUNTIME LINKAGE + STATIC RENDERER',
+      note: '同一 build 的运行摘要将两个 child ID 与 Desktop app-server 的读取 / 生命周期请求关联起来；其余 UI 路径来自静态资源检查。没有从 spawn 到屏幕绘制的同会话端到端记录。',
+      cells: {
+        parent: [
+          ['parent rollout 记录 child IDs', 'observed', '脱敏运行摘要保留 parent rollout 中的两个 child ID。', 'desktop-runtime-proof-title'],
+          ['父级后续行为未完整捕获', 'unknown', '现有摘要聚焦关联 child 和 Desktop 请求，不能补全 parent turn 的控制权时序。', 'desktop-runtime-proof-title'],
+          ['turn/start 等请求已关联', 'observed', 'Desktop app-server 关联日志出现对应 child 的 turn/start；不表示由这一步创建 child。', 'desktop-runtime-proof-title'],
+          ['thread/name/set 被记录', 'observed', '可证明 app-server 处理了关联线程命名请求，不证明 UI 已显示。', 'desktop-runtime-proof-title'],
+          ['未观察父级 UI 更新', 'unknown', '运行摘要没有 capture 对应 parent transcript 的 renderer commit。', 'desktop-runtime-proof-title'],
+        ],
+        child: [
+          ['child IDs 与 parent 关联', 'observed', '两个 child ID 可在 parent rollout 与 Desktop 关联记录间对照。', 'desktop-runtime-proof-title'],
+          ['thread/read 已记录', 'observed', '该次会话的 Desktop GUI 关联日志处理了 child thread/read 请求。', 'desktop-runtime-proof-title'],
+          ['child turn/start 已记录', 'observed', '生命周期请求有日志证据，但不包含每条消息是否被模型消费。', 'desktop-runtime-proof-title'],
+          ['activity / item delta 未捕获', 'unknown', '现有运行记录没有对应 subAgentActivity 或 transcript delta 事件。', 'desktop-runtime-proof-title'],
+          ['child panel paint 未观察', 'unknown', '没有 DOM、React commit 或屏幕绘制记录。', 'desktop-runtime-proof-title'],
+        ],
+        coordinator: [
+          ['具体 controller 仍未知', 'unknown', '安装版静态二进制有 controller 构造路径，但该会话选用的动态 receiver 未确定。', 'desktop-runtime-proof-title'],
+          ['读取与 turn 请求有日志', 'observed', '可确认 app-server 处理这些请求；不能据此还原全部调度事件。', 'desktop-runtime-proof-title'],
+          ['增量转发是静态路径', 'source', '安装版资源显示 forwarding gate 与分队列；本次运行没有对应 delta 捕获。', 'renderer-update-pipeline-title'],
+          ['history 与 transcript 路径', 'source', '静态 renderer 代码说明如何 hydrate child 与接收 transcript 更新。', 'renderer-read-path-title'],
+          ['React commit / paint 未知', 'unknown', '静态状态投影不证明组件已提交或屏幕已绘制。', 'renderer-update-pipeline-title'],
+        ],
+        desktop: [
+          ['panel row 来自 parent projection', 'source', 'build 20586 静态 selector 从 parent 相关来源投影 rows。', 'topology-map-title'],
+          ['child history 按需读取', 'source', '选中 child 后会校验 ancestry，并按状态 hydrate 分页历史。', 'renderer-read-path-title'],
+          ['事件有 forwarding gate', 'source', '不同 item family 经过不同队列和目标匹配条件。', 'renderer-delta-title'],
+          ['store 更新不等于显示', 'source', 'renderer store/list 连接可静态追踪，仍缺该会话的 commit/paint 证据。', 'renderer-update-pipeline-title'],
+          ['未知 · end-to-end paint', 'unknown', '本机证据止于关联 app-server 请求；没有可见 UI 绘制的运行观测。', 'renderer-update-pipeline-title'],
+        ],
+      },
+    },
+  };
+  const scenario = scenarios[interactionCompareVersion] ?? scenarios['v1-capture'];
+  const laneNames = [['parent','PARENT','父线程'],['child','CHILD','子线程'],['coordinator','COORDINATOR','协调器 / app-server'],['desktop','DESKTOP UI','桌面界面']];
+  const laneMarkup = laneNames.map(([key, label, title]) => `<div class="interaction-compare-lane" data-lane="${key}"><div class="interaction-compare-actor"><span>${label}</span><strong>${title}</strong></div><div class="interaction-compare-cells">${scenario.cells[key].map((cell,index) => `<a class="interaction-compare-cell evidence-${cell[1]} ${interactionCompareSelection === `${key}-${index}` ? 'is-selected' : ''}" href="#${cell[3]}" data-interaction-cell="${key}-${index}" data-evidence="${cell[1]}" aria-current="${interactionCompareSelection === `${key}-${index}` ? 'true' : 'false'}"><span>${phases[index][0]} · ${cell[1] === 'observed' ? 'OBSERVED' : cell[1] === 'source' ? 'SOURCE' : 'UNKNOWN'}</span><strong>${cell[0]}</strong><i aria-hidden="true">↗</i></a>`).join('')}</div></div>`).join('');
+  const [laneKey, cellIndex] = interactionCompareSelection.split('-');
+  const selected = scenario.cells[laneKey]?.[Number(cellIndex)] ?? scenario.cells.parent[0];
+  const selectedLane = laneNames.find(([key]) => key === laneKey)?.[2] ?? '父线程';
+  return `<section class="interaction-compare" aria-labelledby="interaction-compare-title">
+    <header class="interaction-compare-head"><div><span>THREE EVIDENCE LENSES · SHARED PHASE AXIS</span><h4 id="interaction-compare-title">创建之后：控制权、结果与 UI 分别走哪条路？</h4><p>按阶段并排读三类材料；每个节点可跳到已有证据图。</p></div><span class="interaction-compare-badge">${scenario.badge}</span></header>
+    <div class="interaction-compare-controls" role="group" aria-label="选择证据视图">${Object.entries(scenarios).map(([id,item]) => `<button type="button" data-interaction-version="${id}" aria-pressed="${id === interactionCompareVersion}">${item.label}</button>`).join('')}</div>
+    <div class="interaction-compare-legend" aria-label="证据状态图例"><span><i class="observed"></i>运行直接观测</span><span><i class="source"></i>静态源码路径</span><span><i class="unknown"></i>当前未知 / 未覆盖</span></div>
+    <div class="interaction-compare-scroll"><div class="interaction-compare-grid" role="table" aria-label="父线程、子线程、协调器和桌面界面的阶段对照"><div class="interaction-compare-axis"><span>ACTOR</span>${phases.map(([key,index,label]) => `<span data-phase="${key}"><i>${index}</i><b>${label}</b></span>`).join('')}</div>${laneMarkup}</div></div>
+    <article class="interaction-compare-readout" aria-live="polite"><div><span>SELECTED EVIDENCE</span><b>${selectedLane} · ${selected[1] === 'observed' ? '运行观测' : selected[1] === 'source' ? '源码路径' : '未知 / 未覆盖'}</b></div><strong>${selected[0]}</strong><p>${selected[2]}</p><a href="#${selected[3]}">跳转到相关细节 ↗</a></article>
+    <p class="interaction-compare-boundary">${scenario.note} 横向阶段表达语义顺序，不代表耗时比例；不同视图是不同证据来源，不能拼成同一条运行轨迹。</p>
   </section>`;
 }
 
 function renderMechanismExplorer() {
   const root = $('#mechanism-explorer');
   if (!root) return;
+  const groups = [
+    { step: 0, title: '运行前配置', summary: '版本解析、handler 与 controller 选择', content: `${selectionBoundariesMarkup()}${packagedCliFeatureRegistryMarkup()}${currentMainDeltaMarkup()}` },
+    { step: 1, title: '创建子线程', summary: '二进制调用与事件投影', content: `${standaloneStaticSpawnTraceMarkup()}${appServerProjectionMarkup()}` },
+    { step: 2, title: '并行协调', summary: '线程归属、历史与读取路径', content: `${appServerHydrationMarkup()}${rendererReadPathMarkup()}` },
+    { step: 3, title: '回传结果', summary: '状态、结果与界面更新', content: `${interactionCompareMarkup()}${rendererUpdatePipelineMarkup()}` },
+    { step: 4, title: '停止与清理', summary: '不同关闭路径的责任边界', content: shutdownScopeMarkup() },
+    { step: 5, title: '打开并检查子线程', summary: 'Desktop 选择、恢复与历史加载', content: `${desktopHydrationMarkup()}${desktopBuild20586Markup()}` }
+  ];
   const step = mechanismExplorerSteps[mechanismExplorerStep];
-  root.innerHTML = `<div class="mechanism-explorer-steps" role="group" aria-label="Subagent lifecycle steps">${mechanismExplorerSteps.map((item, index) => `<button type="button" data-mechanism-step="${index}" aria-pressed="${index === mechanismExplorerStep}" aria-label="Step ${index + 1}: ${item.label}"><span>0${index + 1}</span>${item.label}</button>`).join('')}</div><article class="mechanism-explorer-detail" aria-live="polite"><div><span>STEP 0${mechanismExplorerStep + 1} · ${step.label.toUpperCase()}</span><a href="${step.href}" target="_blank" rel="noreferrer">${step.source} ↗</a></div><h4>${step.title}</h4><p>${step.text}</p></article>${mechanismExplorerStep === 4 ? shutdownScopeMarkup() : ''}${mechanismExplorerStep === 5 ? `${desktopHydrationMarkup()}${desktopBuild20586Markup()}` : ''}${standaloneStaticSpawnTraceMarkup()}${appServerProjectionMarkup()}${appServerHydrationMarkup()}${rendererReadPathMarkup()}${packagedCliFeatureRegistryMarkup()}${currentMainDeltaMarkup()}<p class="mechanism-explorer-version">Each visualization links to its pinned source snapshot. Static source analysis; no live lifecycle action is implied.</p>`;
+  const visibleCount = mechanismExplorerShowAll ? groups.length : 1;
+  root.innerHTML = `<div class="mechanism-explorer-steps" role="group" aria-label="Subagent lifecycle stages">${mechanismExplorerSteps.map((item, index) => `<button type="button" data-mechanism-step="${index}" aria-pressed="${index === mechanismExplorerStep}" ${index === mechanismExplorerStep ? 'aria-current="step"' : ''} aria-label="Stage ${index + 1} of ${mechanismExplorerSteps.length}: ${item.label}"><span>0${index + 1}</span><b>${item.label}</b></button>`).join('')}</div><article class="mechanism-explorer-detail" aria-live="polite"><div><span>STEP 0${mechanismExplorerStep + 1} · ${step.label.toUpperCase()}</span><a href="${step.href}" target="_blank" rel="noreferrer">${step.source} ↗</a></div><h4>${step.title}</h4><p>${step.text}</p></article><div class="mechanism-evidence-toolbar"><span aria-live="polite">${mechanismExplorerShowAll ? `ALL 6 STAGES · ${groups.length} evidence groups` : `${step.label.toUpperCase()} · ${groups[mechanismExplorerStep].summary}`}</span><button type="button" data-mechanism-show-all aria-pressed="${mechanismExplorerShowAll}">${mechanismExplorerShowAll ? 'Focus this stage' : 'Show all evidence maps'}</button></div><div class="mechanism-evidence-groups">${groups.map((group, index) => `<section class="mechanism-evidence-group" data-mechanism-evidence-group="${index}" aria-labelledby="mechanism-evidence-title-${index}" ${!mechanismExplorerShowAll && index !== mechanismExplorerStep ? 'hidden' : ''}><header><span>STAGE 0${index + 1} · ${mechanismExplorerSteps[index].label.toUpperCase()}</span><h5 id="mechanism-evidence-title-${index}">${group.title}</h5><p>${group.summary}</p></header>${group.content}</section>`).join('')}</div><p class="mechanism-explorer-version">Each visualization links to its pinned source snapshot. Static source analysis; no live lifecycle action is implied.</p>`;
 }
 function mailboxTimingMarkup() {
   const beforeFinal = mailboxScenario === 'before-final';
@@ -2068,6 +2768,52 @@ function waitScopeMarkup() {
     <p class="wait-scope-sources"><a href="https://github.com/openai/codex/blob/3ee47c10513f1bb57d869ea650aba28638e3d11c/codex-rs/core/src/tools/handlers/multi_agents_v2/wait.rs" target="_blank" rel="noreferrer">wait handler</a> · <a href="https://github.com/openai/codex/blob/3ee47c10513f1bb57d869ea650aba28638e3d11c/codex-rs/core/src/agent/control/completion.rs" target="_blank" rel="noreferrer">completion routing</a> · <a href="https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#controlled-v2-follow-up-while-root-wait-is-pending-future-completed-activity-did-not-wake-it" target="_blank" rel="noreferrer">controlled probe ledger</a></p>
   </section>`;
 }
+function waitContractMarkup() {
+  const cases = {
+    'target-complete': {
+      label: 'Requested child finishes',
+      v1: { state: 'wake', title: 'Returns that child’s final status', detail: 'The wait subscribes to the selected target. A final status ends the wait; the result is keyed by agent ID.' },
+      v2: { state: 'wake', title: 'Mailbox activity wakes the wait', detail: 'If the child result is queued to this parent, it can wake the shared input-activity wait. Output stays generic: “Wait completed.”' },
+      delivery: 'Child result follows a separate parent-message route. The wait output does not carry its body.'
+    },
+    'other-mail': {
+      label: 'Another child sends a message',
+      v1: { state: 'pending', title: 'Selected target is still running', detail: 'Mail from a different child is not the requested target’s final status.' },
+      v2: { state: 'wake', title: 'Any parent mailbox activity wakes it', detail: 'The wait does not identify which child sent mail or include its text.' },
+      delivery: 'The message payload stays in the parent’s input/history path and is delivered separately from the wait result.'
+    },
+    steer: {
+      label: 'User steers the parent',
+      v1: { state: 'pending', title: 'Target status has not changed', detail: 'User input is not a final status for the selected child.' },
+      v2: { state: 'interrupt', title: 'Returns “interrupted by new input”', detail: 'Steer activity shares the V2 input-activity watch channel with mailbox activity.' },
+      delivery: 'The steer is parent input. It is not a child completion message.'
+    },
+    timeout: {
+      label: 'No matching event before timeout',
+      v1: { state: 'timeout', title: 'Returns timed_out with no target result', detail: 'The V1 handler returns statuses observed at the completion boundary; an empty result is timed out.' },
+      v2: { state: 'timeout', title: 'Returns timed_out=true', detail: 'The V2 outcome carries no agent ID, status, or message body.' },
+      delivery: 'No child result was delivered by this wait. A later mailbox message is a separate event.'
+    }
+  };
+  const selected = cases[waitContractEvent] ?? cases['target-complete'];
+  const renderContract = (version, item, scope) => `<article class="wait-contract-card ${scope}" data-state="${item.state}"><div class="wait-contract-card-head"><span>${version}</span><span>${scope === 'v1' ? 'TARGET STATUS' : 'PARENT INPUT QUEUE'}</span></div><strong>${item.title}</strong><p>${item.detail}</p><div class="wait-contract-return"><span>WAIT RESULT</span><b>${scope === 'v1' ? (item.state === 'wake' ? 'agent_id → final status' : item.state === 'timeout' ? 'timed_out · no status' : 'still waiting') : item.state === 'wake' ? 'Wait completed · timed_out=false' : item.state === 'interrupt' ? 'Wait interrupted by new input' : item.state === 'timeout' ? 'timed_out=true' : 'not awakened'}</b></div></article>`;
+  return `<section class="wait-contract" aria-labelledby="wait-contract-title">
+    <div class="wait-contract-heading"><div><span>同名工具 · 两种等待契约</span><h5 id="wait-contract-title">“等待子任务”还是“等待父线程有新输入”？</h5></div><span>CODEX SOURCE · 740e5af</span></div>
+    <p class="wait-contract-intro">选择一个事件，比较 V1 与 V2 的唤醒条件和返回值。版本差异会改变 <code>wait_agent</code> 的含义。</p>
+    <div class="wait-contract-controls" role="group" aria-label="选择等待期间发生的事件">
+      ${Object.entries(cases).map(([key, item]) => `<button type="button" data-wait-contract="${key}" aria-pressed="${waitContractEvent === key}">${item.label}</button>`).join('')}
+    </div>
+    <div class="wait-contract-grid" aria-live="polite" aria-atomic="true">${renderContract('V1 · namespaced', selected.v1, 'v1')}${renderContract('V2 · unnamespaced', selected.v2, 'v2')}</div>
+    <div class="wait-contract-delivery"><span>独立的结果消息通道</span><strong>${selected.delivery}</strong><div class="wait-contract-lane"><i>子任务结果 / AgentMessage</i><b aria-hidden="true">→</b><i>父线程 mailbox / history</i><b aria-hidden="true">→</b><i>后续模型输入</i></div></div>
+    <p class="wait-contract-boundary">这是固定源码版本的契约对照，不是 Desktop 实时事件。V2 文档描述提到 agent 更新摘要，但此快照的实际输出类型没有 agent 字段；图中以 handler 返回结构为准。</p>
+    <p class="wait-contract-sources"><a href="https://github.com/openai/codex/blob/740e5af33c71225640e0c1c1555c514c2c93ab74/codex-rs/core/src/tools/handlers/multi_agents/wait.rs#L120-L218" target="_blank" rel="noreferrer">V1 wait handler</a> · <a href="https://github.com/openai/codex/blob/740e5af33c71225640e0c1c1555c514c2c93ab74/codex-rs/core/src/tools/handlers/multi_agents_v2/wait.rs#L148-L220" target="_blank" rel="noreferrer">V2 wait handler</a> · <a href="https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#follow-up-v1-waits-for-lifecycle-finals-v2-waits-for-parent-input-activity-and-returns-a-generic-outcome" target="_blank" rel="noreferrer">evidence ledger</a></p>
+  </section>`;
+}
+function selectWaitContract(eventName) {
+  waitContractEvent = ['target-complete', 'other-mail', 'steer', 'timeout'].includes(eventName) ? eventName : 'target-complete';
+  const panel = $('.wait-contract');
+  if (panel) panel.outerHTML = waitContractMarkup();
+}
 function selectWaitScopeScenario(scenarioName) {
   const container = $('.wait-scope');
   if (!container) return;
@@ -2190,6 +2936,15 @@ function interruptCloseMarkup() {
     }
   };
   const scenario = scenarios[interruptCloseScenario] ?? scenarios['interrupt-resident'];
+  const stopStages = [
+    { title: 'Parent turn is interrupted', lane: 'ROOT · USER STOP', detail: 'The composer Stop path interrupts the selected parent turn. After that succeeds, the manager schedules descendant cleanup for user-stop in the background.', boundary: 'The parent interrupt and descendant sweep have separate completion timing.' },
+    { title: 'Sweep the known snapshot', lane: 'PASS 1 · CURRENT DESCENDANTS', detail: 'Read the currently stored descendant snapshot, then try active children concurrently. A child counts as handled only when its local interrupt returns a non-null interrupted turn ID.', boundary: 'The snapshot can be stale; per-child failures are caught and logged.' },
+    { title: 'Refresh the subtree', lane: 'DISCOVERY · FRESH SNAPSHOT', detail: 'Discover the descendant tree again after pass 1. If discovery fails, the sweep ends after the first pass.', boundary: 'Discovery completeness is not required by this helper; an incomplete snapshot can leave descendants undiscovered.' },
+    { title: 'Handle newly seen active children', lane: 'PASS 2 · UNHANDLED DESCENDANTS', detail: 'Skip children already handled in pass 1. For the rest, try the local manager; otherwise inspect the first returned turn and send turn/interrupt only when it is inProgress.', boundary: 'This is a best-effort per-child sweep, not an atomic tree operation or completion receipt.' },
+    { title: 'Stop UI can finish before children', lane: 'UI · DISPATCH ≠ ACKNOWLEDGEMENT', detail: 'The panel invokes child interrupt callbacks in a plain loop without awaiting their promises. Its loading state can clear while manager interrupts and descendant sweeps continue.', boundary: 'No tree-wide acknowledgement proves every child stopped.' }
+  ];
+  const stopStep = Math.max(0, Math.min(stopStages.length - 1, desktopStopCascadeStep));
+  const stopStage = stopStages[stopStep];
   const lifecycleSteps = [
     ['Spawn pending', 'No acceptance receipt has returned yet; this trace does not infer that a child has been accepted.'],
     ['Receipt returned', 'The spawn caller has the acceptance receipt. The control path owns the accepted child independently of later caller cancellation.'],
@@ -2205,6 +2960,21 @@ function interruptCloseMarkup() {
       ${[['SPAWN','Request in flight','Await the acceptance receipt.'],['ACCEPTED','Receipt returned','Child control is established.'],['CALLER CANCELLED','Child remains active','The spawn edge remains open.'],['OPTIONAL CLOSE','Explicit close_agent','Close the edge and live subtree.']].map(([eyebrow,title,summary],index) => `<li class="${interruptCloseLifecycleStep === index ? 'is-current' : ''} ${index === 3 ? 'is-separate' : ''}" aria-current="${interruptCloseLifecycleStep === index ? 'step' : 'false'}"><span>0${index + 1} · ${eyebrow}</span><strong>${title}</strong><small>${summary}</small></li>`).join('')}
     </ol>
     <p class="interrupt-close-step-detail" aria-live="polite"><b>STEP ${String(interruptCloseLifecycleStep + 1).padStart(2,'0')}</b><span>${lifecycleStep[1]}</span></p>` : '';
+  const desktopStopCascade = scenario.tone === 'root-stop' ? `
+    <section class="desktop-stop-cascade" aria-labelledby="desktop-stop-cascade-title" data-step="${stopStep}">
+      <header><div><span>INSTALLED DESKTOP · BUILD 20586 · STATIC CALL-PATH TRACE</span><h6 id="desktop-stop-cascade-title">“Stop all” is a two-pass best-effort sweep</h6></div><small>SELECT A CHECKPOINT</small></header>
+      <div class="desktop-stop-cascade-rail" role="group" aria-label="Inspect the Desktop descendant stop cascade">
+        ${stopStages.map((item,index) => `<button type="button" data-desktop-stop-step="${index}" aria-pressed="${index === stopStep}"><span>0${index + 1}</span><small>${item.lane}</small><strong>${item.title}</strong>${index < stopStages.length - 1 ? '<i aria-hidden="true">→</i>' : ''}</button>`).join('')}
+      </div>
+      <div class="desktop-stop-cascade-detail" aria-live="polite"><div><span>${stopStage.lane}</span><strong>${stopStage.title}</strong><p>${stopStage.detail}</p></div><aside><b>BOUNDARY</b><p>${stopStage.boundary}</p></aside></div>
+      <div class="desktop-stop-cascade-tree" aria-label="Two-pass descendant interruption flow">
+        <article><span>PASS 1 · STORED SNAPSHOT</span><b>Active descendants</b><small>Concurrent local interrupt attempts</small></article><i aria-hidden="true">→</i>
+        <article class="refresh-node"><span>FRESH DISCOVERY</span><b>Reconcile subtree</b><small>Failure ends sweep after pass 1</small></article><i aria-hidden="true">→</i>
+        <article><span>PASS 2 · NEW ACTIVE</span><b>Skip handled IDs</b><small>Local manager, or inProgress turn fallback</small></article>
+      </div>
+      <p class="desktop-stop-cascade-note"><b>Separate lifetimes:</b> panel loading tracks callback dispatch; descendant cleanup can continue after the Stop UI settles.</p>
+      <a class="desktop-stop-cascade-source" href="https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#installed-thread-manager-descendant-interruption" target="_blank" rel="noreferrer">Open the pinned call-path evidence ↗</a>
+    </section>` : '';
   return `<section class="interrupt-close-map" aria-labelledby="interrupt-close-title">
     <div class="interrupt-close-heading"><div><span class="interrupt-close-eyebrow">STOP · INTERRUPT · CLOSE</span><h5 id="interrupt-close-title">Which operation stops one turn, or closes a subtree?</h5></div><span>${interruptCloseScenario === 'root-stop' ? 'Desktop · 26.1007.71326' : 'Codex source · 16e578d'}</span></div>
     <p class="interrupt-close-intro">Compare the selected operation across activity, runtime, identity, persisted edge, and descendant scope. These paths have different owners and completion signals.</p>
@@ -2219,6 +2989,7 @@ function interruptCloseMarkup() {
       ${[['ACTIVITY',scenario.activity],['RUNTIME',scenario.runtime],['REGISTRY',scenario.registry],['PERSISTED EDGE',scenario.edge],['LIVE DESCENDANTS',scenario.descendants]].map(([label,value]) => `<article class="interrupt-close-cell"><span>${label}</span><strong>${value}</strong></article>`).join('')}
     </div>
     ${acceptanceLifecycle}
+    ${desktopStopCascade}
     <p class="interrupt-close-outcome"><b>${scenario.label}</b><span>${scenario.detail}</span></p>
     <p class="interrupt-close-boundary">Static source analysis pinned to <code>16e578d</code>; this is not a live interruption or shutdown observation. The accepted-spawn case follows the API's documented cancellation boundary; explicit close remains a separate recursive path.</p>
     <p class="interrupt-close-source"><a href="https://github.com/openai/codex/blob/16e578dd1ddaf4f5db9cd1f3dbfea0958fd74339/codex-rs/core/src/tools/handlers/multi_agents_v2/interrupt_agent.rs" target="_blank" rel="noreferrer">V2 interrupt handler</a> · <a href="https://github.com/openai/codex/blob/16e578dd1ddaf4f5db9cd1f3dbfea0958fd74339/codex-rs/core/src/agent/api.rs" target="_blank" rel="noreferrer">spawn acceptance boundary</a> · <a href="https://github.com/openai/codex/blob/16e578dd1ddaf4f5db9cd1f3dbfea0958fd74339/codex-rs/core/src/agent/control/legacy.rs" target="_blank" rel="noreferrer">explicit close and recursive shutdown</a> · <a href="https://github.com/HeadmasterEggy/codex-subagent-reverse-engineering/blob/codex/local-child-interactivity-evidence/evidence/subagent-flow.md#accepted-spawn-and-explicit-subtree-close" target="_blank" rel="noreferrer">lifecycle evidence ledger</a></p>
@@ -2236,6 +3007,14 @@ function selectInterruptCloseLifecycleStep(stepValue) {
   const step = Number(stepValue);
   if (!Number.isInteger(step) || step < 0 || step > 3) return;
   interruptCloseLifecycleStep = step;
+  container.outerHTML = interruptCloseMarkup();
+}
+function selectDesktopStopCascadeStep(stepValue) {
+  const container = $('.interrupt-close-map');
+  if (!container) return;
+  const step = Number(stepValue);
+  if (!Number.isInteger(step) || step < 0 || step > 4) return;
+  desktopStopCascadeStep = step;
   container.outerHTML = interruptCloseMarkup();
 }
 function admissionMarkup() {
@@ -2299,6 +3078,10 @@ document.addEventListener('input', event => {
 document.addEventListener('change', event => {
   if (event.target.matches('[data-probe-range]')) {
     selectEmbeddedProbeStep(event.target.value);
+    return;
+  }
+  if (event.target.matches('[data-cli-v1-range]')) {
+    selectCliV1ProbeStep(event.target.value);
     return;
   }
   if (!event.target.matches('[data-native-panel-inline]')) return;
@@ -2470,14 +3253,14 @@ function connect() {
   const events = new EventSource(`/api/events?token=${encodeURIComponent(token)}`, { withCredentials:false });
   events.onopen = () => {
     if (connectionExpired) return;
-    $('#connection').textContent = 'Live';
+    $('#connection').textContent = 'Lab connected';
     $('.pulse').classList.add('online');
     $('.connection').classList.remove('expired');
     $('#reload-session').hidden = true;
   };
   events.onerror = () => {
     if (connectionExpired) return;
-    $('#connection').textContent = 'Reconnecting';
+    $('#connection').textContent = 'Lab reconnecting';
     $('.pulse').classList.remove('online');
     if (connectionCheckPending) return;
     connectionCheckPending = true;
@@ -2624,6 +3407,11 @@ $('#tree').addEventListener('keydown', event => {
   }
 });
 document.addEventListener('click', async event => {
+  const rendererUpdateButton = event.target.closest('[data-renderer-update-stage]');
+  if (rendererUpdateButton) {
+    selectRendererUpdateStage(rendererUpdateButton.dataset.rendererUpdateStage);
+    return;
+  }
   const rendererReadTab = event.target.closest('[data-renderer-read-route]');
   if (rendererReadTab) {
     selectRendererReadRoute(rendererReadTab.dataset.rendererReadRoute);
@@ -2643,10 +3431,29 @@ document.addEventListener('click', async event => {
     document.querySelector(`[data-app-server-projection="${appServerProjectionTool}"]`)?.focus();
     return;
   }
+  const boundaryVersionButton = event.target.closest('[data-boundary-version]');
+  if (boundaryVersionButton) {
+    versionResolutionScenario = ['feature-fallback','model-v2','config-v2','disabled'].includes(boundaryVersionButton.dataset.boundaryVersion) ? boundaryVersionButton.dataset.boundaryVersion : 'feature-fallback';
+    const versionMap = $('.cli-feature-map');
+    if (versionMap) versionMap.outerHTML = packagedCliFeatureRegistryMarkup();
+    refreshSelectionBoundaries();
+    const focusTarget = document.querySelector(`[data-boundary-version="${versionResolutionScenario}"]`);
+    if (focusTarget) focusTarget.focus();
+    return;
+  }
+  const boundaryEntryButton = event.target.closest('[data-boundary-entry]');
+  if (boundaryEntryButton) {
+    agentControlEntry = ['new-root','cold-resume','fork-root','internal-child','live-resume'].includes(boundaryEntryButton.dataset.boundaryEntry) ? boundaryEntryButton.dataset.boundaryEntry : 'new-root';
+    refreshAgentControlViews();
+    refreshSelectionBoundaries();
+    document.querySelector(`[data-boundary-entry="${agentControlEntry}"]`)?.focus();
+    return;
+  }
   const controllerEntryButton = event.target.closest('[data-controller-entry]');
   if (controllerEntryButton) {
     agentControlEntry = controllerEntryButton.dataset.controllerEntry;
     controllerEntryButton.closest('.agent-control-construction').outerHTML = agentControlExplorerMarkup();
+    refreshSelectionBoundaries();
     document.querySelector(`[data-controller-entry="${agentControlEntry}"]`)?.focus();
     return;
   }
@@ -2654,6 +3461,7 @@ document.addEventListener('click', async event => {
   if (controllerSourceButton) {
     agentControlSource = controllerSourceButton.dataset.controllerSource;
     controllerSourceButton.closest('.agent-control-construction').outerHTML = agentControlExplorerMarkup();
+    refreshSelectionBoundaries();
     document.querySelector(`[data-controller-source="${agentControlSource}"]`)?.focus();
     return;
   }
@@ -2661,6 +3469,7 @@ document.addEventListener('click', async event => {
   if (controllerVersionButton) {
     agentControlVersion = controllerVersionButton.dataset.controllerVersion;
     controllerVersionButton.closest('.agent-control-construction').outerHTML = agentControlExplorerMarkup();
+    refreshSelectionBoundaries();
     document.querySelector(`[data-controller-version="${agentControlVersion}"]`)?.focus();
     return;
   }
@@ -2668,6 +3477,7 @@ document.addEventListener('click', async event => {
   if (controllerFactoryButton) {
     agentControlFactoryEnabled = !agentControlFactoryEnabled;
     controllerFactoryButton.closest('.agent-control-construction').outerHTML = agentControlExplorerMarkup();
+    refreshSelectionBoundaries();
     document.querySelector('[data-controller-factory]')?.focus();
     return;
   }
@@ -2693,8 +3503,22 @@ document.addEventListener('click', async event => {
     return;
   }
   const nativeSpawnButton = event.target.closest('[data-native-spawn-step]');
+  const nativeEvidenceButton = event.target.closest('[data-native-evidence-view]');
+  if (nativeEvidenceButton) {
+    nativeEvidenceView = ['source', 'cli', 'v2Attempt', 'v2Run', 'jsonGap', 'wake', 'lifecycle', 'lab'].includes(nativeEvidenceButton.dataset.nativeEvidenceView) ? nativeEvidenceButton.dataset.nativeEvidenceView : 'v2Run';
+    nativeEvidenceButton.closest('.native-spawn-trace').outerHTML = nativeSpawnTraceMarkup();
+    document.querySelector(`[data-native-evidence-view="${nativeEvidenceView}"]`)?.focus();
+    return;
+  }
+  const nativeLifecycleButton = event.target.closest('[data-native-lifecycle]');
+  if (nativeLifecycleButton) {
+    nativeLifecycleScenario = ['close','died'].includes(nativeLifecycleButton.dataset.nativeLifecycle) ? nativeLifecycleButton.dataset.nativeLifecycle : 'complete';
+    nativeLifecycleButton.closest('.native-spawn-trace').outerHTML = nativeSpawnTraceMarkup();
+    document.querySelector(`[data-native-lifecycle="${nativeLifecycleScenario}"]`)?.focus();
+    return;
+  }
   if (nativeSpawnButton) {
-    nativeSpawnFocus = Math.max(0, Math.min(4, Number(nativeSpawnButton.dataset.nativeSpawnStep) || 0));
+    nativeSpawnFocus = Math.max(0, Math.min(6, Number(nativeSpawnButton.dataset.nativeSpawnStep) || 0));
     nativeSpawnButton.closest('.native-spawn-trace').outerHTML = nativeSpawnTraceMarkup();
     document.querySelector(`[data-native-spawn-step="${nativeSpawnFocus}"]`)?.focus();
     return;
@@ -2706,16 +3530,45 @@ document.addEventListener('click', async event => {
     document.querySelector(`[data-desktop-hydration="${desktopHydrationState}"]`)?.focus();
     return;
   }
+  const interactionVersionButton = event.target.closest('[data-interaction-version]');
+  if (interactionVersionButton) {
+    interactionCompareVersion = ['v1-capture', 'v2-source', 'desktop20586'].includes(interactionVersionButton.dataset.interactionVersion) ? interactionVersionButton.dataset.interactionVersion : 'v1-capture';
+    interactionCompareSelection = 'parent-0';
+    interactionVersionButton.closest('.interaction-compare').outerHTML = interactionCompareMarkup();
+    document.querySelector(`[data-interaction-version="${interactionCompareVersion}"]`)?.focus();
+    return;
+  }
+  const interactionCell = event.target.closest('[data-interaction-cell]');
+  if (interactionCell) {
+    event.preventDefault();
+    interactionCompareSelection = interactionCell.dataset.interactionCell;
+    interactionCell.closest('.interaction-compare').outerHTML = interactionCompareMarkup();
+    document.querySelector(`[data-interaction-cell="${interactionCompareSelection}"]`)?.focus();
+    return;
+  }
   const mechanismStepButton = event.target.closest('[data-mechanism-step]');
   if (mechanismStepButton) {
     mechanismExplorerStep = Math.max(0, Math.min(mechanismExplorerSteps.length - 1, Number(mechanismStepButton.dataset.mechanismStep) || 0));
+    mechanismExplorerShowAll = false;
     renderMechanismExplorer();
     document.querySelector(`[data-mechanism-step="${mechanismExplorerStep}"]`)?.focus();
+    return;
+  }
+  const mechanismShowAllButton = event.target.closest('[data-mechanism-show-all]');
+  if (mechanismShowAllButton) {
+    mechanismExplorerShowAll = !mechanismExplorerShowAll;
+    renderMechanismExplorer();
+    document.querySelector('[data-mechanism-show-all]')?.focus();
     return;
   }
   const probeStep = event.target.closest('[data-probe-step]');
   if (probeStep) {
     selectEmbeddedProbeStep(probeStep.dataset.probeStep);
+    return;
+  }
+  const cliV1Step = event.target.closest('[data-cli-v1-step]');
+  if (cliV1Step) {
+    selectCliV1ProbeStep(cliV1Step.dataset.cliV1Step);
     return;
   }
   const deliveryModeButton = event.target.closest('[data-delivery-flow]');
@@ -2853,6 +3706,12 @@ document.addEventListener('click', async event => {
     desktop20586Status.closest('.desktop-20586').outerHTML = desktopBuild20586Markup();
     return;
   }
+  const desktop20586TurnLive = event.target.closest('[data-20586-turn-live]');
+  if (desktop20586TurnLive) {
+    desktopBuild20586TurnLive = desktop20586TurnLive.dataset['20586TurnLive'] === 'yes';
+    desktop20586TurnLive.closest('.desktop-20586').outerHTML = desktopBuild20586Markup();
+    return;
+  }
   const desktop20586Route = event.target.closest('[data-20586-route]');
   if (desktop20586Route) {
     desktopBuild20586Route = ['accepted', 'wrongHost', 'missingAncestor', 'staleSelection'].includes(desktop20586Route.dataset['20586Route'])
@@ -2975,6 +3834,14 @@ document.addEventListener('click', async event => {
   if (boardWriteCase) { selectBoardWriteScenario(boardWriteCase.dataset.boardWriteCase); return; }
   const toolExposureCase = event.target.closest('[data-tool-exposure-case]');
   if (toolExposureCase) { selectToolExposureCase(toolExposureCase.dataset.toolExposureCase); return; }
+  const versionResolutionCase = event.target.closest('[data-version-resolution]');
+  if (versionResolutionCase) {
+    versionResolutionScenario = ['feature-fallback','model-v2','config-v2','disabled'].includes(versionResolutionCase.dataset.versionResolution) ? versionResolutionCase.dataset.versionResolution : 'feature-fallback';
+    versionResolutionCase.closest('.cli-feature-map').outerHTML = packagedCliFeatureRegistryMarkup();
+    refreshSelectionBoundaries();
+    document.querySelector(`[data-version-resolution="${versionResolutionScenario}"]`)?.focus();
+    return;
+  }
   const toolExposureOption = event.target.closest('[data-tool-disable-messages], [data-tool-wait-enabled]');
   if (toolExposureOption) {
     updateToolExposureOption(toolExposureOption.hasAttribute('data-tool-disable-messages') ? 'messages' : 'wait', toolExposureOption.checked);
@@ -2982,6 +3849,8 @@ document.addEventListener('click', async event => {
   }
   const waitScopeCase = event.target.closest('[data-wait-scope-case]');
   if (waitScopeCase) { selectWaitScopeScenario(waitScopeCase.dataset.waitScopeCase); return; }
+  const waitContractCase = event.target.closest('[data-wait-contract]');
+  if (waitContractCase) { selectWaitContract(waitContractCase.dataset.waitContract); return; }
   const waitScopeStepButton = event.target.closest('[data-wait-scope-step]');
   if (waitScopeStepButton) { selectWaitScopeStep(waitScopeStepButton.dataset.waitScopeStep); return; }
   const residencyCase = event.target.closest('[data-residency-case]');
@@ -2990,10 +3859,18 @@ document.addEventListener('click', async event => {
   if (interruptCloseCase) { selectInterruptCloseScenario(interruptCloseCase.dataset.interruptCloseCase); return; }
   const interruptCloseStep = event.target.closest('[data-interrupt-close-step]');
   if (interruptCloseStep) { selectInterruptCloseLifecycleStep(interruptCloseStep.dataset.interruptCloseStep); return; }
+  const desktopStopStep = event.target.closest('[data-desktop-stop-step]');
+  if (desktopStopStep) { selectDesktopStopCascadeStep(desktopStopStep.dataset.desktopStopStep); return; }
   const admissionCase = event.target.closest('[data-admission-case]');
   if (admissionCase) { selectAdmissionScenario(admissionCase.dataset.admissionCase); return; }
+  const desktopTopologyButton = event.target.closest('[data-desktop-topology-step]');
+  if (desktopTopologyButton) { selectDesktopTopologyStep(desktopTopologyButton.dataset.desktopTopologyStep); return; }
+  const desktopRuntimeButton = event.target.closest('[data-desktop-runtime-step]');
+  if (desktopRuntimeButton) { selectDesktopRuntimeStep(desktopRuntimeButton.dataset.desktopRuntimeStep); return; }
   const fidelityCase = event.target.closest('[data-fidelity-case]');
   if (fidelityCase) { selectFullFidelityScenario(fidelityCase.dataset.fidelityCase); return; }
+  const rendererDeltaType = event.target.closest('[data-renderer-delta-type]');
+  if (rendererDeltaType) { selectRendererDeltaType(rendererDeltaType.dataset.rendererDeltaType); return; }
   const rendererDeltaCase = event.target.closest('[data-renderer-delta]');
   if (rendererDeltaCase) { selectRendererDeltaScenario(rendererDeltaCase.dataset.rendererDelta); return; }
   const completionPayloadCase = event.target.closest('[data-completion-payload]');
@@ -3024,8 +3901,12 @@ document.addEventListener('click', async event => {
   if (spawnRoleToggle) { selectSpawnConfigOption('role', spawnRoleToggle.checked); return; }
   const topologyCase = event.target.closest('[data-topology-case]');
   if (topologyCase) { selectTopologyScenario(topologyCase.dataset.topologyCase); return; }
+  const rowEligibilityCase = event.target.closest('[data-row-eligibility]');
+  if (rowEligibilityCase) { topologyEligibilityState = rowEligibilityCase.dataset.rowEligibility; selectTopologyScenario('row-eligibility'); return; }
   const historyGate = event.target.closest('[data-history-gate]');
   if (historyGate) { selectHistoryGate(historyGate.dataset.historyGate); return; }
+  const panelPersistenceStepButton = event.target.closest('[data-panel-persist-step]');
+  if (panelPersistenceStepButton) { selectPanelPersistenceStep(panelPersistenceStepButton.dataset.panelPersistStep); return; }
   const cancelButton = event.target.closest('[data-cancel]');
   const inboxButton = event.target.closest('[data-open-inbox]');
   const childButton = event.target.closest('[data-child]');
@@ -3054,6 +3935,12 @@ document.addEventListener('click', async event => {
       const deliveryModel = $('#agent-mailbox .delivery-model');
       if (deliveryModel) deliveryModel.open = true;
       requestAnimationFrame(() => scrollInspectorTo(targetId));
+    } else if (targetId === 'topology-row-eligibility') {
+      deliveryModelOpen = true;
+      const deliveryModel = $('#agent-mailbox .delivery-model');
+      if (deliveryModel) deliveryModel.open = true;
+      selectTopologyScenario('row-eligibility');
+      requestAnimationFrame(() => scrollInspectorTo('topology-map-title'));
     } else scrollInspectorTo(targetId);
     return;
   }

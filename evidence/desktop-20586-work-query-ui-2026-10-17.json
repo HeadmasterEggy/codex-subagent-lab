@@ -1,0 +1,52 @@
+{
+  "date": "2026-10-17",
+  "target": "local Subagent Lab build 20586 Work panel explanation",
+  "url": "http://127.0.0.1:49105/",
+  "steps": [
+    "Selected the mechanism explorer Inspect view.",
+    "Selected Desktop build 20586.",
+    "Selected Work panel status Done.",
+    "Read the rendered cache key, request, and retry control.",
+    "Changed turn liveness from active to ended, then back to active."
+  ],
+  "observations": {
+    "active": {
+      "retryOnMount": false,
+      "cacheKey": "final-response + conversationId + threadId + activationId",
+      "request": "/flora/subagent/thread/turns?conversationId&threadId&limit=1"
+    },
+    "ended": {
+      "retryOnMount": true,
+      "cacheKeyUnchanged": true,
+      "requestUnchanged": true
+    },
+    "returnedToActive": {
+      "retryOnMount": false,
+      "cacheKeyUnchanged": true,
+      "requestUnchanged": true
+    }
+  },
+  "localCanInteractGates": {
+    "eligibleAndInteractive": {
+      "resumeLookup": "attempted; child thread ID supplied",
+      "transcript": "interactive",
+      "composer": "shown"
+    },
+    "interactionDisabled": {
+      "resumeLookup": "skipped",
+      "transcript": "read-only",
+      "composer": "hidden"
+    },
+    "writerConflict": {
+      "resumeLookup": "still eligible; child thread ID supplied",
+      "transcript": "read-only",
+      "composer": "hidden"
+    }
+  },
+  "limits": [
+    "This verifies the local Lab controls and rendered text only.",
+    "The Lab did not issue the Work endpoint request.",
+    "This is not a capture of the native Codex Desktop panel or its server response.",
+    "The Local gate scenarios are Lab projections; they do not establish server authorization or successful resume."
+  ]
+}

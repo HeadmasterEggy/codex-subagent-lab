@@ -1,0 +1,51 @@
+{
+  "date": "2026-10-17",
+  "kind": "live_local_lab_run",
+  "url": "http://127.0.0.1:49105/",
+  "workspace": "Lab workspace",
+  "request": {
+    "root_task": "Create exactly one read-only child to inspect package.json, then list, wait, and read the result.",
+    "children_requested": 1,
+    "target": "package.json"
+  },
+  "observed": {
+    "root_status": "completed",
+    "child_count": 1,
+    "child_status": "completed",
+    "child_exit_code": 0,
+    "coordination_tools": ["list_agents", "wait_agent", "read_messages"],
+    "child_result_delivered_to_parent": true,
+    "parent_final_response_received": true,
+    "workspace_package_json_exists": false,
+    "workspace_files_changed": false,
+    "active_processes_after_completion": 0,
+    "task_tree_counts": {"completed": 2, "running": 0, "failed": 0}
+  },
+  "interpretation": {
+    "establishes": [
+      "The Lab accepted one child task and launched a separate read-only Codex CLI process.",
+      "The child completed and its result was returned through the parent inbox.",
+      "The parent called the coordination tools and completed with a summary visible in the Inspector."
+    ],
+    "does_not_establish": [
+      "Requested package metadata: package.json was absent from the fixed workspace root.",
+      "Codex Desktop native subagent host, controller selection, or panel behavior.",
+      "Model interpretation beyond what is stated in its final text."
+    ]
+  },
+  "runtime": {
+    "root_elapsed_seconds_rounded": 31,
+    "child_elapsed_seconds_rounded": 15,
+    "root_usage_reported": {
+      "input_tokens": 108957,
+      "cached_input_tokens": 87424,
+      "output_tokens": 277,
+      "scope": "whole root task event; not child-only cost or a representative benchmark"
+    }
+  },
+  "limitations": [
+    "Manual run of the Lab prototype, not a Codex Desktop runtime capture.",
+    "The orchestration path completed, but the absent package.json made target inspection inconclusive.",
+    "Task state and raw process events are held in memory; this is a sanitized manual summary."
+  ]
+}

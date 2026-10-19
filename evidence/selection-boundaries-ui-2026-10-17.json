@@ -1,0 +1,26 @@
+{
+  "date": "2026-10-17",
+  "target": "Prepare-stage protocol handler and controller boundary map",
+  "url": "http://127.0.0.1:4342/",
+  "method": "Manual browser interaction against the local Lab demo page; no Codex task was launched.",
+  "observations": {
+    "versionResolution": [
+      "Feature fallback rendered V1 and the V1 spawn_agent handler.",
+      "Model metadata V2 rendered V2 in the new map and the existing version-resolution card; both controls reported the same selected scenario.",
+      "Explicit disabled rendered no collaboration handler and marked AgentControl::spawn as not reached."
+    ],
+    "controllerSelection": [
+      "Internal child rendered Parent-provided AgentControl.",
+      "Current-main with the what-if host factory enabled rendered LocalAgentControl for V1, with the V1 local-control constraint, and Host factory controller for V2."
+    ],
+    "responsive": {
+      "viewport590x900": "Four nodes stack vertically; document width remained 590px, with no horizontal overflow.",
+      "viewport1440x1000": "Four nodes render across one row; the browser screenshot showed the complete map within the Prepare panel."
+    },
+    "provenance": "The UI labels its source model as the 4ebc485 resolver snapshot plus 67a7096 handler/binding paths. This is a static source-backed visualization, not a capture of native Desktop controller selection."
+  },
+  "limits": [
+    "The host-factory cases are UI projections of source rules and a what-if toggle, not an observed production Desktop factory installation.",
+    "The run verifies the Lab page and its controls only; it does not establish live task behavior, model consumption, or visible Codex Desktop subagent activity."
+  ]
+}
