@@ -1,0 +1,48 @@
+{
+  "date": "2026-10-17",
+  "kind": "live_local_lab_run",
+  "url": "http://127.0.0.1:49105/",
+  "workspace": "Lab workspace",
+  "request": {
+    "root_task": "Create exactly one read-only child to inspect README.md and report its first-level heading and opening sentence; then list, wait, and read the result.",
+    "children_requested": 1,
+    "target": "README.md"
+  },
+  "observed": {
+    "root_status": "completed",
+    "child_count": 1,
+    "child_status": "completed",
+    "child_exit_code": 0,
+    "coordination_tools": ["list_agents", "wait_agent", "read_messages"],
+    "child_result_delivered_to_parent": true,
+    "parent_final_response_received": true,
+    "workspace_files_changed": false,
+    "active_processes_after_completion": 0,
+    "task_tree_counts": {"completed": 4, "running": 0, "failed": 0}
+  },
+  "content_result": {
+    "first_level_heading": "# Codex Subagent Lab",
+    "opening_sentence": "The Inspector now includes a selectable app-server projection view for `spawnAgent`, `sendInput`, and `wait`."
+  },
+  "interpretation": {
+    "establishes": [
+      "The child read the existing README and returned the requested exact heading and opening sentence.",
+      "The child completion result was supplied to the parent, which called the coordination tools and summarized it.",
+      "The read-only task tree completed without changing workspace files."
+    ],
+    "does_not_establish": [
+      "Codex Desktop native subagent host, controller selection, or panel behavior.",
+      "Model interpretation beyond what is stated in its final text."
+    ]
+  },
+  "runtime": {
+    "root_elapsed_seconds_rounded": 29,
+    "child_elapsed_seconds_rounded": 11,
+    "usage": "Not retained in the sanitized run record."
+  },
+  "limitations": [
+    "Manual run of the Lab prototype, not a Codex Desktop runtime capture.",
+    "The task tree contains both this run and the preceding package.json run; both runs' root and child tasks are completed.",
+    "Task state and raw process events are held in memory; this is a sanitized manual summary."
+  ]
+}

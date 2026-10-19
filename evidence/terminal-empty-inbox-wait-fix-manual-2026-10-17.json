@@ -1,0 +1,42 @@
+{
+  "date": "2026-10-17",
+  "kind": "manual_local_lab_api_check",
+  "mode": "DEMO_MODE",
+  "surface": "browser page calling the local coordinator API",
+  "scenario": {
+    "task_state": "completed",
+    "pending_inbox_messages": 0,
+    "wait_agent_timeout_ms": 30000,
+    "read_messages_wait_ms": 30000
+  },
+  "before_fix": {
+    "wait_agent_elapsed_ms": 30006,
+    "wait_agent_timed_out": true,
+    "read_messages_elapsed_ms": 30008,
+    "messages_returned": 0,
+    "server_revision": "pre-fix process"
+  },
+  "after_fix": {
+    "wait_agent_elapsed_ms": 2,
+    "wait_agent_timed_out": true,
+    "read_messages_elapsed_ms": 1,
+    "messages_returned": 0,
+    "server_revision": "restarted process running the fixed server.mjs"
+  },
+  "interpretation": {
+    "establishes": [
+      "The Lab returns immediately when a terminal task has no pending inbox messages.",
+      "The behavior was compared before and after restarting with the source fix."
+    ],
+    "does_not_establish": [
+      "Codex Desktop native subagent coordinator behavior.",
+      "Behavior for a task that is still running or for a terminal task with queued messages.",
+      "A benchmark beyond these two manually checked API calls."
+    ]
+  },
+  "limitations": [
+    "Manual local demo-mode coordinator check, not a test suite.",
+    "The earlier server process was started before the fix and the later process after the fix.",
+    "Task identifiers and authentication tokens are omitted."
+  ]
+}

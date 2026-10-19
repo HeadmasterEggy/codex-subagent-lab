@@ -1,0 +1,38 @@
+{
+  "date": "2026-10-17",
+  "target": "local Subagent Lab panel-persistence explanation",
+  "url": "http://127.0.0.1:4342/",
+  "steps": [
+    "Opened the refreshed local Lab in a new browser page.",
+    "Inspected the five checkpoint controls, accessible labels, and route legend.",
+    "Selected Refresh checkpoint and confirmed its readout names the workspace-home exception and distinguishes Work filtering from Local route inclusion.",
+    "Selected Restore and confirmed the Local overview-restored/child-selection-cleared explanation.",
+    "Emulated a 390x844 touch viewport, then a 1280x900 viewport, and checked the panel and route tracks for horizontal overflow."
+  ],
+  "observations": {
+    "checkpointControls": "five buttons; accessible names use Checkpoint N of 5 and the step title",
+    "legend": [
+      "route retained",
+      "filtered from route snapshot",
+      "conditional draft handoff"
+    ],
+    "refreshCheckpoint": "ordinary panel route filtering is qualified; workspace-home exception is stated; Work and Local outcomes remain separate",
+    "restoreCheckpoint": "Local panel overview is restored and selected child is cleared",
+    "mobile390x844": {
+      "panelWidth": 340,
+      "panelScrollWidth": 338,
+      "routeTracks": "single-column vertical flow",
+      "documentHorizontalOverflow": false
+    },
+    "viewport1280x900": {
+      "panelWidth": 755,
+      "routeTracks": "five checkpoint columns",
+      "documentHorizontalOverflow": false
+    },
+    "consoleWarningsOrErrors": 0
+  },
+  "limits": [
+    "This verifies the Lab interface and rendered explanation only.",
+    "It does not observe a native Codex Desktop checkpoint, app restart, or restored panel."
+  ]
+}
